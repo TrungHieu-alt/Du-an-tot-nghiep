@@ -52,6 +52,16 @@ This pre-execution response is mandatory for implementation, analysis, planning,
 This requirement applies only to the pre-execution checkpoint.
 It does NOT require the final answer, deliverable, or completion handoff to use the same structure unless explicitly requested by the user.
 
+### Response-Only Task Rule (Canonical)
+Use this rule when the user explicitly requests chat output only (for example: "overview as a response, not a new file") and no repository change is required.
+- Recognition signal: user intent is informational/summary/reporting output in chat, with explicit or implicit "no file/code changes."
+- Required behavior:
+  1. Do not edit repository files.
+  2. Do not run implementation commands that mutate code/data.
+  3. Produce the requested deliverable directly in the response.
+  4. Still provide pre-execution `Task Summary`, `Scope`, and `Plan` before final output.
+  5. In handoff, mark touched files as `none` and record read-only verification evidence.
+
 ### 1) Task Summary
 - Intent
 - Success criteria

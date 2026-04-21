@@ -19,6 +19,12 @@ A task is done only if every required item below is satisfied.
   - Minimum for matching work: one ingest path + one match retrieval path.
 - Capture exact commands and outcomes in handoff notes.
 
+Response-only exception (see canonical rule in `AGENTS.md`):
+- If task type is `Response-Only Task (No Repository Changes)`, replace runtime smoke checks with read-only verification evidence:
+  - source files/docs inspected,
+  - key statements cross-checked,
+  - confirmation that touched files are `none`.
+
 ## 3) Contract Discipline
 - If API behavior changed:
   - Schemas/contracts are updated.

@@ -1,5 +1,4 @@
 ./backend/_pycache__/
-./backend/__pycache__/
 ./backend/.env
 ./backend/venv/
 ./frontend/node_modules/

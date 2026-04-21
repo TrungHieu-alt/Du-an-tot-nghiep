@@ -55,3 +55,10 @@ Purpose: task router and required procedures by task type. Intake/output format 
   2. Keep interfaces stable.
   3. Run smoke checks to prove behavior parity.
   4. Record what was intentionally not changed.
+
+## G) Response-Only Task (No Repository Changes)
+- Use when the requested deliverable is response content only and the user does not want file/code changes.
+- Procedure:
+  1. Apply the canonical rule in `AGENTS.md` (`Response-Only Task Rule`).
+  2. Keep repository state unchanged.
+  3. Verify outputs against read sources and provide evidence in handoff.
