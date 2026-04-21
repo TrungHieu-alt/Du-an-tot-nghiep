@@ -1,0 +1,26 @@
+SUMMARY
+Backend developer with experience building REST APIs using Python, FastAPI, and PostgreSQL. Strong in database design, API integration, and writing clean, maintainable backend logic.
+
+SKILLS
+- Python
+- FastAPI
+- PostgreSQL
+- Docker
+- Git
+- REST API Development
+
+EXPERIENCE
+- Developed backend API services for internal tools using Python and FastAPI.
+- Designed relational database schemas and optimized SQL queries.
+- Built authentication and authorization modules using JWT.
+- Collaborated with frontend engineers to integrate new features.
+- Improved API performance and reduced average latency by 30%.
+- Participated in code reviews and maintained documentation for backend modules.
+
+PROJECTS
+Inventory Tracking Service
+A small backend service for managing stock levels, supplier orders, and inventory logs.
+Tech stack: Python, FastAPI, PostgreSQL, Docker.
+
+EDUCATION
+B.S. in Computer Science – University of Engineering and Technology (2019–2023)

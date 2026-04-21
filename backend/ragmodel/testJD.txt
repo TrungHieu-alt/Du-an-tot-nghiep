@@ -1,0 +1,26 @@
+JOB DESCRIPTION
+We are looking for a Backend Developer to join our engineering team in Hanoi. The role focuses on building API services, improving system reliability, and collaborating with cross-functional teams to deliver new product features.
+
+REQUIREMENTS
+- 1–3 years of experience in backend development.
+- Solid knowledge of Python.
+- Experience with FastAPI or Flask.
+- Understanding of relational databases (PostgreSQL or MySQL).
+- Familiarity with Docker.
+- Ability to write clean, maintainable code.
+- Good analytical and communication skills.
+
+RESPONSIBILITIES
+- Develop and maintain REST API services.
+- Design database schemas and optimize SQL queries.
+- Implement authentication and authorization logic.
+- Collaborate with frontend engineers to integrate APIs.
+- Improve system reliability and performance.
+- Participate in code reviews and technical discussions.
+
+TECH STACK
+- Python
+- FastAPI
+- PostgreSQL
+- Docker
+- Git
