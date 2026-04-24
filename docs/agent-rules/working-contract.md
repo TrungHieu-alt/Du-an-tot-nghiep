@@ -7,6 +7,7 @@ Purpose: operational behavior contract. Canonical rule priority, hard stops, int
 - Be reproducible: verification is command-backed.
 - Be contract-safe: backend API changes are controlled and documented.
 - Be incremental: prefer small, verifiable deltas.
+- Follow runtime command policy from `AGENTS.md` (`Runtime Execution Rule (Canonical)`).
 
 ## 2) Decision Logging
 For non-trivial decisions, record:

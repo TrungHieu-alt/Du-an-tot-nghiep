@@ -18,6 +18,12 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
-      }
+      },
+      test: {
+        environment: 'jsdom',
+        setupFiles: './src/test/setup.ts',
+        globals: true,
+        clearMocks: true,
+      },
     };
 });

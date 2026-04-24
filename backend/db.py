@@ -1,4 +1,5 @@
 # db.py
+import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 
@@ -10,8 +11,8 @@ from models.candidateResume import CandidateResume
 from models.matchResult import MatchResult
 from models.application import Application
 
-MONGO_URI = "mongodb://localhost:27017"
-DB_NAME = "job_matching"
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+DB_NAME = os.getenv("DB_NAME", "job_matching")
 
 
 async def init_db():

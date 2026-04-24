@@ -95,6 +95,11 @@ Use this rule when the user explicitly requests chat output only (for example: "
 - Do not make silent assumptions on security, auth, or tenant boundaries.
 - Do not merge AI guardrails doc edits without a duplicate-rule check across `AGENTS.md` and `docs/agent-rules/*`.
 
+## Runtime Execution Rule (Canonical)
+- For any task that requires runtime execution (for example: running tests, starting app services, smoke checks, or commands that depend on live backend/frontend processes), use Docker Compose runtime instead of host-local runtimes.
+- Default execution path is `docker compose` with repository-defined services.
+- Host-local runtime commands are allowed only when Docker-based execution is unavailable or explicitly requested by the user, and this exception must be documented in the handoff note.
+
 ## AI Guardrails Doc Change Gate
 Applies when editing `AGENTS.md` or any file under `docs/agent-rules/`.
 

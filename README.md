@@ -139,22 +139,39 @@ Frontend UI  --->  Backend API  --->  MongoDB (CRUD)
 ```text
 .
 ├── backend/         # FastAPI backend + RAG pipeline
-├── frontend/        # Frontend workspace (hiện chưa có source files)
+├── frontend/        # Frontend React + Vite
+├── docker-compose.yml
+├── .env.example
 ├── docs/            # HLD/LLD và agent rules
 └── asset/           # Hình ảnh minh họa README
 ```
 
 ## Cấu hình môi trường
-Tạo file `.env` trong `backend/`:
+Tạo file `.env` ở root project (cùng cấp `docker-compose.yml`):
 
 ```env
+DB_NAME=job_matching
 GEMINI_API_KEY=your_api_key_here
 OPENAI_API_KEY=
 MASTODON_API_BASE_URL=
 MASTODON_ACCESS_TOKEN=
+VITE_API_BASE_URL=http://localhost:8000
 ```
 
+`MONGO_URI` là tùy chọn. Nếu không truyền, backend trong Docker sẽ dùng MongoDB container nội bộ: `mongodb://mongo:27017`.
+
 ## Chạy hệ thống
+### Docker Compose (khuyến nghị cho dev)
+```bash
+cp .env.example .env
+# cập nhật GEMINI_API_KEY trong .env
+docker compose up --build
+```
+
+- MongoDB: `mongodb://localhost:27017`
+- Backend: `http://localhost:8000`
+- Frontend: `http://localhost:5173`
+
 ### Backend
 ```bash
 cd backend
@@ -168,8 +185,6 @@ python main.py
 Backend chạy ở `http://localhost:8000`.
 
 ### Frontend
-Thư mục `frontend/` hiện chưa có source code để chạy app. Khi frontend được thêm vào, có thể dùng luồng Vite chuẩn:
-
 ```bash
 cd frontend
 npm install
@@ -180,6 +195,8 @@ Frontend dự kiến chạy ở `http://localhost:5173`.
 
 ## Ghi chú
 - ChromaDB lưu local tại `backend/ragmodel/vector_store`.
-- MongoDB mặc định: `mongodb://localhost:27017`, DB `job_matching`.
+- MongoDB mặc định fallback: `mongodb://localhost:27017`, DB `job_matching`.
+- Với Docker Compose, backend mặc định kết nối service `mongo` (`mongodb://mongo:27017`).
+- Nếu muốn dùng MongoDB Atlas, set `MONGO_URI` trong root `.env`.
 - CORS backend hiện mở cho `http://localhost:5173` và `http://127.0.0.1:5173`.
 - Nếu chỉ cần chi tiết pipeline AI, xem `backend/README.md`.
