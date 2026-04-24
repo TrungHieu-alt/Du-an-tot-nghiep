@@ -160,19 +160,48 @@ VITE_API_BASE_URL=http://localhost:8000
 
 `MONGO_URI` là tùy chọn. Nếu không truyền, backend trong Docker sẽ dùng MongoDB container nội bộ: `mongodb://mongo:27017`.
 
-## Chạy hệ thống
-### Docker Compose (khuyến nghị cho dev)
+## Setup runtime + chạy app (Docker)
+Docker Compose là runtime mặc định của project.
+
+### 1) Chuẩn bị môi trường
 ```bash
 cp .env.example .env
 # cập nhật GEMINI_API_KEY trong .env
+```
+
+### 2) Build và chạy toàn bộ app
+```bash
 docker compose up --build
 ```
 
-- MongoDB: `mongodb://localhost:27017`
-- Backend: `http://localhost:8000`
+### 3) Nạp dữ liệu mẫu vào MongoDB container
+```bash
+# copy folder dump_db từ host vào container mongo
+docker compose cp ./dump_db/. mongo:/dump_db
+
+# restore vào DB mặc định job_matching (ghi đè collections cũ)
+docker compose exec mongo mongorestore --db job_matching --drop /dump_db
+```
+
+### 4) Truy cập services
+- MongoDB: `mongodb://localhost:27018`
+- Backend API: `http://localhost:8000`
 - Frontend: `http://localhost:5173`
 
-### Backend
+### 5) Các lệnh runtime Docker thường dùng
+```bash
+# chạy nền
+docker compose up -d
+
+# xem log
+docker compose logs -f
+
+# dừng app
+docker compose down
+```
+
+### Host-local (tùy chọn, chỉ dùng khi không chạy Docker)
+#### Backend
 ```bash
 cd backend
 python -m venv .venv
@@ -184,7 +213,7 @@ python main.py
 
 Backend chạy ở `http://localhost:8000`.
 
-### Frontend
+#### Frontend
 ```bash
 cd frontend
 npm install
