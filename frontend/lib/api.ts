@@ -1,40 +1,46 @@
 
-import axios from "axios";
+import axios from 'axios';
+import { getStoredAccessToken } from './auth-session';
+import { ENV } from '../src/config/env';
+import { reportApiError } from './api-error';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-
-console.log("🔗 API Base URL:", API_BASE_URL);
+declare module 'axios' {
+  export interface InternalAxiosRequestConfig<D = any> {
+    suppressGlobalErrorToast?: boolean;
+  }
+}
 
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: ENV.API_BASE_URL,
   timeout: 30000,
   headers: {
-    // Bypass ngrok browser warning for free accounts (kept for compatibility if switched back)
-    "ngrok-skip-browser-warning": "true",
-    "Bypass-Tunnel-Reminder": "true",
-    "Content-Type": "application/json",
-    "Accept": "application/json",
+    'ngrok-skip-browser-warning': 'true',
+    'Bypass-Tunnel-Reminder': 'true',
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
   },
 });
 
-// Attach Bearer token
 api.interceptors.request.use((config) => {
-  const token =
-    sessionStorage.getItem("accessToken") ||
-    localStorage.getItem("accessToken");
-
+  const token = getStoredAccessToken();
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-// Add response interceptor for better debugging
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.code === "ERR_NETWORK") {
-      console.error("Network Error detected. This might be due to CORS or the server being unreachable.");
+    const suppressToast = Boolean(error?.config?.suppressGlobalErrorToast);
+    const normalized = reportApiError(error, {
+      suppressToast,
+      context: {
+        source: 'axios',
+      },
+    });
+    if (error && typeof error === 'object') {
+      (error as { normalizedApiError?: unknown }).normalizedApiError = normalized;
     }
     return Promise.reject(error);
   }

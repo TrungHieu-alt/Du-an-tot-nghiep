@@ -1,23 +1,32 @@
 
 import { http } from './http';
-import { User } from '../types';
+import { apiRoutes } from '../../lib/api-routes';
 
 export interface RegisterDto {
   email: string;
   password: string;
+  role?: 'candidate' | 'recruiter';
   name?: string;
 }
 
-export interface AuthResponse {
-  accessToken?: string;
-  user: User;
+export interface UserResponse {
+  user_id: number;
+  email: string;
+  role?: 'candidate' | 'recruiter' | 'admin';
+  created_at?: string;
+  updated_at?: string;
 }
 
 export const authApi = {
   register: (dto: RegisterDto) => {
-    return http<AuthResponse>('/auth/register', {
+    const payload = {
+      email: dto.email,
+      password: dto.password,
+      role: dto.role,
+    };
+    return http<UserResponse>(apiRoutes.users.register(), {
       method: 'POST',
-      body: dto,
+      body: payload,
     });
   },
 };

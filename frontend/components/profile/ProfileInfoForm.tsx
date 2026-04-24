@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../../types';
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
-import api from '../../lib/api';
 
 interface ProfileInfoFormProps {
   user: User;
@@ -40,20 +39,19 @@ const ProfileInfoForm: React.FC<ProfileInfoFormProps> = ({ user, onUserUpdate })
     setMessage(null);
 
     try {
-      // API expects 'fullName' but state uses 'name' (derived from user.name)
-      const payload = {
-        fullName: formData.name,
+      onUserUpdate({
+        ...user,
+        name: formData.name,
         phone: formData.phone,
-        gender: formData.gender,
-        birthday: formData.birthday
-      };
-
-      const res = await api.put('/users/me', payload);
-      onUserUpdate(res.data);
-      setMessage({ type: 'success', text: 'Cập nhật thông tin thành công!' });
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.message || 'Có lỗi xảy ra.';
-      setMessage({ type: 'error', text: Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg });
+        gender: formData.gender as User['gender'],
+        birthday: formData.birthday,
+      });
+      setMessage({
+        type: 'success',
+        text: 'Backend hiện chưa hỗ trợ cập nhật hồ sơ cá nhân. Thay đổi chỉ lưu cục bộ trong phiên này.',
+      });
+    } catch {
+      setMessage({ type: 'error', text: 'Có lỗi xảy ra.' });
     } finally {
       setLoading(false);
     }

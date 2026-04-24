@@ -1,5 +1,3 @@
-import api from '../lib/api';
-
 interface ParsedBdfResponse {
   title?: string;
   skills?: string;
@@ -14,14 +12,6 @@ interface ParsedBdfResponse {
  * Uploads and parses a BDF/PDF/DOC file.
  */
 export const parseBdfApi = async (file: File): Promise<ParsedBdfResponse> => {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const response = await api.post('/parse-bdf', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
-
-  return response.data;
+  void file;
+  throw new Error('Tính năng parse-bdf chưa được backend hỗ trợ trong contract hiện tại.');
 };

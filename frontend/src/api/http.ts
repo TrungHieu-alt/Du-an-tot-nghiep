@@ -1,12 +1,14 @@
 
 import { ENV } from '../config/env';
+import { toApiRequestError } from '../../lib/api-error';
 
 interface RequestOptions extends RequestInit {
-  body?: any;
+  body?: unknown;
+  suppressGlobalErrorToast?: boolean;
 }
 
 export async function http<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, ...rest } = options;
+  const { body, suppressGlobalErrorToast = false, ...rest } = options;
   
   const headers = new Headers(options.headers);
   if (body && !(body instanceof FormData)) {
@@ -19,23 +21,51 @@ export async function http<T>(path: string, options: RequestOptions = {}): Promi
   const config: RequestInit = {
     ...rest,
     headers,
-    body: body instanceof FormData ? body : JSON.stringify(body),
+    body:
+      body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
   };
 
-  const response = await fetch(`${ENV.API_BASE_URL}${path}`, config);
+  const method = options.method?.toUpperCase() ?? 'GET';
+  let response: Response;
+  try {
+    response = await fetch(`${ENV.API_BASE_URL}${path}`, config);
+  } catch (error) {
+    throw toApiRequestError(error, {
+      suppressToast: suppressGlobalErrorToast,
+      context: {
+        source: 'fetch',
+        endpoint: path,
+        method,
+      },
+    });
+  }
 
   if (!response.ok) {
-    let errorMessage = 'Đã có lỗi xảy ra';
+    let errorPayload: unknown;
     try {
-      const errorData = await response.json();
-      // NestJS common error structure: { message: string | string[], error: string, statusCode: number }
-      errorMessage = Array.isArray(errorData.message) 
-        ? errorData.message[0] 
-        : errorData.message || errorMessage;
+      const contentType = response.headers.get('content-type') ?? '';
+      if (contentType.includes('application/json')) {
+        errorPayload = await response.json();
+      } else {
+        const text = await response.text();
+        if (text.trim()) {
+          errorPayload = text;
+        }
+      }
     } catch {
-      errorMessage = `Error ${response.status}: ${response.statusText}`;
+      errorPayload = undefined;
     }
-    throw new Error(errorMessage);
+
+    throw toApiRequestError(errorPayload ?? response.statusText, {
+      suppressToast: suppressGlobalErrorToast,
+      context: {
+        source: 'fetch',
+        endpoint: path,
+        method,
+        statusCode: response.status,
+        payload: errorPayload,
+      },
+    });
   }
 
   if (response.status === 204) return {} as T;

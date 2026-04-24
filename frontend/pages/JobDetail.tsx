@@ -10,6 +10,9 @@ import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import EditJobModal from '../components/modals/EditJobModal';
 import { SkeletonList } from '../components/common/SkeletonLoader';
+import { apiRoutes } from '../lib/api-routes';
+import { getCurrentUserId } from '../lib/auth-session';
+import { normalizeApiError } from '../lib/api-error';
 
 // --- Interfaces based on Backend JSON ---
 
@@ -131,7 +134,7 @@ const JobDetail: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get(`/jobs/${id}`);
+      const res = await api.get(apiRoutes.jobs.byId(id));
       const payload = res.data;
 
       // Normalize data based on backend JSON
@@ -186,9 +189,9 @@ const JobDetail: React.FC = () => {
       };
       
       setJob(normalized);
-    } catch (err: any) {
-      console.error('Fetch Job Error:', err);
-      setError(err.response?.data?.message || 'Không thể tải thông tin công việc.');
+    } catch (err: unknown) {
+      const normalized = normalizeApiError(err, { source: 'axios' });
+      setError(normalized.displayMessage || 'Không thể tải thông tin công việc.');
     } finally {
       setLoading(false);
     }
@@ -203,11 +206,13 @@ const JobDetail: React.FC = () => {
     if (user) {
       const fetchMyCvs = async () => {
         try {
-          const res = await api.get('/cv/user/me');
+          const userId = user.id || getCurrentUserId();
+          if (!userId) return;
+          const res = await api.get(apiRoutes.cv.byUser(userId));
           const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
           setMyCvs(data);
-        } catch (e) {
-          console.error("Failed to fetch CVs for matching", e);
+        } catch {
+          // Error toast is handled globally by API interceptor.
         }
       };
       fetchMyCvs();
@@ -220,13 +225,12 @@ const JobDetail: React.FC = () => {
   const handleUpdateJob = async (updatedData: any) => {
     setIsSaving(true);
     try {
-      await api.put(`/jobs/${id}`, updatedData);
+      await api.put(apiRoutes.jobs.byId(id as string), updatedData);
       await fetchJob();
       setIsEditModalOpen(false);
       alert('Cập nhật tin tuyển dụng thành công!');
-    } catch (err: any) {
-      console.error("Update failed", err);
-      alert(err.response?.data?.message || 'Cập nhật thất bại.');
+    } catch {
+      // Error toast is handled globally by API interceptor.
     } finally {
       setIsSaving(false);
     }
@@ -234,11 +238,10 @@ const JobDetail: React.FC = () => {
 
   const handleDeleteJob = async () => {
     try {
-      await api.delete(`/jobs/${id}`);
+      await api.delete(apiRoutes.jobs.byId(id as string));
       navigate('/jobs');
-    } catch (err: any) {
-      console.error("Delete failed", err);
-      alert('Không thể xóa tin tuyển dụng. Vui lòng thử lại.');
+    } catch {
+      // Error toast is handled globally by API interceptor.
     }
   };
 
@@ -273,11 +276,10 @@ const JobDetail: React.FC = () => {
       // Call RAG match endpoint: Match Job (id) against CV (cvId)
       // Note: The endpoint logic is symmetric, so order might depend on backend impl,
       // typically /match-job-cv-chunks/:jobId/:cvId
-      const res = await api.get(`/rag/match-job-cv-chunks/${id}/${cvId}`);
+      const res = await api.get(apiRoutes.jobs.matchCvDetail(id as string, cvId));
       setMatchResult(res.data);
-    } catch (error) {
-      console.error("Match analysis failed", error);
-      alert("Không thể phân tích mức độ phù hợp. Vui lòng thử lại sau.");
+    } catch {
+      // Error toast is handled globally by API interceptor.
     } finally {
       setIsAnalyzing(false);
     }

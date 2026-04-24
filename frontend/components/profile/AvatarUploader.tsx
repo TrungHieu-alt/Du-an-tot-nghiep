@@ -1,7 +1,6 @@
 
 import React, { useRef, useState } from 'react';
 import { Camera, Loader2, User as UserIcon } from 'lucide-react';
-import api from '../../lib/api';
 
 interface AvatarUploaderProps {
   currentAvatar?: string;
@@ -22,19 +21,13 @@ const AvatarUploader: React.FC<AvatarUploaderProps> = ({ currentAvatar, userName
       return;
     }
 
-    setIsUploading(true);
-    const formData = new FormData();
-    formData.append('avatar', file);
-
     try {
-      const res = await api.post('/users/me/avatar', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      // Assuming backend returns { avatar: "url" }
-      onUploadSuccess(res.data.avatar);
-    } catch (error) {
-      console.error("Upload failed", error);
-      alert('Tải ảnh lên thất bại. Vui lòng thử lại.');
+      setIsUploading(true);
+      const localPreviewUrl = URL.createObjectURL(file);
+      onUploadSuccess(localPreviewUrl);
+      alert('Backend hiện chưa hỗ trợ tải ảnh đại diện. Ảnh chỉ hiển thị tạm thời trong phiên này.');
+    } catch {
+      alert('Không thể xử lý ảnh đã chọn.');
     } finally {
       setIsUploading(false);
     }

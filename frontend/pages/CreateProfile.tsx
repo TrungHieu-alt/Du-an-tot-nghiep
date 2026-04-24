@@ -7,6 +7,8 @@ import BdfUploadParser from '../components/profile/BdfUploadParser';
 import { CreateCvDto } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
+import { apiRoutes } from '../lib/api-routes';
+import { getCurrentUserId } from '../lib/auth-session';
 
 // Local safe clone to ensure localStorage writes don't crash on cycles
 const safeDeepClone = (obj: any, seen = new WeakSet()): any => {
@@ -117,6 +119,10 @@ const CreateProfile: React.FC = () => {
 
         // 2. CASE B: Need to create CV from parsed text
         if (isCandidateMode) {
+            const userId = user?.id || getCurrentUserId();
+            if (!userId) {
+              throw new Error('Vui lòng đăng nhập để tạo hồ sơ.');
+            }
             // Construct payload with safe defaults to ensure API success
             const mappedData: Partial<CreateCvDto> = {
                 fullname: data.fullname || user?.name || "Hồ sơ của tôi", // Fallback mandatory field
@@ -143,7 +149,7 @@ const CreateProfile: React.FC = () => {
             console.log("Auto-creating CV with data:", mappedData);
             
             // Call API to create
-            const res = await api.post('/cv', mappedData);
+            const res = await api.post(apiRoutes.cv.create(userId), mappedData);
             
             // Redirect immediately with new data
             if (res.data && (res.data._id || res.data.id)) {

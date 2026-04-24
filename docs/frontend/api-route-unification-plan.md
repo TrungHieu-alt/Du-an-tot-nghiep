@@ -53,54 +53,54 @@ This plan supersedes ad-hoc frontend route usage and is the execution/governance
 | `POST /rag/ask` | none | disable/remove | unsupported |
 | `POST /parse-bdf` | none | disable/remove | unsupported |
 
-## Phased Migration Checklist
+## Phased Migration Checklist (Completed April 24, 2026)
 
 ### Phase A: Auth/User
-- [ ] Set frontend auth routes to `/api/users/register` and `/api/users/login`.
-- [ ] Store/use backend user identity fields (`user_id`, `role`, timestamps).
-- [ ] Replace profile fetch path with `GET /api/users/{user_id}`.
-- [ ] Replace account delete path with `DELETE /api/users/{user_id}`.
-- [ ] Disable unsupported auth/account operations (`/auth/change-password`, `/users/me` update variants).
-- [ ] Record evidence of completed replacements.
+- [x] Set frontend auth routes to `/api/users/register` and `/api/users/login`.
+- [x] Store/use backend user identity fields (`user_id`, `role`, timestamps).
+- [x] Replace profile fetch path with `GET /api/users/{user_id}`.
+- [x] Replace account delete path with `DELETE /api/users/{user_id}`.
+- [x] Disable unsupported auth/account operations (`/auth/change-password`, `/users/me` update variants).
+- [x] Record evidence of completed replacements.
 
 ### Phase B: CV/Candidate
-- [ ] Replace CV create route with `POST /api/cv/create/{user_id}`.
-- [ ] Replace CV list/user-me variants with:
+- [x] Replace CV create route with `POST /api/cv/create/{user_id}`.
+- [x] Replace CV list/user-me variants with:
   - `GET /api/cv/user/{user_id}`
   - `GET /api/cv/main/user/{user_id}` (when main CV needed)
-- [ ] Keep CV CRUD on canonical `/api/cv/{cv_id}` routes.
-- [ ] Replace rename patch usage with full `PUT /api/cv/{cv_id}` updates.
-- [ ] Replace CV upload path with `POST /api/cv/upload/{user_id}`.
-- [ ] Remove `/cvs/*` legacy calls.
-- [ ] Record evidence of completed replacements.
+- [x] Keep CV CRUD on canonical `/api/cv/{cv_id}` routes.
+- [x] Replace rename patch usage with full `PUT /api/cv/{cv_id}` updates.
+- [x] Replace CV upload path with `POST /api/cv/upload/{user_id}`.
+- [x] Remove `/cvs/*` legacy calls.
+- [x] Record evidence of completed replacements.
 
 ### Phase C: Jobs/Recruiter
-- [ ] Replace job create route with `POST /api/jobs/create/{recruiter_id}`.
-- [ ] Replace recruiter-me list with `GET /api/jobs/recruiter/{recruiter_id}`.
-- [ ] Keep job CRUD on canonical `/api/jobs/{job_id}` routes.
-- [ ] Replace rename patch usage with full `PUT /api/jobs/{job_id}` updates.
-- [ ] Remove `/requirements/*` namespace usage.
-- [ ] Record evidence of completed replacements.
+- [x] Replace job create route with `POST /api/jobs/create/{recruiter_id}`.
+- [x] Replace recruiter-me list with `GET /api/jobs/recruiter/{recruiter_id}`.
+- [x] Keep job CRUD on canonical `/api/jobs/{job_id}` routes.
+- [x] Replace rename patch usage with full `PUT /api/jobs/{job_id}` updates.
+- [x] Remove `/requirements/*` namespace usage.
+- [x] Record evidence of completed replacements.
 
 ### Phase D: Matching
-- [ ] Replace `rag/*` read endpoints with canonical matching endpoints:
+- [x] Replace `rag/*` read endpoints with canonical matching endpoints:
   - `GET /api/cv/match/{cv_id}/jobs`
   - `GET /api/cv/match/{cv_id}/jobs/{job_id}`
   - `GET /api/jobs/match/{job_id}/cvs`
   - `GET /api/jobs/match/{job_id}/cvs/{cv_id}`
-- [ ] Use `/api/matching/*` routes only where persisted run/list/delete workflows are needed.
-- [ ] Record evidence of completed replacements.
+- [x] Use `/api/matching/*` routes only where persisted run/list/delete workflows are needed.
+- [x] Record evidence of completed replacements.
 
 ### Phase E: Unsupported Frontend-Only Routes
-- [ ] Remove/disable unsupported calls:
+- [x] Remove/disable unsupported calls:
   - `/auth/profile` (after replaced by `/users/{user_id}`)
   - `/auth/change-password`
   - `/users/me` update/career/avatar variants
   - `/requirements/*`
   - `/parse-bdf`
   - `/rag/ask`
-- [ ] Ensure UI fallbacks communicate unavailability where needed.
-- [ ] Record evidence of completed removals/disablements.
+- [x] Ensure UI fallbacks communicate unavailability where needed.
+- [x] Record evidence of completed removals/disablements.
 
 ## Validation Checklist
 - [ ] Contract check before each phase:

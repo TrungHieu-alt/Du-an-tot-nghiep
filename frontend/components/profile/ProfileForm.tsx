@@ -23,6 +23,8 @@ import {
 import { CreateCvDto } from '../../types';
 import api from '../../lib/api'; // Using axios instance
 import { useAuth } from '../../contexts/AuthContext';
+import { apiRoutes } from '../../lib/api-routes';
+import { getCurrentUserId } from '../../lib/auth-session';
 
 interface ProfileFormProps {
   initialData?: Partial<CreateCvDto> | null;
@@ -383,7 +385,11 @@ const ProfileForm: React.FC<ProfileFormProps> = ({
           await onSubmit(finalPayload);
           setSaveSuccess(true);
         } else {
-          const res = await api.post('/jobs', finalPayload);
+          const recruiterId = user?.id || getCurrentUserId();
+          if (!recruiterId) {
+            throw new Error('Vui lòng đăng nhập để tạo tin tuyển dụng.');
+          }
+          const res = await api.post(apiRoutes.jobs.create(recruiterId), finalPayload);
           setSaveSuccess(true);
           alert('Đăng tin tuyển dụng thành công!');
           try {
@@ -392,14 +398,10 @@ const ProfileForm: React.FC<ProfileFormProps> = ({
             // ignore
           }
         }
-      } catch (error: any) {
-        console.error('Failed to save job', error);
-        const errorMessage = error?.response?.data?.message
-          ? Array.isArray(error.response.data.message)
-            ? error.response.data.message.join(', ')
-            : error.response.data.message
-          : 'Lỗi khi lưu tin tuyển dụng. Vui lòng kiểm tra lại thông tin.';
-        alert(errorMessage);
+      } catch (error: unknown) {
+        if (!(error as { response?: unknown })?.response && error instanceof Error) {
+          alert(error.message);
+        }
       } finally {
         setLocalIsSubmitting(false);
       }
@@ -772,19 +774,19 @@ const ProfileForm: React.FC<ProfileFormProps> = ({
         await onSubmit(safePayload);
         setSaveSuccess(true);
       } else {
-        const res = await api.post('/cv', safePayload);
+        const userId = user?.id || getCurrentUserId();
+        if (!userId) {
+          throw new Error('Vui lòng đăng nhập để tạo hồ sơ.');
+        }
+        const res = await api.post(apiRoutes.cv.create(userId), safePayload);
         setSaveSuccess(true);
         alert('Lưu hồ sơ thành công!');
         onSubmit(res.data); // Pass full response including _id
       }
-    } catch (error: any) {
-      console.error('Failed to save CV', error);
-      const errorMessage = error?.response?.data?.message
-        ? Array.isArray(error.response.data.message)
-          ? error.response.data.message.join(', ')
-          : error.response.data.message
-        : 'Lỗi khi lưu hồ sơ. Vui lòng kiểm tra lại thông tin.';
-      alert(errorMessage);
+    } catch (error: unknown) {
+      if (!(error as { response?: unknown })?.response && error instanceof Error) {
+        alert(error.message);
+      }
     } finally {
       setLocalIsSubmitting(false);
     }

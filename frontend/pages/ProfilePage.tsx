@@ -7,6 +7,8 @@ import { User } from '../types';
 import ProfileHeader from '../components/profile/ProfileHeader';
 import ProfileInfoForm from '../components/profile/ProfileInfoForm';
 import { Loader2 } from 'lucide-react';
+import { apiRoutes } from '../lib/api-routes';
+import { getCurrentUserId } from '../lib/auth-session';
 
 const ProfilePage: React.FC = () => {
   const { isAuthenticated, user: authUser, login } = useAuth();
@@ -24,8 +26,17 @@ const ProfilePage: React.FC = () => {
 
     const fetchProfile = async () => {
       try {
-        const res = await api.get('/auth/profile');
-        setUserProfile(res.data);
+        const userId = authUser?.id || getCurrentUserId();
+        if (!userId) {
+          throw new Error('Missing user id in session');
+        }
+        const res = await api.get(apiRoutes.users.byId(userId));
+        setUserProfile({
+          id: String(res.data.user_id ?? userId),
+          email: res.data.email,
+          name: res.data.name || res.data.email,
+          role: res.data.role,
+        });
       } catch (error) {
         console.error("Failed to fetch profile", error);
         // Fallback to AuthContext user if API fails (rare case)

@@ -3,13 +3,14 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { Briefcase, ArrowLeft, User, Mail, Lock, Eye, EyeOff, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
-import { authApi, RegisterDto } from '../src/api/auth';
+import { authApi, RegisterDto, UserResponse } from '../src/api/auth';
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<'candidate' | 'recruiter'>('candidate');
 
   const {
     register,
@@ -22,13 +23,17 @@ const Register: React.FC = () => {
     setApiError(null);
 
     try {
-      const response = await authApi.register(data);
-      
-      // Lưu thông tin vào localStorage theo yêu cầu
-      if (response.accessToken) {
-        localStorage.setItem('accessToken', response.accessToken);
-      }
-      localStorage.setItem('user', JSON.stringify(response.user));
+      const response = await authApi.register({
+        ...data,
+        role: selectedRole,
+      });
+      const normalizedUser = {
+        id: String((response as UserResponse).user_id),
+        email: response.email,
+        role: response.role,
+        name: response.email,
+      };
+      localStorage.setItem('user', JSON.stringify(normalizedUser));
 
       alert('Đăng ký thành công!');
       
@@ -173,6 +178,21 @@ const Register: React.FC = () => {
                                 </button>
                             </div>
                             {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password.message}</p>}
+                        </div>
+
+                        {/* Role Field */}
+                        <div className="space-y-1">
+                            <label className="text-sm font-semibold text-gray-700" htmlFor="role">Vai trò <span className="text-red-500">*</span></label>
+                            <select
+                              id="role"
+                              value={selectedRole}
+                              onChange={(e) => setSelectedRole(e.target.value as 'candidate' | 'recruiter')}
+                              className="block w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0A65CC]/20 focus:border-[#0A65CC] transition-all text-sm font-medium"
+                              disabled={isLoading}
+                            >
+                              <option value="candidate">Ứng viên</option>
+                              <option value="recruiter">Nhà tuyển dụng</option>
+                            </select>
                         </div>
 
                         <button

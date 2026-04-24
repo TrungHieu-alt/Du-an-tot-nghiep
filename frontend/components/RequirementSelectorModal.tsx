@@ -7,6 +7,8 @@ import RequirementCard from './RequirementCard';
 import ConfirmDialog from './common/ConfirmDialog';
 import EditRequirementModal from './modals/EditRequirementModal';
 import api from '../lib/api';
+import { apiRoutes } from '../lib/api-routes';
+import { getCurrentUserId } from '../lib/auth-session';
 
 interface RequirementSelectorModalProps {
   isOpen: boolean;
@@ -26,8 +28,7 @@ const RequirementSelectorModal: React.FC<RequirementSelectorModalProps> = ({
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-  // We assume the logged-in user owns the data fetched from /jobs/user/me
-  const CURRENT_USER_ID = "me"; 
+  const currentUserId = getCurrentUserId();
   
   // Local state
   const [localReqs, setLocalReqs] = useState<ExtendedJobRequirement[]>([]);
@@ -63,7 +64,11 @@ const RequirementSelectorModal: React.FC<RequirementSelectorModalProps> = ({
   const fetchRequirements = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/jobs/user/me');
+      if (!currentUserId) {
+        setLocalReqs([]);
+        return;
+      }
+      const res = await api.get(apiRoutes.jobs.byRecruiter(currentUserId));
       // Backend may return array directly or { data: [...] } or { items: [...] }
       const rawData = Array.isArray(res.data) 
         ? res.data 
@@ -111,15 +116,14 @@ const RequirementSelectorModal: React.FC<RequirementSelectorModalProps> = ({
           iconType: 'Code', // fallback icon
           color: 'bg-blue-500', // fallback color
           criteriaList: criteriaList,
-          ownerId: CURRENT_USER_ID, // Owned by "me"
+          ownerId: currentUserId, // Owned by current recruiter
           originalData: item // Store full backend object
         };
       });
 
       setLocalReqs(mappedReqs);
-    } catch (error) {
-      console.error('RequirementSelectorModal error', error);
-      setToast({ message: 'Không tải được yêu cầu tuyển dụng', type: 'error' });
+    } catch {
+      // Error toast is handled globally by API interceptor.
     } finally {
       setLoading(false);
     }
@@ -153,22 +157,14 @@ const RequirementSelectorModal: React.FC<RequirementSelectorModalProps> = ({
     setLocalReqs(prev => prev.map(r => r.id === req.id ? { ...r, title: newTitle } : r));
 
     try {
-      // Try specific rename endpoint first
-      await api.patch(`/jobs/${req.id}/rename`, { title: newTitle });
+      await api.put(apiRoutes.jobs.byId(req.id), {
+        ...(req as ExtendedJobRequirement).originalData,
+        title: newTitle,
+      });
       setToast({ message: 'Đổi tên thành công', type: 'success' });
-    } catch (error) {
-      console.error("Rename failed, attempting fallback PUT", error);
-      
-      try {
-         // Fallback to standard update if specific rename not available
-         await api.put(`/jobs/${req.id}`, { title: newTitle });
-         setToast({ message: 'Đổi tên thành công', type: 'success' });
-      } catch (fallbackError) {
-         console.error("Rename fallback failed", fallbackError);
-         // Rollback
-         setLocalReqs(prev => prev.map(r => r.id === req.id ? { ...r, title: originalTitle } : r));
-         setToast({ message: 'Đổi tên thất bại. Vui lòng thử lại.', type: 'error' });
-      }
+    } catch {
+      // Rollback
+      setLocalReqs(prev => prev.map(r => r.id === req.id ? { ...r, title: originalTitle } : r));
     }
   };
 
@@ -184,7 +180,7 @@ const RequirementSelectorModal: React.FC<RequirementSelectorModalProps> = ({
       // Use PUT /jobs/:id to update
       // Ensure we map the form data back to what backend expects if needed,
       // but ProfileForm usually outputs compatible DTO structure.
-      await api.put(`/jobs/${editingReq.id}`, formData);
+      await api.put(apiRoutes.jobs.byId(editingReq.id), formData);
       
       setToast({ message: 'Cập nhật yêu cầu thành công', type: 'success' });
       setEditingReq(null);
@@ -192,9 +188,8 @@ const RequirementSelectorModal: React.FC<RequirementSelectorModalProps> = ({
       // Refresh list to get consistent state
       await fetchRequirements();
 
-    } catch (error) {
-      console.error("Update failed", error);
-      setToast({ message: 'Cập nhật thất bại. Vui lòng thử lại.', type: 'error' });
+    } catch {
+      // Error toast is handled globally by API interceptor.
     } finally {
       setIsSaving(false);
     }
@@ -213,12 +208,10 @@ const RequirementSelectorModal: React.FC<RequirementSelectorModalProps> = ({
     });
 
     try {
-      await api.delete(`/jobs/${itemToDelete.id}`);
-    } catch (error) {
-      console.error("Delete failed", error);
+      await api.delete(apiRoutes.jobs.byId(itemToDelete.id));
+    } catch {
       // Rollback
       setLocalReqs(prev => [...prev, itemToDelete]);
-      setToast({ message: 'Xóa thất bại.', type: 'error' });
     }
   };
 
@@ -252,16 +245,17 @@ const RequirementSelectorModal: React.FC<RequirementSelectorModalProps> = ({
       delete payload.applicationsCount;
 
       // Re-create via POST
-      await api.post('/jobs', payload);
+      if (!currentUserId) {
+        throw new Error('Missing recruiter_id for restore.');
+      }
+      await api.post(apiRoutes.jobs.create(currentUserId), payload);
       
       setToast({ message: 'Đã hoàn tác xóa', type: 'success' });
       // Refresh to ensure we have the new ID
       fetchRequirements();
-    } catch (error) {
-      console.error("Restore failed", error);
+    } catch {
       // Rollback removal of item
       setLocalReqs(prev => prev.filter(r => r.id !== item.id));
-      setToast({ message: 'Hoàn tác thất bại.', type: 'error' });
     }
   };
 
@@ -332,7 +326,7 @@ const RequirementSelectorModal: React.FC<RequirementSelectorModalProps> = ({
                   onEdit={() => handleEdit(req)}
                   onDelete={() => handleDeleteClick(req)}
                   onRename={handleRename}
-                  currentUserId={CURRENT_USER_ID}
+                  currentUserId={currentUserId || ''}
                 />
               ))}
               

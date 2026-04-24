@@ -8,6 +8,8 @@ import { Filter, SlidersHorizontal, Info, UserCircle } from 'lucide-react';
 import { ViewMode, FilterGroup, UserCV, JobWithMatch } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
+import { apiRoutes } from '../lib/api-routes';
+import { getCurrentUserId } from '../lib/auth-session';
 
 import SearchBar from '../components/search/SearchBar';
 import FiltersPanel from '../components/search/FiltersPanel';
@@ -62,20 +64,22 @@ const Jobs: React.FC = () => {
     if (isAuthenticated) {
       const fetchCvs = async () => {
         try {
-          const res = await api.get('/cv/user/me');
+          const userId = getCurrentUserId();
+          if (!userId) return;
+          const res = await api.get(apiRoutes.cv.byUser(userId));
           const data = res.data;
           
           // Map backend response to UserCV
           const mapped: UserCV[] = Array.isArray(data) ? data.map((item: any) => ({
-             id: item._id,
-             name: item.fullname || "Hồ sơ không tên",
-             title: item.headline || item.targetRole || "Chưa có tiêu đề",
+             id: String(item.cv_id ?? item._id ?? item.id),
+             name: item.fullname || item.title || "Hồ sơ không tên",
+             title: item.headline || item.targetRole || item.title || "Chưa có tiêu đề",
              // Map skills from object array {name, level, ...} to string array
-             skills: Array.isArray(item.skills) ? item.skills.map((s: any) => s.name) : [],
+             skills: Array.isArray(item.skills) ? item.skills.map((s: any) => typeof s === 'string' ? s : s.name).filter(Boolean) : [],
              experienceLevel: "Mid-Level", 
-             location: item.location?.city || "",
-             lastUpdated: item.updatedAt ? new Date(item.updatedAt).toLocaleDateString('vi-VN') : "",
-             ownerId: item.createdBy || item.userId
+             location: item.location?.city || item.location || "",
+             lastUpdated: item.updated_at ? new Date(item.updated_at).toLocaleDateString('vi-VN') : "",
+             ownerId: String(item.user_id ?? item.createdBy ?? item.userId ?? '')
           })) : [];
           setUserCvs(mapped);
         } catch (e) {

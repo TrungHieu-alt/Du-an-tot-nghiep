@@ -3,8 +3,11 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Briefcase, ArrowLeft, Mail, Lock, Eye, EyeOff, CheckSquare, Square, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { AuthResponse } from '../types';
+import { User } from '../types';
 import api from '../lib/api';
+import { apiRoutes } from '../lib/api-routes';
+import { getUserIdFromToken } from '../lib/auth-session';
+import { normalizeApiError } from '../lib/api-error';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -17,47 +20,43 @@ const Login: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  const mapBackendUser = (payload: any): User => ({
+    id: String(payload.user_id ?? payload.id),
+    email: payload.email,
+    name: payload.name || payload.email,
+    role: payload.role,
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
 
     try {
-      // 1. Send Login Request
-      const response = await api.post('/auth/login', {
+      const response = await api.post(apiRoutes.users.login(), {
         email,
         password,
-        rememberMe,
+      }, {
+        suppressGlobalErrorToast: true,
       });
 
-      const authData = response.data as AuthResponse;
-      
-      // 2. Successful Login Handling
-      if (authData.accessToken && authData.user) {
-        // Save to sessionStorage
-        sessionStorage.setItem("accessToken", authData.accessToken);
-        sessionStorage.setItem("user", JSON.stringify(authData.user));
-        
-        // Update global auth state
-        login(authData.accessToken, authData.user);
-        
-        // Redirect to homepage
-        navigate('/');
+      const accessToken = response.data?.access_token as string | undefined;
+      if (!accessToken) {
+        throw new Error('Thiếu access token từ máy chủ');
       }
-    } catch (err: any) {
-      console.error("Login error:", err);
-      
-      // 3. Failed Login Handling
-      // STRICT requirement: Use exact message from backend, no mock fallback.
-      if (err.response && err.response.data) {
-        const { message } = err.response.data;
-        // Display the message field exactly (handle array if validation error, else string)
-        const displayMessage = Array.isArray(message) ? message.join(', ') : message;
-        setError(displayMessage);
-      } else {
-        // Fallback only if no response received (Network Error) but NOT a mock login
-        setError("Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
+
+      const userId = getUserIdFromToken(accessToken);
+      if (!userId) {
+        throw new Error('Không đọc được user_id từ token');
       }
+
+      const userResponse = await api.get(apiRoutes.users.byId(userId));
+      const mappedUser = mapBackendUser(userResponse.data);
+      login(accessToken, mappedUser, rememberMe);
+      navigate('/');
+    } catch (err: unknown) {
+      const normalized = normalizeApiError(err, { source: 'axios' });
+      setError(normalized.displayMessage);
     } finally {
       setIsLoading(false);
     }

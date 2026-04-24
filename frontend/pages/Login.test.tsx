@@ -12,6 +12,7 @@ const loginMock = vi.fn();
 vi.mock('../lib/api', () => ({
   default: {
     post: vi.fn(),
+    get: vi.fn(),
   },
 }));
 
@@ -38,13 +39,23 @@ describe('Login page', () => {
 
   it('submits login form, stores session data, and navigates home on success', async () => {
     const apiPost = vi.mocked(api.post);
-    const user = { id: '1', email: 'dev@example.com', name: 'Dev Candidate' };
+    const apiGet = vi.mocked(api.get);
+    const user = { id: '1', email: 'dev@example.com', name: 'dev@example.com', role: 'candidate' };
+    const accessToken =
+      'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature';
     apiPost.mockResolvedValue({
       data: {
-        accessToken: 'token-123',
-        user,
+        access_token: accessToken,
+        token_type: 'bearer',
       },
     });
+    apiGet.mockResolvedValue({
+      data: {
+        user_id: 1,
+        email: 'dev@example.com',
+        role: 'candidate',
+      },
+    } as any);
 
     render(
       <MemoryRouter>
@@ -57,16 +68,19 @@ describe('Login page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Đăng nhập' }));
 
     await waitFor(() => {
-      expect(apiPost).toHaveBeenCalledWith('/auth/login', {
+      expect(apiPost).toHaveBeenCalledWith('/users/login', {
         email: 'dev@example.com',
         password: 'secret123',
-        rememberMe: false,
+      }, {
+        suppressGlobalErrorToast: true,
       });
     });
 
-    expect(sessionStorage.getItem('accessToken')).toBe('token-123');
-    expect(sessionStorage.getItem('user')).toBe(JSON.stringify(user));
-    expect(loginMock).toHaveBeenCalledWith('token-123', user);
+    await waitFor(() => {
+      expect(apiGet).toHaveBeenCalledWith('/users/1');
+    });
+
+    expect(loginMock).toHaveBeenCalledWith(accessToken, user, false);
     expect(navigateMock).toHaveBeenCalledWith('/');
   });
 

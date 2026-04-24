@@ -5,9 +5,12 @@ import api from '../../lib/api';
 import ConfirmDialog from '../common/ConfirmDialog';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { apiRoutes } from '../../lib/api-routes';
+import { getCurrentUserId } from '../../lib/auth-session';
+import { normalizeApiError } from '../../lib/api-error';
 
 const AccountSettings: React.FC = () => {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
   
   const [passData, setPassData] = useState({
@@ -36,15 +39,13 @@ const AccountSettings: React.FC = () => {
     setMessage(null);
 
     try {
-      await api.patch('/auth/change-password', {
-        oldPassword: passData.oldPassword,
-        newPassword: passData.newPassword
+      setMessage({
+        type: 'error',
+        text: 'Backend hiện chưa hỗ trợ đổi mật khẩu qua API.',
       });
-      setMessage({ type: 'success', text: 'Đổi mật khẩu thành công!' });
       setPassData({ oldPassword: '', newPassword: '', confirmPassword: '' });
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.message || 'Có lỗi xảy ra.';
-      setMessage({ type: 'error', text: Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg });
+    } catch {
+      setMessage({ type: 'error', text: 'Có lỗi xảy ra.' });
     } finally {
       setLoading(false);
     }
@@ -55,11 +56,16 @@ const AccountSettings: React.FC = () => {
     setShowDeleteConfirm(false);
     
     try {
-      await api.delete('/users/me');
+      const userId = user?.id || getCurrentUserId();
+      if (!userId) {
+        throw new Error('Không tìm thấy user_id để xóa tài khoản.');
+      }
+      await api.delete(apiRoutes.users.byId(userId));
       logout();
       navigate('/login');
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Không thể xóa tài khoản.');
+    } catch (err: unknown) {
+      const normalized = normalizeApiError(err, { source: 'axios' });
+      setMessage({ type: 'error', text: normalized.displayMessage });
       setIsDeleting(false);
     }
   };

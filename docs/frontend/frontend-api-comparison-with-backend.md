@@ -137,7 +137,7 @@ Use backend contracts directly (preferred for immediate integration):
 - Reason: backend contract is already documented and is the current implemented system baseline.
 - Risk tradeoff: frontend changes are broader in count but lower risk than introducing new backend compatibility routes without clear ownership and tests.
 
-## Comparison Status Snapshot
-- `MATCHED`: 0 direct fully aligned paths when considering current frontend call patterns and backend prefix requirements.
-- `PARTIAL`: existing capabilities can cover many calls with route and payload refactors.
-- `MISSING`: several frontend features require either backend endpoint additions or temporary feature disablement.
+## Comparison Status Snapshot (After Refactor on April 24, 2026)
+- `MATCHED`: frontend request paths now target canonical backend families (`/users`, `/candidate`, `/cv`, `/jobs`, `/matching`, `/applications`) through shared route builders.
+- `PARTIAL`: response-shape adapters still exist in UI mapping layers because backend payloads differ from historical UI models.
+- `MISSING`: unsupported features remain intentionally disabled in UI (`change-password`, avatar upload persistence, parse-bdf endpoint, chatbot network ask endpoint).

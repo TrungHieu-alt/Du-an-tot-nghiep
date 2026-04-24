@@ -7,6 +7,8 @@ import CvCard from './CvCard';
 import ConfirmDialog from './common/ConfirmDialog';
 import EditCvModal from './modals/EditCvModal';
 import api from '../lib/api';
+import { apiRoutes } from '../lib/api-routes';
+import { getCurrentUserId } from '../lib/auth-session';
 
 interface CvSelectorModalProps {
   isOpen: boolean;
@@ -58,31 +60,35 @@ const CvSelectorModal: React.FC<CvSelectorModalProps> = ({
   const fetchCvs = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/cv/user/me');
+      const userId = getCurrentUserId();
+      if (!userId) {
+        setLocalCvs([]);
+        return;
+      }
+      const res = await api.get(apiRoutes.cv.byUser(userId));
       
       // Handle potential response wrapping (e.g. { data: [...] } or just [...])
       const rawData = Array.isArray(res.data) ? res.data : (res.data?.data || []);
 
       const mappedCvs: ExtendedUserCV[] = Array.isArray(rawData) ? rawData.map((item: any) => ({
-        id: item._id,
-        name: item.fullname || "Hồ sơ không tên",
-        title: item.headline || item.targetRole || "Chưa có tiêu đề",
+        id: String(item.cv_id ?? item._id ?? item.id),
+        name: item.fullname || item.title || "Hồ sơ không tên",
+        title: item.headline || item.targetRole || item.title || "Chưa có tiêu đề",
         // Extract skill names if skills is an array of objects
         skills: Array.isArray(item.skills) 
           ? item.skills.map((s: any) => typeof s === 'string' ? s : s.name).filter(Boolean)
           : [],
         experienceLevel: "Mid-Level", // Placeholder or calculate from item.experiences
         location: item.location?.city || item.location?.state || (typeof item.location === 'string' ? item.location : ""),
-        lastUpdated: item.updatedAt 
-          ? new Date(item.updatedAt).toLocaleDateString('vi-VN') 
+        lastUpdated: item.updated_at || item.updatedAt
+          ? new Date(item.updated_at || item.updatedAt).toLocaleDateString('vi-VN') 
           : "Vừa xong",
-        ownerId: item.userId || item.createdBy,
+        ownerId: String(item.user_id ?? item.userId ?? item.createdBy ?? ''),
         originalData: item // Store full object for editing/restoring
       })) : [];
 
       setLocalCvs(mappedCvs);
-    } catch (error) {
-      console.error("Failed to fetch CVs", error);
+    } catch {
       // Fallback to empty if API fails
       setLocalCvs([]);
     } finally {
@@ -111,41 +117,10 @@ const CvSelectorModal: React.FC<CvSelectorModalProps> = ({
   const handleSkip = async () => {
     setIsSkipping(true);
     try {
-      console.log("🚀 Skipping... Fetching CVs for manual search context");
-      const res = await api.get('/cv');
-      
-      // Safety check: API might return { data: [...] } or just [...]
-      const rawData = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-      console.log("📥 Received CVs for skip:", rawData);
-
-      if (!Array.isArray(rawData)) {
-        console.warn("Unexpected response format from /cv", res.data);
-        // Don't throw, just map empty to proceed
-      }
-      
-      // Map to UserCV structure for the Jobs page state
-      const mappedCvs = Array.isArray(rawData) ? rawData.map((item: any) => ({
-        id: item._id,
-        name: item.fullname || "Hồ sơ không tên",
-        title: item.headline || item.targetRole || "Chưa có tiêu đề",
-        skills: Array.isArray(item.skills) 
-          ? item.skills.map((s: any) => typeof s === 'string' ? s : s.name).filter(Boolean)
-          : [],
-        experienceLevel: "Mid-Level",
-        location: item.location?.city || (typeof item.location === 'string' ? item.location : ""),
-        lastUpdated: item.updatedAt 
-          ? new Date(item.updatedAt).toLocaleDateString('vi-VN') 
-          : "Vừa xong"
-      })) : [];
-
       onClose();
-      // Navigate with state containing the fetched CVs
-      console.log("➡️ Navigating to /jobs with state:", { cvs: mappedCvs });
-      navigate('/jobs?manual=true', { state: { cvs: mappedCvs } });
+      navigate('/jobs?manual=true');
     } catch (error) {
-      console.error("Fetch CVs for skip failed", error);
       setToast({ message: 'Không thể tải danh sách CV. Chuyển sang tìm kiếm thủ công.', type: 'error' });
-      // Proceed to navigate anyway
       onClose();
       navigate('/jobs?manual=true');
     } finally {
@@ -159,8 +134,10 @@ const CvSelectorModal: React.FC<CvSelectorModalProps> = ({
     setLocalCvs(prev => prev.map(c => c.id === cv.id ? { ...c, name: newName } : c));
 
     try {
-      // Use specific rename endpoint as per requirements
-      const response = await api.patch(`/cv/${cv.id}/rename`, { fullname: newName });
+      const response = await api.put(apiRoutes.cv.byId(cv.id), {
+        ...(cv as ExtendedUserCV).originalData,
+        title: newName,
+      });
       
       // If server returns updated object, we can update local state with more accurate data (e.g. updatedAt)
       if (response.data) {
@@ -168,10 +145,10 @@ const CvSelectorModal: React.FC<CvSelectorModalProps> = ({
           if (c.id === cv.id) {
              return {
                ...c,
-               name: response.data.fullname || newName,
+               name: response.data.title || response.data.fullname || newName,
                // Update timestamp if available
-               lastUpdated: response.data.updatedAt 
-                 ? new Date(response.data.updatedAt).toLocaleDateString('vi-VN') 
+               lastUpdated: response.data.updated_at || response.data.updatedAt
+                 ? new Date(response.data.updated_at || response.data.updatedAt).toLocaleDateString('vi-VN') 
                  : new Date().toLocaleDateString('vi-VN')
              };
           }
@@ -180,11 +157,9 @@ const CvSelectorModal: React.FC<CvSelectorModalProps> = ({
       }
 
       setToast({ message: 'Đổi tên thành công', type: 'success' });
-    } catch (error) {
-      console.error("Rename failed", error);
+    } catch {
       // Rollback on error
       setLocalCvs(prev => prev.map(c => c.id === cv.id ? { ...c, name: originalName } : c));
-      setToast({ message: 'Đổi tên thất bại', type: 'error' });
     }
   };
 
@@ -196,7 +171,7 @@ const CvSelectorModal: React.FC<CvSelectorModalProps> = ({
 
     try {
       // 3. Fetch full details from API
-      const response = await api.get(`/cv/${cv.id}`);
+      const response = await api.get(apiRoutes.cv.byId(cv.id));
       const data = response.data;
 
       // 4. Map backend response to Form DTO
@@ -224,9 +199,7 @@ const CvSelectorModal: React.FC<CvSelectorModalProps> = ({
         return prev;
       });
 
-    } catch (error) {
-      console.error("Failed to fetch CV details", error);
-      setToast({ message: 'Lỗi tải dữ liệu chi tiết', type: 'error' });
+    } catch {
       // Close modal on error
       setEditingCv(null);
     } finally {
@@ -240,7 +213,7 @@ const CvSelectorModal: React.FC<CvSelectorModalProps> = ({
     
     try {
       // Update via API
-      await api.put(`/cv/${editingCv.id}`, formData);
+      await api.put(apiRoutes.cv.byId(editingCv.id), formData);
       
       // Refresh list to get latest data from server
       await fetchCvs();
@@ -248,9 +221,8 @@ const CvSelectorModal: React.FC<CvSelectorModalProps> = ({
       setEditingCv(null);
       setToast({ message: 'Cập nhật hồ sơ thành công', type: 'success' });
 
-    } catch (error) {
-      console.error("Update failed", error);
-      setToast({ message: 'Cập nhật thất bại', type: 'error' });
+    } catch {
+      // Error toast is handled globally by API interceptor.
     } finally {
       setIsSaving(false);
     }
@@ -268,15 +240,13 @@ const CvSelectorModal: React.FC<CvSelectorModalProps> = ({
     });
 
     try {
-      await api.delete(`/cv/${itemToDelete.id}`);
-    } catch (error) {
-      console.error("Delete failed", error);
+      await api.delete(apiRoutes.cv.byId(itemToDelete.id));
+    } catch {
       // Rollback
       setLocalCvs(prev => {
         if (prev.find(c => c.id === itemToDelete.id)) return prev;
         return [itemToDelete, ...prev];
       });
-      setToast({ message: 'Xóa thất bại', type: 'error' });
     }
   };
 
@@ -307,16 +277,18 @@ const CvSelectorModal: React.FC<CvSelectorModalProps> = ({
       delete payload.__v;
       
       // Restore using POST to create a new record based on old data
-      await api.post('/cv', payload);
+      const userId = item.ownerId || getCurrentUserId();
+      if (!userId) {
+        throw new Error('Missing user_id for CV restore');
+      }
+      await api.post(apiRoutes.cv.create(userId), payload);
       setToast({ message: 'Đã hoàn tác xóa', type: 'success' });
       
       // Refresh to get the new ID assigned by backend
       fetchCvs();
-    } catch (error) {
-      console.error("Undo failed", error);
+    } catch {
       // Rollback: Remove item if restore failed
       setLocalCvs(prev => prev.filter(c => c.id !== item.id));
-      setToast({ message: 'Hoàn tác thất bại', type: 'error' });
     }
   };
 

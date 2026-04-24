@@ -5,6 +5,8 @@ import { useSearchResults } from './useSearchResults';
 import { searchCandidatesApi } from '../utils/mockApi';
 import { ContextOption } from '../components/search/SearchBar';
 import api from '../lib/api';
+import { apiRoutes } from '../lib/api-routes';
+import { getCurrentUserId } from '../lib/auth-session';
 
 /**
  * Specialized hook for Candidate Search Page.
@@ -25,7 +27,9 @@ export const useCandidatesSearch = () => {
   useEffect(() => {
     const fetchRequirements = async () => {
       try {
-        const res = await api.get('/jobs/user/me');
+        const userId = getCurrentUserId();
+        if (!userId) return;
+        const res = await api.get(apiRoutes.jobs.byRecruiter(userId));
         // Handle various response shapes (array or object with data/items property)
         const data = Array.isArray(res.data) ? res.data : (res.data?.data || res.data?.items || []);
         

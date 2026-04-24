@@ -14,6 +14,7 @@ import CreateProfile from './pages/CreateProfile';
 import ProfilePage from './pages/ProfilePage';
 import { ModalProvider, useModal } from './contexts/ModalContext';
 import { AuthProvider } from './contexts/AuthContext';
+import { ErrorToastProvider } from './contexts/ErrorToastContext';
 import CvSelectorModal from './components/CvSelectorModal';
 import RequirementSelectorModal from './components/RequirementSelectorModal';
 import Chatbot from './components/Chatbot';
@@ -124,13 +125,15 @@ const Layout: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <ModalProvider>
-        <Router>
-          <Layout />
-        </Router>
-      </ModalProvider>
-    </AuthProvider>
+    <ErrorToastProvider>
+      <AuthProvider>
+        <ModalProvider>
+          <Router>
+            <Layout />
+          </Router>
+        </ModalProvider>
+      </AuthProvider>
+    </ErrorToastProvider>
   );
 };
 

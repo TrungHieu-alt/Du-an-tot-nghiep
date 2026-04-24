@@ -10,6 +10,9 @@ import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import EditCvModal from '../components/modals/EditCvModal';
 import { UserCV } from '../types';
+import { apiRoutes } from '../lib/api-routes';
+import { getCurrentUserId } from '../lib/auth-session';
+import { normalizeApiError } from '../lib/api-error';
 
 // Types updated to match Backend Response
 interface Experience {
@@ -151,21 +154,33 @@ const CandidateDetail: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get(`/cv/${id}`);
-      const payload = res.data;
+      let payload: any;
+      try {
+        const mainCvRes = await api.get(apiRoutes.cv.mainByUser(id));
+        payload = mainCvRes.data;
+      } catch {
+        const listRes = await api.get(apiRoutes.cv.byUser(id));
+        const list = Array.isArray(listRes.data) ? listRes.data : [];
+        payload = list[0];
+      }
+
+      if (!payload) {
+        const byIdRes = await api.get(apiRoutes.cv.byId(id));
+        payload = byIdRes.data;
+      }
 
       // Normalize data based on provided JSON structure
       const normalized: CandidateDetailData = {
-        id: payload._id || payload.id,
-        userId: payload.createdBy || payload.userId, // Map createdBy to userId for ownership check
-        fullname: payload.fullname || 'Ứng viên ẩn danh',
+        id: String(payload.cv_id ?? payload._id ?? payload.id),
+        userId: String(payload.user_id ?? payload.createdBy ?? payload.userId ?? ''), // Map createdBy to userId for ownership check
+        fullname: payload.fullname || payload.title || 'Ứng viên ẩn danh',
         preferredName: payload.preferredName,
-        headline: payload.headline || payload.targetRole || 'Chưa có tiêu đề',
+        headline: payload.headline || payload.targetRole || payload.title || 'Chưa có tiêu đề',
         email: payload.email,
         phone: payload.phone,
         avatarUrl: payload.avatarUrl,
-        location: payload.location || {},
-        summary: payload.summary,
+        location: typeof payload.location === 'string' ? { city: payload.location } : (payload.location || {}),
+        summary: payload.summary || payload.full_text,
         
         // General Info Mapping
         targetRole: payload.targetRole,
@@ -183,16 +198,16 @@ const CandidateDetail: React.FC = () => {
         tags: Array.isArray(payload.tags) ? payload.tags : [],
         
         status: payload.status,
-        createdAt: payload.createdAt,
-        updatedAt: payload.updatedAt,
+        createdAt: payload.created_at || payload.createdAt,
+        updatedAt: payload.updated_at || payload.updatedAt,
         resumeUrl: payload.resumeUrl || payload.cvFile,
         raw: payload // Store original payload for editing
       };
       
       setCandidate(normalized);
-    } catch (err: any) {
-      console.error('Fetch Candidate Error:', err);
-      setError(err.response?.data?.message || 'Không thể tải thông tin ứng viên.');
+    } catch (err: unknown) {
+      const normalized = normalizeApiError(err, { source: 'axios' });
+      setError(normalized.displayMessage || 'Không thể tải thông tin ứng viên.');
     } finally {
       setLoading(false);
     }
@@ -207,11 +222,13 @@ const CandidateDetail: React.FC = () => {
     if (user) {
       const fetchMyJobs = async () => {
         try {
-          const res = await api.get('/jobs/user/me');
+          const userId = user.id || getCurrentUserId();
+          if (!userId) return;
+          const res = await api.get(apiRoutes.jobs.byRecruiter(userId));
           const data = Array.isArray(res.data) ? res.data : (res.data?.data || res.data?.items || []);
           setMyJobs(data);
-        } catch (e) {
-          console.error("Failed to fetch jobs for matching", e);
+        } catch {
+          // Error toast is handled globally by API interceptor.
         }
       };
       fetchMyJobs();
@@ -225,16 +242,16 @@ const CandidateDetail: React.FC = () => {
     setIsSaving(true);
     try {
       // API call to update
-      await api.put(`/cv/${id}`, updatedData);
+      const targetCvId = candidate?.id || id;
+      await api.put(apiRoutes.cv.byId(targetCvId as string), updatedData);
       
       // Refresh data
       await fetchCandidate();
       
       setIsEditModalOpen(false);
       alert('Cập nhật hồ sơ thành công!');
-    } catch (err: any) {
-      console.error("Update failed", err);
-      alert(err.response?.data?.message || 'Cập nhật thất bại.');
+    } catch {
+      // Error toast is handled globally by API interceptor.
     } finally {
       setIsSaving(false);
     }
@@ -263,11 +280,11 @@ const CandidateDetail: React.FC = () => {
 
     try {
       // Call RAG match endpoint
-      const res = await api.get(`/rag/match-job-cv-chunks/${jobId}/${id}`);
+      const targetCvId = candidate?.id || id;
+      const res = await api.get(apiRoutes.jobs.matchCvDetail(jobId, targetCvId as string));
       setMatchResult(res.data);
-    } catch (error) {
-      console.error("Match analysis failed", error);
-      alert("Không thể phân tích mức độ phù hợp. Vui lòng thử lại sau.");
+    } catch {
+      // Error toast is handled globally by API interceptor.
     } finally {
       setIsAnalyzing(false);
     }

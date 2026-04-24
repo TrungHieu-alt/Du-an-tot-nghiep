@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../../types';
 import { Loader2, AlertCircle, CheckCircle2, Plus, X } from 'lucide-react';
-import api from '../../lib/api';
 
 interface CareerInfoFormProps {
   user: User;
@@ -61,12 +60,13 @@ const CareerInfoForm: React.FC<CareerInfoFormProps> = ({ user, onUserUpdate }) =
     setMessage(null);
 
     try {
-      const res = await api.put('/users/me/career', formData);
-      onUserUpdate({ ...user, ...res.data });
-      setMessage({ type: 'success', text: 'Cập nhật thông tin nghề nghiệp thành công!' });
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.message || 'Có lỗi xảy ra.';
-      setMessage({ type: 'error', text: Array.isArray(errorMsg) ? errorMsg.join(', ') : errorMsg });
+      onUserUpdate({ ...user, ...formData });
+      setMessage({
+        type: 'success',
+        text: 'Backend hiện chưa hỗ trợ cập nhật thông tin nghề nghiệp. Thay đổi chỉ lưu cục bộ trong phiên này.',
+      });
+    } catch {
+      setMessage({ type: 'error', text: 'Có lỗi xảy ra.' });
     } finally {
       setLoading(false);
     }

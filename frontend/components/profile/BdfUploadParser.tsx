@@ -2,6 +2,9 @@
 import React, { useState, useCallback } from 'react';
 import { UploadCloud, FileText, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import api from '../../lib/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { getCurrentUserId } from '../../lib/auth-session';
+import { apiRoutes } from '../../lib/api-routes';
 
 interface ParsedData {
   _id?: string;
@@ -31,6 +34,7 @@ interface BdfUploadParserProps {
 }
 
 const BdfUploadParser: React.FC<BdfUploadParserProps> = ({ onParseComplete }) => {
+  const { user } = useAuth();
   const [isDragging, setIsDragging] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -57,11 +61,14 @@ const BdfUploadParser: React.FC<BdfUploadParserProps> = ({ onParseComplete }) =>
     setIsParsing(true);
 
     try {
+      const userId = user?.id || getCurrentUserId();
+      if (!userId) {
+        throw new Error('Bạn cần đăng nhập để tải và phân tích CV.');
+      }
       const formData = new FormData();
       formData.append('file', file);
 
-      // Call real API
-      const response = await api.post('/cv/upload', formData, {
+      const response = await api.post(apiRoutes.cv.upload(userId), formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -70,8 +77,6 @@ const BdfUploadParser: React.FC<BdfUploadParserProps> = ({ onParseComplete }) =>
 
       const responseData = response.data;
       
-      // Smart extraction of the result object
-      // Priority: response.data.data.result -> response.data.data -> response.data
       let resultObj = null;
 
       if (responseData?.data?.result) {
@@ -83,9 +88,7 @@ const BdfUploadParser: React.FC<BdfUploadParserProps> = ({ onParseComplete }) =>
         resultObj = responseData;
       }
 
-      // Ensure we catch the ID if it exists anywhere nearby
       if (resultObj) {
-         // Fallback lookups for ID if strictly nested structure varies
          if (!resultObj._id && !resultObj.id) {
              if (responseData._id) resultObj._id = responseData._id;
              else if (responseData.data?._id) resultObj._id = responseData.data._id;
