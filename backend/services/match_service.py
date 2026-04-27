@@ -77,6 +77,7 @@ class MatchingService:
                     "job_id": job_id,
                     "total_found": 0,
                     "total_saved": 0,
+                    "min_score": min_score,
                     "matches": []
                 }
             
@@ -171,6 +172,7 @@ class MatchingService:
                     "cv_id": cv_id,
                     "total_found": 0,
                     "total_saved": 0,
+                    "min_score": min_score,
                     "matches": []
                 }
             
