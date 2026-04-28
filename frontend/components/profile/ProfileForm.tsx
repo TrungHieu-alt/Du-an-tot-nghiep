@@ -32,13 +32,52 @@ interface ProfileFormProps {
   isSubmitting?: boolean;
   mode?: 'candidate' | 'recruiter';
   isEditMode?: boolean;
+  disableAutoCreate?: boolean;
+  editDeleteAction?: {
+    label: string;
+    onClick: () => void;
+  };
 }
+
+type BackendCvCreatePayload = {
+  title: string;
+  location?: string;
+  experience?: string;
+  skills: string[];
+  summary?: string;
+  full_text?: string;
+  is_main?: boolean;
+};
 
 const todayIsoDate = () => {
   const d = new Date();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${mm}-${dd}`;
+};
+
+const parseSalaryRangeToMinMax = (
+  value: unknown
+): { salary_min?: number; salary_max?: number } => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return { salary_min: value, salary_max: value };
+  }
+  if (typeof value !== 'string') return {};
+  const normalized = value.replace(/[, ]+/g, '');
+  const rangeMatch = normalized.match(/(\d+(?:\.\d+)?)\s*[-–—]\s*(\d+(?:\.\d+)?)/);
+  if (rangeMatch) {
+    const min = Number(rangeMatch[1]);
+    const max = Number(rangeMatch[2]);
+    return {
+      salary_min: Number.isFinite(min) ? min : undefined,
+      salary_max: Number.isFinite(max) ? max : undefined,
+    };
+  }
+  const singleMatch = normalized.match(/(\d+(?:\.\d+)?)/);
+  if (!singleMatch) return {};
+  const salary = Number(singleMatch[1]);
+  if (!Number.isFinite(salary)) return {};
+  return { salary_min: salary, salary_max: salary };
 };
 
 // --- Helper for Robust Deep Cleaning with Cycle Detection ---
@@ -129,6 +168,8 @@ const ProfileForm: React.FC<ProfileFormProps> = ({
   isSubmitting: parentIsSubmitting = false,
   mode = 'recruiter',
   isEditMode = false,
+  disableAutoCreate = false,
+  editDeleteAction,
 }) => {
   const { user } = useAuth();
 
@@ -156,6 +197,281 @@ const ProfileForm: React.FC<ProfileFormProps> = ({
 
   const labelClass = 'block text-sm font-medium text-gray-700 mb-1.5';
   const sectionClass = 'bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-6';
+
+  if (isEditMode && mode === 'candidate') {
+    const [editCandidate, setEditCandidate] = useState({
+      title: String((initialData as any)?.headline || (initialData as any)?.title || '').trim(),
+      location:
+        String(
+          (initialData as any)?.location?.city ||
+            (initialData as any)?.location ||
+            ''
+        ).trim(),
+      experience: String((initialData as any)?.experience || '').trim(),
+      skills: Array.isArray((initialData as any)?.skills)
+        ? (initialData as any).skills
+            .map((s: any) => (typeof s === 'string' ? s : s?.name || ''))
+            .filter(Boolean)
+            .join(', ')
+        : '',
+      summary: String((initialData as any)?.summary || '').trim(),
+      full_text: String((initialData as any)?.full_text || '').trim(),
+      is_main: Boolean((initialData as any)?.is_main),
+    });
+
+    useEffect(() => {
+      if (!initialData) return;
+      setEditCandidate((prev) => ({
+        ...prev,
+        title: String((initialData as any)?.headline || (initialData as any)?.title || '').trim(),
+        location: String((initialData as any)?.location?.city || (initialData as any)?.location || '').trim(),
+        experience: String((initialData as any)?.experience || '').trim(),
+        skills: Array.isArray((initialData as any)?.skills)
+          ? (initialData as any).skills
+              .map((s: any) => (typeof s === 'string' ? s : s?.name || ''))
+              .filter(Boolean)
+              .join(', ')
+          : '',
+        summary: String((initialData as any)?.summary || '').trim(),
+        full_text: String((initialData as any)?.full_text || '').trim(),
+        is_main: Boolean((initialData as any)?.is_main),
+      }));
+    }, [initialData]);
+
+    const onStrictCandidateSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      const skills = editCandidate.skills
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      await onSubmit({
+        title: editCandidate.title,
+        location: editCandidate.location || undefined,
+        experience: editCandidate.experience || undefined,
+        skills,
+        summary: editCandidate.summary || undefined,
+        full_text: editCandidate.full_text || undefined,
+        is_main: editCandidate.is_main,
+      });
+    };
+
+    return (
+      <form onSubmit={onStrictCandidateSubmit} className="space-y-6 animate-in fade-in duration-300">
+        <div className={sectionClass}>
+          <SectionTitle icon={User} title="Thông tin hồ sơ (DB fields)" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="md:col-span-2">
+              <label className={labelClass}>Tiêu đề hồ sơ</label>
+              <input aria-label="Tiêu đề hồ sơ" className={inputClass} value={editCandidate.title} onChange={(e) => setEditCandidate((p) => ({ ...p, title: e.target.value }))} />
+            </div>
+            <div>
+              <label className={labelClass}>Địa điểm</label>
+              <input aria-label="Địa điểm" className={inputClass} value={editCandidate.location} onChange={(e) => setEditCandidate((p) => ({ ...p, location: e.target.value }))} />
+            </div>
+            <div>
+              <label className={labelClass}>Kỹ năng (phân tách bằng dấu phẩy)</label>
+              <input aria-label="Kỹ năng (phân tách bằng dấu phẩy)" className={inputClass} value={editCandidate.skills} onChange={(e) => setEditCandidate((p) => ({ ...p, skills: e.target.value }))} />
+            </div>
+            <div className="md:col-span-2">
+              <label className={labelClass}>Kinh nghiệm</label>
+              <textarea aria-label="Kinh nghiệm" className={textareaClass} rows={3} value={editCandidate.experience} onChange={(e) => setEditCandidate((p) => ({ ...p, experience: e.target.value }))} />
+            </div>
+            <div className="md:col-span-2">
+              <label className={labelClass}>Tóm tắt</label>
+              <textarea aria-label="Tóm tắt" className={textareaClass} rows={3} value={editCandidate.summary} onChange={(e) => setEditCandidate((p) => ({ ...p, summary: e.target.value }))} />
+            </div>
+            <div className="md:col-span-2">
+              <label className={labelClass}>Nội dung đầy đủ</label>
+              <textarea aria-label="Nội dung đầy đủ" className={textareaClass} rows={5} value={editCandidate.full_text} onChange={(e) => setEditCandidate((p) => ({ ...p, full_text: e.target.value }))} />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={editCandidate.is_main} onChange={(e) => setEditCandidate((p) => ({ ...p, is_main: e.target.checked }))} />
+              Đặt làm CV chính
+            </label>
+          </div>
+        </div>
+        <div className="sticky bottom-0 z-10 bg-white/95 backdrop-blur border border-gray-100 rounded-xl shadow-sm p-3 flex items-center justify-between gap-3">
+          {editDeleteAction ? (
+            <button
+              type="button"
+              onClick={editDeleteAction.onClick}
+              className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg transition-colors font-medium text-sm"
+            >
+              <Trash2 className="w-4 h-4" />
+              {editDeleteAction.label}
+            </button>
+          ) : <div />}
+          <button type="submit" disabled={isFormSubmitting} className="px-5 py-2.5 rounded-lg bg-[#0A65CC] text-white font-semibold disabled:opacity-60">
+            {isFormSubmitting ? 'Đang lưu...' : 'Lưu thay đổi'}
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  if (isEditMode && mode === 'recruiter') {
+    const normalizeSkillsValue = (skills: unknown): string => {
+      if (Array.isArray(skills)) {
+        return skills
+          .map((s: any) => (typeof s === 'string' ? s : s?.name || ''))
+          .filter(Boolean)
+          .join(', ');
+      }
+      if (typeof skills === 'string') {
+        return skills;
+      }
+      return '';
+    };
+
+    const extractSalaryRange = (data: any): { salary_min?: number; salary_max?: number } => {
+      if (typeof data?.salary_min === 'number' || typeof data?.salary_max === 'number') {
+        return {
+          salary_min: typeof data?.salary_min === 'number' ? data.salary_min : undefined,
+          salary_max: typeof data?.salary_max === 'number' ? data.salary_max : undefined,
+        };
+      }
+      return parseSalaryRangeToMinMax(data?.salaryRange);
+    };
+
+    const initialSalary = extractSalaryRange(initialData);
+
+    const [editJob, setEditJob] = useState({
+      title: String((initialData as any)?.title || '').trim(),
+      role: String((initialData as any)?.role || '').trim(),
+      location: String((initialData as any)?.location?.city || (initialData as any)?.location || '').trim(),
+      job_type: String((initialData as any)?.job_type || '').trim(),
+      experience_level: String((initialData as any)?.experience_level || (initialData as any)?.experienceLevel || '').trim(),
+      skills: normalizeSkillsValue((initialData as any)?.skills),
+      salary_min: initialSalary.salary_min,
+      salary_max: initialSalary.salary_max,
+      full_text: String((initialData as any)?.full_text || '').trim(),
+    });
+
+    useEffect(() => {
+      if (!initialData) return;
+      const salary = extractSalaryRange(initialData);
+      setEditJob({
+        title: String((initialData as any)?.title || '').trim(),
+        role: String((initialData as any)?.role || '').trim(),
+        location: String((initialData as any)?.location?.city || (initialData as any)?.location || '').trim(),
+        job_type: String((initialData as any)?.job_type || '').trim(),
+        experience_level: String((initialData as any)?.experience_level || (initialData as any)?.experienceLevel || '').trim(),
+        skills: normalizeSkillsValue((initialData as any)?.skills),
+        salary_min: salary.salary_min,
+        salary_max: salary.salary_max,
+        full_text: String((initialData as any)?.full_text || '').trim(),
+      });
+    }, [initialData]);
+
+    const onStrictRecruiterSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      await onSubmit({
+        title: editJob.title,
+        role: editJob.role,
+        location: editJob.location,
+        job_type: editJob.job_type,
+        experience_level: editJob.experience_level,
+        skills: editJob.skills
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        salary_min:
+          typeof editJob.salary_min === 'number' && Number.isFinite(editJob.salary_min)
+            ? editJob.salary_min
+            : undefined,
+        salary_max:
+          typeof editJob.salary_max === 'number' && Number.isFinite(editJob.salary_max)
+            ? editJob.salary_max
+            : undefined,
+        full_text: editJob.full_text || undefined,
+      });
+    };
+
+    return (
+      <form onSubmit={onStrictRecruiterSubmit} className="space-y-6 animate-in fade-in duration-300">
+        <div className={sectionClass}>
+          <SectionTitle icon={Briefcase} title="Thông tin tuyển dụng (DB fields)" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="md:col-span-2">
+              <label className={labelClass}>Tiêu đề</label>
+              <input aria-label="Tiêu đề" className={inputClass} value={editJob.title} onChange={(e) => setEditJob((p) => ({ ...p, title: e.target.value }))} />
+            </div>
+            <div>
+              <label className={labelClass}>Vai trò</label>
+              <input aria-label="Vai trò" className={inputClass} value={editJob.role} onChange={(e) => setEditJob((p) => ({ ...p, role: e.target.value }))} />
+            </div>
+            <div>
+              <label className={labelClass}>Địa điểm</label>
+              <input aria-label="Địa điểm" className={inputClass} value={editJob.location} onChange={(e) => setEditJob((p) => ({ ...p, location: e.target.value }))} />
+            </div>
+            <div>
+              <label className={labelClass}>Loại công việc</label>
+              <input aria-label="Loại công việc" className={inputClass} value={editJob.job_type} onChange={(e) => setEditJob((p) => ({ ...p, job_type: e.target.value }))} />
+            </div>
+            <div>
+              <label className={labelClass}>Cấp bậc kinh nghiệm</label>
+              <input aria-label="Cấp bậc kinh nghiệm" className={inputClass} value={editJob.experience_level} onChange={(e) => setEditJob((p) => ({ ...p, experience_level: e.target.value }))} />
+            </div>
+            <div className="md:col-span-2">
+              <label className={labelClass}>Kỹ năng (phân tách bằng dấu phẩy)</label>
+              <input aria-label="Kỹ năng (phân tách bằng dấu phẩy)" className={inputClass} value={editJob.skills} onChange={(e) => setEditJob((p) => ({ ...p, skills: e.target.value }))} />
+            </div>
+            <div>
+              <label className={labelClass}>Lương tối thiểu (`salary_min`)</label>
+              <input
+                aria-label="Lương tối thiểu (salary_min)"
+                type="number"
+                className={inputClass}
+                value={editJob.salary_min ?? ''}
+                onChange={(e) =>
+                  setEditJob((p) => ({
+                    ...p,
+                    salary_min:
+                      e.target.value === '' ? undefined : Number(e.target.value),
+                  }))
+                }
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Lương tối đa (`salary_max`)</label>
+              <input
+                aria-label="Lương tối đa (salary_max)"
+                type="number"
+                className={inputClass}
+                value={editJob.salary_max ?? ''}
+                onChange={(e) =>
+                  setEditJob((p) => ({
+                    ...p,
+                    salary_max:
+                      e.target.value === '' ? undefined : Number(e.target.value),
+                  }))
+                }
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className={labelClass}>Nội dung JD</label>
+              <textarea aria-label="Nội dung JD" className={textareaClass} rows={6} value={editJob.full_text} onChange={(e) => setEditJob((p) => ({ ...p, full_text: e.target.value }))} />
+            </div>
+          </div>
+        </div>
+        <div className="sticky bottom-0 z-10 bg-white/95 backdrop-blur border border-gray-100 rounded-xl shadow-sm p-3 flex items-center justify-between gap-3">
+          {editDeleteAction ? (
+            <button
+              type="button"
+              onClick={editDeleteAction.onClick}
+              className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg transition-colors font-medium text-sm"
+            >
+              <Trash2 className="w-4 h-4" />
+              {editDeleteAction.label}
+            </button>
+          ) : <div />}
+          <button type="submit" disabled={isFormSubmitting} className="px-5 py-2.5 rounded-lg bg-[#0A65CC] text-white font-semibold disabled:opacity-60">
+            {isFormSubmitting ? 'Đang lưu...' : 'Lưu thay đổi'}
+          </button>
+        </div>
+      </form>
+    );
+  }
 
   // --- RECRUITER MODE ---
   if (mode === 'recruiter') {
@@ -758,6 +1074,43 @@ const ProfileForm: React.FC<ProfileFormProps> = ({
     return safeDeepClone(payload) as Partial<CreateCvDto>;
   };
 
+  const toBackendCvCreatePayload = (payload: Partial<CreateCvDto>): BackendCvCreatePayload => {
+    const title = (payload.headline || payload.fullname || 'Untitled CV').trim();
+    const location =
+      payload.location && typeof payload.location === 'object'
+        ? (payload.location.city || '').trim() || undefined
+        : undefined;
+
+    const skills = (payload.skills || [])
+      .map((skill: any) => {
+        if (typeof skill === 'string') return skill.trim();
+        return (skill?.name || '').trim();
+      })
+      .filter(Boolean);
+
+    const experienceLines = (payload.experiences || [])
+      .map((exp: any) => {
+        if (!exp) return '';
+        const headline = [exp.title, exp.company].filter(Boolean).join(' @ ').trim();
+        const details = Array.isArray(exp.responsibilities) ? exp.responsibilities.filter(Boolean).join('; ') : '';
+        return [headline, details].filter(Boolean).join(' - ').trim();
+      })
+      .filter(Boolean);
+
+    const experience = experienceLines.length ? experienceLines.join('\n') : undefined;
+    const fullText = [payload.summary, experience].filter(Boolean).join('\n\n') || undefined;
+
+    return {
+      title,
+      location,
+      experience,
+      skills,
+      summary: payload.summary || undefined,
+      full_text: fullText,
+      is_main: false,
+    };
+  };
+
   const handleCvSubmit: SubmitHandler<CreateCvDto> = async (data) => {
     const token = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
     if (!token && !user) {
@@ -770,7 +1123,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({
     const safePayload = safeDeepClone(payload);
 
     try {
-      if (isEditMode) {
+      if (isEditMode || disableAutoCreate) {
         await onSubmit(safePayload);
         setSaveSuccess(true);
       } else {
@@ -778,7 +1131,8 @@ const ProfileForm: React.FC<ProfileFormProps> = ({
         if (!userId) {
           throw new Error('Vui lòng đăng nhập để tạo hồ sơ.');
         }
-        const res = await api.post(apiRoutes.cv.create(userId), safePayload);
+        const backendPayload = toBackendCvCreatePayload(safePayload);
+        const res = await api.post(apiRoutes.cv.create(userId), backendPayload);
         setSaveSuccess(true);
         alert('Lưu hồ sơ thành công!');
         onSubmit(res.data); // Pass full response including _id

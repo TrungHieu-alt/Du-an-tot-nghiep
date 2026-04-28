@@ -92,8 +92,8 @@ const SearchBar: React.FC<SearchBarProps> = ({
                 className="appearance-none bg-white text-blue-700 pl-3 pr-8 py-1.5 rounded-full text-sm font-medium border border-blue-100 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/30 max-w-[250px] truncate"
               >
                  <option value="" disabled>Chọn yêu cầu...</option>
-                 {contextOptions.map(opt => (
-                   <option key={opt.id} value={opt.id} className="text-gray-900">{opt.label}</option>
+                 {contextOptions.map((opt, index) => (
+                   <option key={`${opt.id}-${opt.label}-${index}`} value={opt.id} className="text-gray-900">{opt.label}</option>
                  ))}
               </select>
               <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-700 pointer-events-none" />

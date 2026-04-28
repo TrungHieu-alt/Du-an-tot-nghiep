@@ -9,6 +9,7 @@ import EditRequirementModal from './modals/EditRequirementModal';
 import api from '../lib/api';
 import { apiRoutes } from '../lib/api-routes';
 import { getCurrentUserId } from '../lib/auth-session';
+import { toJobPostUpdatePayload } from '../lib/backend-payload-mappers';
 
 interface RequirementSelectorModalProps {
   isOpen: boolean;
@@ -79,25 +80,32 @@ const RequirementSelectorModal: React.FC<RequirementSelectorModalProps> = ({
         const criteriaList: string[] = [];
         
         // 1. Salary
-        if (item.salary && typeof item.salary === 'object' && (item.salary.min || item.salary.max)) {
-           const currency = item.salary.currency || '';
-           const min = item.salary.min ? item.salary.min.toLocaleString() : '';
-           const max = item.salary.max ? item.salary.max.toLocaleString() : '';
-           criteriaList.push(`Lương: ${min} - ${max} ${currency}`);
+        if (item.salary_min || item.salary_max) {
+           const min = item.salary_min ? Number(item.salary_min).toLocaleString() : '';
+           const max = item.salary_max ? Number(item.salary_max).toLocaleString() : '';
+           criteriaList.push(`Lương: ${min} - ${max}`);
         }
 
         // 2. Location
-        const loc = item.companyLocation || (item.location?.city) || 'Chưa xác định';
+        const loc = item.location || (item.location?.city) || 'Chưa xác định';
         criteriaList.push(loc);
 
         // 3. Employment Type
-        if (Array.isArray(item.employmentType) && item.employmentType.length > 0) {
-          criteriaList.push(item.employmentType.join(', '));
+        if (item.job_type) {
+          criteriaList.push(item.job_type);
         }
 
         // 4. Requirements (limit to top 3 for card view)
-        if (Array.isArray(item.requirements)) {
-           item.requirements.slice(0, 3).forEach((r: string) => criteriaList.push(r));
+        if (item.role) {
+          criteriaList.push(item.role);
+        }
+        if (item.full_text) {
+           item.full_text
+            .split('\n')
+            .map((line: string) => line.trim())
+            .filter(Boolean)
+            .slice(0, 2)
+            .forEach((line: string) => criteriaList.push(line));
         }
 
         // Map Skills (Backend returns objects {name, _id}, UI often needs strings or objects)
@@ -109,7 +117,7 @@ const RequirementSelectorModal: React.FC<RequirementSelectorModalProps> = ({
           id: item._id || item.id,
           title: item.title || 'Untitled Position',
           skills: skillNames,
-          experienceLevel: item.seniority || item.experienceLevel || 'Mid-Level',
+          experienceLevel: item.experience_level || item.experienceLevel || 'Mid-Level',
           location: loc,
           createdAt: item.createdAt ? new Date(item.createdAt).toLocaleDateString('vi-VN') : 'Mới tạo',
           openPositions: 1, // field might not exist in backend
@@ -157,10 +165,13 @@ const RequirementSelectorModal: React.FC<RequirementSelectorModalProps> = ({
     setLocalReqs(prev => prev.map(r => r.id === req.id ? { ...r, title: newTitle } : r));
 
     try {
-      await api.put(apiRoutes.jobs.byId(req.id), {
-        ...(req as ExtendedJobRequirement).originalData,
-        title: newTitle,
-      });
+      await api.put(
+        apiRoutes.jobs.byId(req.id),
+        toJobPostUpdatePayload(
+          { title: newTitle },
+          (req as ExtendedJobRequirement).originalData
+        )
+      );
       setToast({ message: 'Đổi tên thành công', type: 'success' });
     } catch {
       // Rollback
@@ -177,10 +188,10 @@ const RequirementSelectorModal: React.FC<RequirementSelectorModalProps> = ({
     setIsSaving(true);
     
     try {
-      // Use PUT /jobs/:id to update
-      // Ensure we map the form data back to what backend expects if needed,
-      // but ProfileForm usually outputs compatible DTO structure.
-      await api.put(apiRoutes.jobs.byId(editingReq.id), formData);
+      await api.put(
+        apiRoutes.jobs.byId(editingReq.id),
+        toJobPostUpdatePayload(formData, editingReq.originalData)
+      );
       
       setToast({ message: 'Cập nhật yêu cầu thành công', type: 'success' });
       setEditingReq(null);
@@ -235,20 +246,14 @@ const RequirementSelectorModal: React.FC<RequirementSelectorModalProps> = ({
     try {
       // Prepare payload to recreate the job
       // We strip system fields like _id, createdAt, updatedAt
-      const payload = { ...item.originalData };
-      delete payload._id;
-      delete payload.id;
-      delete payload.createdAt;
-      delete payload.updatedAt;
-      delete payload.__v;
-      delete payload.views;
-      delete payload.applicationsCount;
-
       // Re-create via POST
       if (!currentUserId) {
         throw new Error('Missing recruiter_id for restore.');
       }
-      await api.post(apiRoutes.jobs.create(currentUserId), payload);
+      await api.post(
+        apiRoutes.jobs.create(currentUserId),
+        toJobPostUpdatePayload(item.originalData, item.originalData)
+      );
       
       setToast({ message: 'Đã hoàn tác xóa', type: 'success' });
       // Refresh to ensure we have the new ID
@@ -318,9 +323,9 @@ const RequirementSelectorModal: React.FC<RequirementSelectorModalProps> = ({
              </div>
           ) : localReqs.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {localReqs.map((req) => (
+              {localReqs.map((req, index) => (
                 <RequirementCard 
-                  key={req.id} 
+                  key={`req-${req.id ?? 'noid'}-${index}`} 
                   req={req} 
                   onSelect={onSelectReq}
                   onEdit={() => handleEdit(req)}

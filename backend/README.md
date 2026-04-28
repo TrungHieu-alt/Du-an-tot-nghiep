@@ -76,7 +76,7 @@ project/
 ```bash
 pip install llama-index-core llama-index-embeddings-huggingface \
             llama-index-vector-stores-chroma sentence-transformers \
-            chromadb google-generativeai python-dotenv
+            chromadb google-genai python-dotenv
 ```
 
 Tạo file `.env`:

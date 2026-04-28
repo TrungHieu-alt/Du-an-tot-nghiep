@@ -156,9 +156,14 @@ OPENAI_API_KEY=
 MASTODON_API_BASE_URL=
 MASTODON_ACCESS_TOKEN=
 VITE_API_BASE_URL=http://localhost:8000
+DEV_ALLOW_ALL_ACCOUNTS=false
 ```
 
 `MONGO_URI` là tùy chọn. Nếu không truyền, backend trong Docker sẽ dùng MongoDB container nội bộ: `mongodb://mongo:27017`.
+
+`DEV_ALLOW_ALL_ACCOUNTS` (tạm thời cho môi trường dev):
+- `false` (mặc định): giữ validation ứng viên/CV ownership như hiện tại.
+- `true`: cho phép test chéo flow bằng một account (bỏ qua check candidate profile tồn tại và CV ownership khi tạo application).
 
 ## Setup runtime + chạy app (Docker)
 Docker Compose là runtime mặc định của project.

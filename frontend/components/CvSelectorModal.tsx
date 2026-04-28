@@ -9,6 +9,7 @@ import EditCvModal from './modals/EditCvModal';
 import api from '../lib/api';
 import { apiRoutes } from '../lib/api-routes';
 import { getCurrentUserId } from '../lib/auth-session';
+import { toCandidateResumeUpdatePayload } from '../lib/backend-payload-mappers';
 
 interface CvSelectorModalProps {
   isOpen: boolean;
@@ -22,6 +23,35 @@ interface CvSelectorModalProps {
 interface ExtendedUserCV extends UserCV {
   originalData?: any;
 }
+
+const mapToBackendCvCreatePayload = (raw: any) => {
+  const title = String(raw?.title || raw?.headline || raw?.fullname || 'Untitled CV').trim();
+  const location =
+    typeof raw?.location === 'object'
+      ? String(raw.location?.city || '').trim() || undefined
+      : typeof raw?.location === 'string'
+      ? raw.location.trim() || undefined
+      : undefined;
+
+  const skills = (Array.isArray(raw?.skills) ? raw.skills : [])
+    .map((s: any) => (typeof s === 'string' ? s.trim() : String(s?.name || '').trim()))
+    .filter(Boolean);
+
+  const experience = typeof raw?.experience === 'string' ? raw.experience : undefined;
+  const summary = typeof raw?.summary === 'string' ? raw.summary : undefined;
+  const full_text = typeof raw?.full_text === 'string' ? raw.full_text : [summary, experience].filter(Boolean).join('\n\n') || undefined;
+
+  return {
+    title,
+    location,
+    experience,
+    skills,
+    summary,
+    full_text,
+    is_main: Boolean(raw?.is_main),
+    pdf_url: typeof raw?.pdf_url === 'string' ? raw.pdf_url : undefined,
+  };
+};
 
 const CvSelectorModal: React.FC<CvSelectorModalProps> = ({ 
   isOpen, onClose, onSelectCv, onSkip 
@@ -39,23 +69,28 @@ const CvSelectorModal: React.FC<CvSelectorModalProps> = ({
   const [isFetchingDetails, setIsFetchingDetails] = useState(false);
   const [isSkipping, setIsSkipping] = useState(false);
 
-  // Fetch CVs from real API when modal opens
+  // Fetch CVs only when the modal opens to avoid stale refetch races during delete/edit flows.
   useEffect(() => {
-    if (isOpen) {
-      fetchCvs();
-      document.body.style.overflow = 'hidden';
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape' && !editingCv && !deletingCv) {
-          onClose();
-        }
-      };
-      document.addEventListener('keydown', handleKeyDown);
-      return () => {
-        document.removeEventListener('keydown', handleKeyDown);
-        document.body.style.overflow = 'unset';
-      };
-    }
-  }, [isOpen, editingCv, deletingCv]); // Added deps to refresh listeners correctly
+    if (!isOpen) return;
+    fetchCvs();
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !editingCv && !deletingCv) {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, editingCv, deletingCv, onClose]);
 
   const fetchCvs = async () => {
     setLoading(true);
@@ -134,10 +169,13 @@ const CvSelectorModal: React.FC<CvSelectorModalProps> = ({
     setLocalCvs(prev => prev.map(c => c.id === cv.id ? { ...c, name: newName } : c));
 
     try {
-      const response = await api.put(apiRoutes.cv.byId(cv.id), {
-        ...(cv as ExtendedUserCV).originalData,
-        title: newName,
-      });
+      const response = await api.put(
+        apiRoutes.cv.byId(cv.id),
+        toCandidateResumeUpdatePayload(
+          { title: newName },
+          (cv as ExtendedUserCV).originalData
+        )
+      );
       
       // If server returns updated object, we can update local state with more accurate data (e.g. updatedAt)
       if (response.data) {
@@ -213,7 +251,10 @@ const CvSelectorModal: React.FC<CvSelectorModalProps> = ({
     
     try {
       // Update via API
-      await api.put(apiRoutes.cv.byId(editingCv.id), formData);
+      await api.put(
+        apiRoutes.cv.byId(editingCv.id),
+        toCandidateResumeUpdatePayload(formData, editingCv.originalData)
+      );
       
       // Refresh list to get latest data from server
       await fetchCvs();
@@ -275,13 +316,14 @@ const CvSelectorModal: React.FC<CvSelectorModalProps> = ({
       delete payload.createdAt;
       delete payload.updatedAt;
       delete payload.__v;
+      const backendPayload = mapToBackendCvCreatePayload(payload);
       
       // Restore using POST to create a new record based on old data
       const userId = item.ownerId || getCurrentUserId();
       if (!userId) {
         throw new Error('Missing user_id for CV restore');
       }
-      await api.post(apiRoutes.cv.create(userId), payload);
+      await api.post(apiRoutes.cv.create(userId), backendPayload);
       setToast({ message: 'Đã hoàn tác xóa', type: 'success' });
       
       // Refresh to get the new ID assigned by backend

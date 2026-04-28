@@ -3,14 +3,16 @@ import pytesseract
 from PIL import Image
 import docx2txt
 import langdetect
-import google.generativeai as genai
 import os
 import mimetypes
 import re
+import logging
 
-from ragmodel.config import GEMINI_API_KEY, MODEL
+from ragmodel.config import MODEL, AI_MODE
+from ragmodel.logics.ai_error_utils import log_quota_limit_if_detected
+from ragmodel.logics.gemini_client import generate_text
 
-genai.configure(api_key=GEMINI_API_KEY)
+logger = logging.getLogger(__name__)
 
 # ---------------------------
 # Detect file type
@@ -67,6 +69,9 @@ def detect_lang(text: str):
         return "en"
 
 def translate_to_en(text: str):
+    if AI_MODE != "live":
+        return text
+
     lang = detect_lang(text)
     if lang == "en":
         return text
@@ -75,11 +80,14 @@ def translate_to_en(text: str):
 Translate the following resume content to English.
 Do NOT rewrite, do NOT summarize, keep meaning exactly the same.
 
-TEXT:
+    TEXT:
 {text}
 """
-    resp = genai.GenerativeModel(MODEL).generate_content(prompt)
-    return resp.text.strip()
+    try:
+        return generate_text(prompt, model=MODEL)
+    except Exception as e:
+        log_quota_limit_if_detected(logger, e, stage="resume_translate", model=MODEL)
+        raise
 
 # ---------------------------
 # Clean text
@@ -118,9 +126,10 @@ def split_resume_blocks(text: str):
         if len(cleaned) > 1:
             return "\n".join(cleaned)
 
-    # ----------------------------
+    if AI_MODE != "live":
+        return text
+
     # Fallback LLM segmentation
-    # ----------------------------
     prompt = f"""
 Split the following resume into clean blocks:
 SUMMARY
@@ -134,8 +143,11 @@ Do NOT rewrite; only segment text.
 TEXT:
 {text}
 """
-    resp = genai.GenerativeModel(MODEL).generate_content(prompt)
-    return resp.text.strip()
+    try:
+        return generate_text(prompt, model=MODEL)
+    except Exception as e:
+        log_quota_limit_if_detected(logger, e, stage="resume_split_blocks", model=MODEL)
+        raise
 
 # ---------------------------
 # MAIN ENTRYPOINT FOR CV

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { X, Trash2, UploadCloud, Edit3, AlertCircle } from 'lucide-react';
+import { X, UploadCloud, Edit3, AlertCircle } from 'lucide-react';
 import ProfileForm from '../profile/ProfileForm';
 import BdfUploadParser from '../profile/BdfUploadParser';
 import ConfirmDialog from '../common/ConfirmDialog';
@@ -25,6 +25,7 @@ const EditRequirementModal: React.FC<EditRequirementModalProps> = ({
   // Helper to extract salary from criteria list to pre-fill form
   // Memoized to prevent re-creating the object on every render, which causes ProfileForm to reset
   const initialFormData = useMemo(() => {
+    const source = (req as any)?.originalData || {};
     if (formData) return formData; // Return processed data from upload if exists
 
     const salaryCriteria = req.criteriaList.find(c => 
@@ -36,11 +37,20 @@ const EditRequirementModal: React.FC<EditRequirementModalProps> = ({
     const otherCriteria = req.criteriaList.filter(c => c !== salaryCriteria);
 
     return {
-      title: req.title,
-      skills: req.skills.join(', '),
-      experienceLevel: req.experienceLevel,
-      location: req.location,
-      salaryRange: salaryCriteria ? salaryCriteria.replace(/^(Lương|Salary|Mức lương):?\s*/i, '') : '',
+      title: source.title || req.title,
+      role: source.role || '',
+      job_type: source.job_type || '',
+      skills: Array.isArray(source.skills) && source.skills.length ? source.skills.join(', ') : req.skills.join(', '),
+      experienceLevel: source.experience_level || req.experienceLevel,
+      location: source.location || req.location,
+      salaryRange:
+        typeof source.salary_min === 'number' || typeof source.salary_max === 'number'
+          ? `${source.salary_min ?? ''}-${source.salary_max ?? ''}`
+          : salaryCriteria
+          ? salaryCriteria.replace(/^(Lương|Salary|Mức lương):?\s*/i, '')
+          : '',
+      full_text: source.full_text || '',
+      pdf_url: source.pdf_url || '',
       criteria: otherCriteria.map(c => `- ${c}`).join('\n')
     };
   }, [req, formData]);
@@ -134,6 +144,10 @@ const EditRequirementModal: React.FC<EditRequirementModalProps> = ({
               isSubmitting={isSaving}
               mode="recruiter"
               isEditMode={true}
+              editDeleteAction={{
+                label: 'Xóa yêu cầu',
+                onClick: () => setShowDeleteConfirm(true),
+              }}
             />
           ) : (
             <div className="py-4">
@@ -142,7 +156,7 @@ const EditRequirementModal: React.FC<EditRequirementModalProps> = ({
                   Tải lên bản mô tả công việc (JD) hoặc hồ sơ yêu cầu (BDF) để hệ thống tự động cập nhật thông tin.
                 </p>
               </div>
-              <BdfUploadParser onParseComplete={handleParseComplete} />
+              <BdfUploadParser mode="jd" onParseComplete={handleParseComplete} />
               <div className="mt-6 text-center">
                  <button 
                    onClick={() => setActiveTab('manual')}
@@ -155,19 +169,6 @@ const EditRequirementModal: React.FC<EditRequirementModalProps> = ({
           )}
         </div>
 
-        {/* Footer Actions */}
-        {activeTab === 'manual' && (
-           <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg transition-colors font-medium text-sm"
-              >
-                <Trash2 className="w-4 h-4" />
-                Xóa yêu cầu
-              </button>
-           </div>
-        )}
       </div>
 
       {/* Delete Confirmation Modal */}

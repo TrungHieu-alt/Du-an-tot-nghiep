@@ -9,7 +9,7 @@ numpy==1.26.4
 Mastodon.py==1.8.1
 
 # === LLM + AI ===
-google-generativeai==0.8.3
+google-genai==1.35.0
 openai==1.52.0
 sentence-transformers==3.0.1
 
@@ -28,7 +28,7 @@ langdetect==1.0.9
 
 
 # === Web Server ===
-fastapi==0.104.1
+fastapi==0.115.6
 uvicorn[standard]==0.24.0
 motor==3.3.1
 pymongo==4.5.0

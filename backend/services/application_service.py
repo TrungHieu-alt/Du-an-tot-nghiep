@@ -1,5 +1,6 @@
 # services/application_service.py
 import logging
+import os
 from typing import Dict, Optional
 from repositories.application_repo import ApplicationRepository
 from repositories.candidate_repo import CandidateRepository
@@ -7,6 +8,10 @@ from repositories.job_repo import JobRepository
 from repositories.cv_repo import CVRepository
 
 logger = logging.getLogger(__name__)
+
+
+def _dev_allow_all_accounts() -> bool:
+    return os.getenv("DEV_ALLOW_ALL_ACCOUNTS", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
 class ApplicationService:
@@ -53,16 +58,19 @@ class ApplicationService:
         if not job:
             raise ValueError(f"Job not found: job_id={job_id}")
         
-        # 2. Validate candidate exists (use get_by_user_id instead of get_by_id)
-        candidate = await CandidateRepository.get_by_user_id(candidate_id)
-        if not candidate:
-            raise ValueError(f"Candidate not found: candidate_id={candidate_id}")
+        dev_allow_all = _dev_allow_all_accounts()
+
+        # 2. Validate candidate exists (skip in permissive dev mode)
+        if not dev_allow_all:
+            candidate = await CandidateRepository.get_by_user_id(candidate_id)
+            if not candidate:
+                raise ValueError(f"Candidate not found: candidate_id={candidate_id}")
         
         # 3. Validate CV exists and belongs to candidate
         cv = await CVRepository.get_by_id(cv_id)
         if not cv:
             raise ValueError(f"CV not found: cv_id={cv_id}")
-        if cv.user_id != candidate_id:
+        if not dev_allow_all and cv.user_id != candidate_id:
             raise ValueError("CV does not belong to this candidate")
         
         # 4. Check for duplicate application

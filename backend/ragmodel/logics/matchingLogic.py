@@ -5,12 +5,14 @@ from typing import Dict, List, Optional
 
 from ragmodel.db import vectorStore as vs
 from ragmodel.logics.embedder import embed_cv, embed_jd
-from ragmodel.logics.llmEvaluate import evaluate_match
+from ragmodel.logics.llmEvaluate import evaluate_match_batch
+from ragmodel.config import AI_MODE
 
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+LLM_ENABLED = AI_MODE == "live"
 
 # ============================
 # CONSTANTS
@@ -132,6 +134,14 @@ def normalize_llm_score(score: float) -> float:
         return max(0.0, min(100.0, float(score)))
     except (ValueError, TypeError):
         return 0.0
+
+
+def apply_mock_llm(candidate: Dict) -> None:
+    """Populate LLM-like fields without API calls when AI is disabled."""
+    candidate["llm_score"] = normalize_llm_score(candidate.get("weighted_sim", 0) * 100)
+    candidate["reason"] = (
+        f"AI_MODE={AI_MODE}: LLM stage bypassed; score derived from weighted vector similarity"
+    )
 
 # ============================
 # MATCH JD → CV (Direct matching)
@@ -292,25 +302,26 @@ def get_top_k_cvs_for_jd(
         logger.info(f"Stage 2 (Weighted): Reranked to top {len(top_for_llm)} candidates")
 
         # ==== STAGE 3: LLM Evaluation ====
-        for c in top_for_llm:
+        if LLM_ENABLED:
             try:
-                # Call LLM with JD first, then CV
-                llm_result = evaluate_match(
-                    jd_json.get("full_text", ""), 
-                    c["cv"].get("full_text", "")
+                llm_results = evaluate_match_batch(
+                    jd_json.get("full_text", ""),
+                    [c["cv"].get("full_text", "") for c in top_for_llm],
+                    anchor_label="JOB_DESCRIPTION",
+                    candidate_label="CV",
                 )
-                
-                # Normalize and store LLM score
-                c["llm_score"] = normalize_llm_score(llm_result.get("score", 0))
-                c["reason"] = llm_result.get("reason", "")
-                time.sleep(1)  # To avoid rate limits
+                for c, llm_result in zip(top_for_llm, llm_results):
+                    c["llm_score"] = normalize_llm_score(llm_result.get("score", 0))
+                    c["reason"] = llm_result.get("reason", "")
             except Exception as e:
-                logger.warning(f"LLM evaluation failed for CV {c['id']}: {e}")
-                # Fallback: use weighted similarity as proxy
-                c["llm_score"] = c["weighted_sim"] * 100
-                c["reason"] = "LLM evaluation unavailable (using vector similarity)"
+                logger.warning(f"LLM batch evaluation failed for JD {jd_json.get('job_id', 'unknown')}: {e}")
+                for c in top_for_llm:
+                    apply_mock_llm(c)
+        else:
+            for c in top_for_llm:
+                apply_mock_llm(c)
 
-        logger.info(f"Stage 3 (LLM): Evaluated {len(top_for_llm)} candidates")
+        logger.info(f"Stage 3 (LLM): Processed {len(top_for_llm)} candidates (enabled={LLM_ENABLED})")
 
         # ==== STAGE 4: Hybrid Ranking ====
         def calculate_final_score(candidate: Dict) -> float:
@@ -343,6 +354,7 @@ def get_top_k_cvs_for_jd(
 # ============================
 def get_top_k_jds_for_cv(
     cv_json: Dict, 
+    cv_emb: Optional[Dict[str, np.ndarray]] = None,
     ann_k: int = None, 
     rerank_k: int = None, 
     final_k: int = None
@@ -370,8 +382,9 @@ def get_top_k_jds_for_cv(
     rerank_k = rerank_k or MatchingConfig.RERANK_K
     final_k = final_k or MatchingConfig.FINAL_K
     
-    # Get CV embeddings
-    cv_emb = embed_cv(cv_json)
+    # Reuse precomputed CV embeddings when available (e.g., from Chroma metadata)
+    if not cv_emb:
+        cv_emb = embed_cv(cv_json)
 
     try:
         # ==== STAGE 1: ANN Retrieval ====
@@ -424,25 +437,26 @@ def get_top_k_jds_for_cv(
         logger.info(f"Stage 2 (Weighted): Reranked to top {len(top_for_llm)} candidates")
 
         # ==== STAGE 3: LLM Evaluation ====
-        for c in top_for_llm:
+        if LLM_ENABLED:
             try:
-                # Call LLM with JD first, then CV
-                llm_result = evaluate_match(
-                    c["jd"].get("full_text", ""), 
-                    cv_json.get("full_text", "")
+                llm_results = evaluate_match_batch(
+                    cv_json.get("full_text", ""),
+                    [c["jd"].get("full_text", "") for c in top_for_llm],
+                    anchor_label="CV",
+                    candidate_label="JOB_DESCRIPTION",
                 )
-                
-                # Normalize and store LLM score
-                c["llm_score"] = normalize_llm_score(llm_result.get("score", 0))
-                c["reason"] = llm_result.get("reason", "")
-                
+                for c, llm_result in zip(top_for_llm, llm_results):
+                    c["llm_score"] = normalize_llm_score(llm_result.get("score", 0))
+                    c["reason"] = llm_result.get("reason", "")
             except Exception as e:
-                logger.warning(f"LLM evaluation failed for JD {c['id']}: {e}")
-                # Fallback: use weighted similarity as proxy
-                c["llm_score"] = c["weighted_sim"] * 100
-                c["reason"] = "LLM evaluation unavailable (using vector similarity)"
+                logger.warning(f"LLM batch evaluation failed for CV {cv_json.get('cv_id', 'unknown')}: {e}")
+                for c in top_for_llm:
+                    apply_mock_llm(c)
+        else:
+            for c in top_for_llm:
+                apply_mock_llm(c)
 
-        logger.info(f"Stage 3 (LLM): Evaluated {len(top_for_llm)} candidates")
+        logger.info(f"Stage 3 (LLM): Processed {len(top_for_llm)} candidates (enabled={LLM_ENABLED})")
 
         # ==== STAGE 4: Hybrid Ranking ====
         def calculate_final_score(candidate: Dict) -> float:

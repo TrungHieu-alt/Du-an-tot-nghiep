@@ -14,14 +14,22 @@ interface ControlsProps {
   isMatchMode?: boolean; // New prop to control specific behavior
   hideSort?: boolean;
   hideCount?: boolean;
+  sortOptions?: Array<{ value: SortOption; label: string }>;
 }
 
 const SortAndViewControls: React.FC<ControlsProps> = ({ 
   sort, onSortChange, viewMode, onViewModeChange, resultCount, itemLabel = 'kết quả', 
   isMatchMode = false,
   hideSort = false,
-  hideCount = false
+  hideCount = false,
+  sortOptions,
 }) => {
+  const effectiveSortOptions = sortOptions || [
+    { value: 'newest', label: 'Mới nhất' },
+    { value: 'oldest', label: 'Cũ nhất' },
+    { value: 'salary_high', label: 'Lương cao nhất' },
+    { value: 'salary_low', label: 'Lương thấp nhất' },
+  ];
   return (
     <div className={`flex flex-col sm:flex-row items-center mb-6 gap-4 ${hideCount ? 'justify-end' : 'justify-between'}`}>
       {!hideCount && (
@@ -52,12 +60,9 @@ const SortAndViewControls: React.FC<ControlsProps> = ({
               {isMatchMode ? (
                 <option value="relevance">Sắp xếp: Độ phù hợp nhất</option>
               ) : (
-                <>
-                  <option value="newest">Mới nhất</option>
-                  <option value="oldest">Cũ nhất</option>
-                  <option value="salary_high">Lương cao nhất</option>
-                  <option value="salary_low">Lương thấp nhất</option>
-                </>
+                effectiveSortOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))
               )}
             </select>
             <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isMatchMode ? 'text-blue-400' : 'text-gray-400'}`} />

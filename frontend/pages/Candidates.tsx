@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useCandidatesSearch } from '../hooks/useCandidatesSearch';
-import { SlidersHorizontal, Filter, Info, UserCircle, Sparkles, ChevronDown } from 'lucide-react';
+import { SlidersHorizontal, Filter, Info, UserCircle } from 'lucide-react';
 import { ViewMode, FilterGroup } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -36,6 +36,12 @@ const CANDIDATE_FILTERS: FilterGroup[] = [
 ];
 
 const Candidates: React.FC = () => {
+  const formatLastMatchedAt = (value?: string) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString('vi-VN');
+  };
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const { isAuthenticated } = useAuth();
@@ -129,57 +135,35 @@ const Candidates: React.FC = () => {
                </button>
             </div>
 
-            <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-               {/* Sort Controls - Custom for Candidates */}
-               <div className="flex items-center gap-3 w-full sm:w-auto">
-                 <p className="text-gray-500 font-medium text-sm whitespace-nowrap hidden sm:block">
-                    Tìm thấy <span className="text-gray-900 font-bold">{meta.total}</span> ứng viên
-                 </p>
-                 
-                 <div className="relative w-full sm:w-auto">
-                    {isMatchMode && (
-                      <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10">
-                        <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                      </div>
-                    )}
-                    <select
-                        value={isMatchMode ? 'relevance' : state.sort}
-                        onChange={(e) => handleSortChange(e.target.value as any)}
-                        disabled={isMatchMode}
-                        className={`w-full sm:min-w-[200px] appearance-none pr-10 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer
-                            ${isMatchMode 
-                              ? 'pl-9 text-blue-700 border-blue-200 bg-blue-50/50 cursor-default' 
-                              : 'pl-4 text-gray-900'
-                            }
-                        `}
-                    >
-                        {isMatchMode ? (
-                            <option value="relevance">Sắp xếp: Độ phù hợp nhất</option>
-                        ) : (
-                            <>
-                                <option value="newest">Mới nhất</option>
-                                <option value="oldest">Cũ nhất</option>
-                                <option value="exp_high">Kinh nghiệm: Cao đến Thấp</option>
-                                <option value="exp_low">Kinh nghiệm: Thấp đến Cao</option>
-                            </>
-                        )}
-                    </select>
-                    <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${isMatchMode ? 'text-blue-400' : 'text-gray-400'}`} />
-                 </div>
-               </div>
-               
-               {/* View Toggle ONLY (Sort and Count hidden) */}
-               <SortAndViewControls 
-                 sort={state.sort} 
-                 onSortChange={() => {}} 
-                 viewMode={viewMode} 
-                 onViewModeChange={setViewMode} 
-                 resultCount={meta.total}
-                 itemLabel="ứng viên"
-                 hideSort={true}
-                 hideCount={true}
-               />
-            </div>
+            <SortAndViewControls 
+              sort={state.sort} 
+              onSortChange={handleSortChange} 
+              viewMode={viewMode} 
+              onViewModeChange={setViewMode} 
+              resultCount={meta.total}
+              itemLabel="ứng viên"
+              isMatchMode={isMatchMode}
+              sortOptions={[
+                { value: 'newest', label: 'Mới nhất' },
+                { value: 'oldest', label: 'Cũ nhất' },
+                { value: 'exp_high', label: 'Kinh nghiệm: Cao đến Thấp' },
+                { value: 'exp_low', label: 'Kinh nghiệm: Thấp đến Cao' },
+              ]}
+            />
+            {isMatchMode && (
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <p className="text-xs text-gray-500">
+                  {meta.lastMatchedAt ? `Last matched: ${formatLastMatchedAt(meta.lastMatchedAt)}` : ''}
+                </p>
+                <button
+                  onClick={() => refresh({ forceRematch: true })}
+                  disabled={loading}
+                  className="px-3 py-2 text-sm font-semibold rounded-lg border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  Re-match
+                </button>
+              </div>
+            )}
 
             {/* Results Grid/List */}
             {loading ? (

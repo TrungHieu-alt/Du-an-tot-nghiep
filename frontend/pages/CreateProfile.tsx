@@ -4,11 +4,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FileText, Edit3, ArrowLeft, Loader2 } from 'lucide-react';
 import ProfileForm from '../components/profile/ProfileForm';
 import BdfUploadParser from '../components/profile/BdfUploadParser';
-import { CreateCvDto } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
 import { apiRoutes } from '../lib/api-routes';
 import { getCurrentUserId } from '../lib/auth-session';
+import { toCandidateResumeUpdatePayload, toJobPostUpdatePayload } from '../lib/backend-payload-mappers';
 
 // Local safe clone to ensure localStorage writes don't crash on cycles
 const safeDeepClone = (obj: any, seen = new WeakSet()): any => {
@@ -43,6 +43,8 @@ const CreateProfile: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'manual' | 'upload'>('manual');
   const [prefilledData, setPrefilledData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [requiresParsedCvConfirmation, setRequiresParsedCvConfirmation] = useState(false);
+  const [parsedCvId, setParsedCvId] = useState<string | null>(null);
 
   // Set default user data if available
   React.useEffect(() => {
@@ -64,18 +66,39 @@ const CreateProfile: React.FC = () => {
     try {
         if (isCandidateMode) {
             // --- CANDIDATE FLOW ---
-            const newCvId = resultData._id || resultData.id;
+            let submitResult = resultData;
+            let newCvId = resultData._id || resultData.id || resultData.cv_id;
+
+            if (requiresParsedCvConfirmation || !newCvId) {
+              const userId = user?.id || getCurrentUserId();
+              if (!userId) {
+                throw new Error('Vui lòng đăng nhập để lưu hồ sơ.');
+              }
+
+              const mappedData = toCandidateResumeUpdatePayload(
+                resultData,
+                prefilledData || undefined
+              );
+              const response = parsedCvId
+                ? await api.put(apiRoutes.cv.byId(parsedCvId), mappedData)
+                : await api.post(apiRoutes.cv.create(userId), mappedData);
+
+              submitResult = response.data;
+              newCvId = submitResult?._id || submitResult?.id || submitResult?.cv_id || parsedCvId;
+            }
             
             // Save to localStorage for demo persistence
             try {
                 const existingStr = localStorage.getItem('demo_cvs');
                 const existing = existingStr ? JSON.parse(existingStr) : [];
-                const safeCv = safeDeepClone(resultData);
+                const safeCv = safeDeepClone(submitResult);
                 localStorage.setItem('demo_cvs', JSON.stringify([safeCv, ...existing]));
             } catch (e) {
                 console.error("Failed to save CV to local storage", e);
             }
 
+            setRequiresParsedCvConfirmation(false);
+            setParsedCvId(null);
             console.log("Redirecting to jobs with CV:", newCvId);
             if (newCvId) {
                 // FORCE REDIRECT
@@ -86,18 +109,31 @@ const CreateProfile: React.FC = () => {
 
         } else {
             // --- RECRUITER FLOW ---
-            const newReqId = resultData._id || resultData.id || `req_${Date.now()}`;
+            let submitResult = resultData;
+            let newReqId = resultData._id || resultData.id || resultData.job_id;
+
+            if (!newReqId) {
+              const recruiterId = user?.id || getCurrentUserId();
+              if (!recruiterId) {
+                throw new Error('Vui lòng đăng nhập để tạo yêu cầu tuyển dụng.');
+              }
+
+              const mappedData = toJobPostUpdatePayload(resultData, prefilledData || undefined);
+              const response = await api.post(apiRoutes.jobs.create(recruiterId), mappedData);
+              submitResult = response.data;
+              newReqId = submitResult?._id || submitResult?.id || submitResult?.job_id;
+            }
             
             try {
                 const existingStr = localStorage.getItem('demo_requirements');
                 const existing = existingStr ? JSON.parse(existingStr) : [];
-                const safeReq = safeDeepClone(resultData);
+                const safeReq = safeDeepClone(submitResult);
                 localStorage.setItem('demo_requirements', JSON.stringify([safeReq, ...existing]));
             } catch (e) {
                 console.error("Failed to save requirement to local storage", e);
             }
             
-            navigate(`/candidates?req=${newReqId}`);
+            navigate(newReqId ? `/candidates?req=${newReqId}` : '/candidates');
         }
     } catch (err) {
         console.error("Error during navigation logic", err);
@@ -110,54 +146,13 @@ const CreateProfile: React.FC = () => {
     setIsSubmitting(true); // Start loading UI immediately
 
     try {
-        // 1. CASE A: Backend already created the CV (ID exists)
-        if (data._id || data.id) {
-            console.log("Upload returned existing ID, redirecting...");
-            await handleFormSubmit(data);
-            return;
-        }
-
-        // 2. CASE B: Need to create CV from parsed text
         if (isCandidateMode) {
-            const userId = user?.id || getCurrentUserId();
-            if (!userId) {
-              throw new Error('Vui lòng đăng nhập để tạo hồ sơ.');
-            }
-            // Construct payload with safe defaults to ensure API success
-            const mappedData: Partial<CreateCvDto> = {
-                fullname: data.fullname || user?.name || "Hồ sơ của tôi", // Fallback mandatory field
-                email: data.email || user?.email,
-                phone: data.phone || user?.phone,
-                headline: data.headline || data.targetRole || "Open to work",
-                summary: data.summary,
-                location: {
-                    city: data.location?.city || (typeof data.location === 'string' ? data.location : '') || '',
-                    state: data.location?.state || '',
-                    country: data.location?.country || ''
-                },
-                targetRole: data.targetRole,
-                skills: Array.isArray(data.skills) ? data.skills : [],
-                experiences: Array.isArray(data.experiences) ? data.experiences : [],
-                education: Array.isArray(data.education) ? data.education : [],
-                projects: Array.isArray(data.projects) ? data.projects : [],
-                certifications: Array.isArray(data.certifications) ? data.certifications : [],
-                languages: Array.isArray(data.languages) ? data.languages : [],
-                tags: data.tags || [],
-                employmentType: Array.isArray(data.employmentType) ? data.employmentType : []
-            };
-
-            console.log("Auto-creating CV with data:", mappedData);
-            
-            // Call API to create
-            const res = await api.post(apiRoutes.cv.create(userId), mappedData);
-            
-            // Redirect immediately with new data
-            if (res.data && (res.data._id || res.data.id)) {
-                await handleFormSubmit(res.data);
-            } else {
-                throw new Error("API succeeded but returned no ID");
-            }
-
+            const uploadedCvId = data?._id || data?.id || data?.cv_id || null;
+            setParsedCvId(uploadedCvId ? String(uploadedCvId) : null);
+            setPrefilledData(data);
+            setRequiresParsedCvConfirmation(true);
+            setActiveTab('manual');
+            setIsSubmitting(false);
         } else {
             // Recruiter Mode: Just fill form (standard behavior)
             setPrefilledData({
@@ -171,12 +166,12 @@ const CreateProfile: React.FC = () => {
             setIsSubmitting(false);
         }
     } catch (error) {
-        console.error("Auto-save failed, fallback to manual review", error);
-        // Only on CRITICAL failure do we show the form
+        console.error("Parse handling failed, fallback to manual review", error);
         setPrefilledData(data); // Try to fill whatever we got
+        setRequiresParsedCvConfirmation(isCandidateMode);
         setActiveTab('manual');
         setIsSubmitting(false);
-        alert("Không thể tự động tạo hồ sơ. Vui lòng kiểm tra lại thông tin.");
+        alert("Không thể xử lý tài liệu tự động. Vui lòng kiểm tra và lưu lại trước khi tìm kiếm.");
     }
   };
 
@@ -240,6 +235,7 @@ const CreateProfile: React.FC = () => {
                 onSubmit={handleFormSubmit}
                 isSubmitting={isSubmitting}
                 mode={isCandidateMode ? 'candidate' : 'recruiter'}
+                isEditMode={true}
               />
             ) : (
               <div className="animate-in fade-in slide-in-from-right-4 duration-300">
@@ -259,7 +255,7 @@ const CreateProfile: React.FC = () => {
                         <p className="text-gray-500 text-sm mt-2">Vui lòng đợi trong giây lát</p>
                     </div>
                 ) : (
-                    <BdfUploadParser onParseComplete={handleParseComplete} />
+                    <BdfUploadParser mode={isCandidateMode ? 'cv' : 'jd'} onParseComplete={handleParseComplete} />
                 )}
               </div>
             )}

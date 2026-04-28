@@ -8,12 +8,12 @@ class CandidateResume(Document):
     cv_id: int
     user_id: int
     title: str
-    location: Optional[str]
-    experience: Optional[str]
+    location: Optional[str] = None
+    experience: Optional[str] = None
     skills: List[str] = []
-    summary: Optional[str]
-    full_text: Optional[str]
-    embedding: Optional[str]
+    summary: Optional[str] = None
+    full_text: Optional[str] = None
+    embedding: Optional[str] = None
     created_at: datetime = datetime.utcnow()
     updated_at: datetime = datetime.utcnow()
     pdf_url: Optional[str] = None

@@ -134,6 +134,7 @@ const CvCard: React.FC<CvCardProps> = ({
                 <button
                   ref={buttonRef}
                   onClick={toggleMenu}
+                  aria-label={`Mở menu cho ${cv.name}`}
                   className={`p-1 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gray-200 
                     ${showMenu ? 'bg-gray-100 text-gray-900' : 'text-gray-300 hover:text-gray-600 hover:bg-gray-50'}`}
                 >
@@ -159,6 +160,7 @@ const CvCard: React.FC<CvCardProps> = ({
                     </button>
                     <button
                       onClick={(e) => handleAction(e, 'delete')}
+                      aria-label={`Xóa ${cv.name}`}
                       className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" /> Xóa
@@ -185,8 +187,8 @@ const CvCard: React.FC<CvCardProps> = ({
             <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
                 {cv.experienceLevel}
             </span>
-            {cv.skills.slice(0, 2).map(skill => (
-                <span key={skill} className="text-xs bg-gray-50 border border-gray-100 text-gray-500 px-2 py-0.5 rounded">
+            {cv.skills.slice(0, 2).map((skill, index) => (
+                <span key={`${skill}-${index}`} className="text-xs bg-gray-50 border border-gray-100 text-gray-500 px-2 py-0.5 rounded">
                     {skill}
                 </span>
             ))}

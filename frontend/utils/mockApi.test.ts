@@ -81,6 +81,29 @@ describe('mockApi utilities', () => {
     });
   });
 
+  it('searchCandidatesApi skips match endpoint when req id is placeholder "undefined"', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      data: [
+        {
+          user_id: 2,
+          full_name: 'Nguyen Van A',
+          skills: ['Node.js', 'MongoDB'],
+          experience_years: 3,
+          location: 'HCM',
+        },
+      ],
+    } as any);
+
+    const result = await searchCandidatesApi(
+      { q: '', location: '', filters: {}, sort: 'relevance', page: 1 },
+      'undefined'
+    );
+
+    expect(vi.mocked(api.get)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.get).mock.calls[0][0]).toBe('/candidate/profiles');
+    expect(result.data).toHaveLength(1);
+  });
+
   it('requirement CRUD helpers call canonical jobs endpoints', async () => {
     vi.mocked(api.post).mockResolvedValue({ data: { id: 'r1', title: 'Req' } } as any);
     vi.mocked(api.put).mockResolvedValue({ data: { id: 'r1', title: 'Req updated' } } as any);

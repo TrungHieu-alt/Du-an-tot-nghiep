@@ -31,9 +31,10 @@ interface ParsedData {
 
 interface BdfUploadParserProps {
   onParseComplete: (data: ParsedData) => void;
+  mode?: 'cv' | 'jd';
 }
 
-const BdfUploadParser: React.FC<BdfUploadParserProps> = ({ onParseComplete }) => {
+const BdfUploadParser: React.FC<BdfUploadParserProps> = ({ onParseComplete, mode = 'cv' }) => {
   const { user } = useAuth();
   const [isDragging, setIsDragging] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
@@ -51,8 +52,9 @@ const BdfUploadParser: React.FC<BdfUploadParserProps> = ({ onParseComplete }) =>
 
   const processFile = useCallback(async (file: File) => {
     // Validate file type
-    if (!file.name.match(/\.(pdf|doc|docx|bdf)$/i)) {
-      setError("Định dạng file không hỗ trợ. Vui lòng tải lên PDF, DOC, DOCX hoặc BDF.");
+    if (!file.name.match(/\.(pdf|txt)$/i)) {
+      const kind = mode === 'cv' ? 'CV' : 'JD';
+      setError(`Định dạng file không hỗ trợ cho luồng ${kind} hiện tại. Vui lòng tải lên PDF hoặc TXT.`);
       return;
     }
 
@@ -63,12 +65,13 @@ const BdfUploadParser: React.FC<BdfUploadParserProps> = ({ onParseComplete }) =>
     try {
       const userId = user?.id || getCurrentUserId();
       if (!userId) {
-        throw new Error('Bạn cần đăng nhập để tải và phân tích CV.');
+        throw new Error('Bạn cần đăng nhập để tải và phân tích tài liệu.');
       }
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await api.post(apiRoutes.cv.upload(userId), formData, {
+      const uploadRoute = mode === 'cv' ? apiRoutes.cv.upload(userId) : apiRoutes.jobs.upload(userId);
+      const response = await api.post(uploadRoute, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -107,7 +110,7 @@ const BdfUploadParser: React.FC<BdfUploadParserProps> = ({ onParseComplete }) =>
     } finally {
       setIsParsing(false);
     }
-  }, [onParseComplete]);
+  }, [mode, onParseComplete, user?.id]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -141,7 +144,7 @@ const BdfUploadParser: React.FC<BdfUploadParserProps> = ({ onParseComplete }) =>
           type="file" 
           id="file-upload" 
           className="hidden" 
-          accept=".pdf,.doc,.docx,.bdf"
+          accept=".pdf,.txt"
           onChange={handleFileSelect}
         />
 
@@ -169,7 +172,7 @@ const BdfUploadParser: React.FC<BdfUploadParserProps> = ({ onParseComplete }) =>
               Kéo thả hoặc tải lên CV/JD
             </h3>
             <p className="text-gray-500 text-sm max-w-sm mb-6 leading-relaxed">
-              Hỗ trợ định dạng .PDF, .DOCX. Hệ thống sẽ tự động phân tích và điền thông tin cho bạn.
+              Hỗ trợ định dạng .PDF, .TXT. Hệ thống sẽ tự động phân tích và điền thông tin cho bạn.
             </p>
             <span className="bg-white border border-gray-200 text-gray-700 px-6 py-2.5 rounded-full font-semibold hover:border-[#0A65CC] hover:text-[#0A65CC] transition-colors shadow-sm">
               Chọn tệp tin

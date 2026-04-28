@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { X, Trash2, UploadCloud, Edit3, AlertCircle, Loader2 } from 'lucide-react';
+import { X, UploadCloud, Edit3, AlertCircle, Loader2 } from 'lucide-react';
 import ProfileForm from '../profile/ProfileForm';
 import BdfUploadParser from '../profile/BdfUploadParser';
 import ConfirmDialog from '../common/ConfirmDialog';
@@ -50,6 +50,7 @@ const EditCvModal: React.FC<EditCvModalProps> = ({
   // Memoize initial data to prevent form resetting on re-renders
   // Use safeDeepClone to ensure no reference cycles passed to form state
   const initialFormData = useMemo(() => {
+    const source = (cv as any)?.originalData || {};
     // 1. Prefer details fetched from backend (if available)
     if (cv.details) {
         return safeDeepClone(cv.details);
@@ -60,13 +61,18 @@ const EditCvModal: React.FC<EditCvModalProps> = ({
     
     // 3. Fallback to basic info from list view
     return {
-      fullname: cv.name || '',
-      headline: cv.title || '',
+      fullname: source.fullname || cv.name || '',
+      headline: source.title || cv.title || '',
+      summary: source.summary || '',
+      full_text: source.full_text || '',
       skills: Array.isArray(cv.skills) 
         ? cv.skills.map(s => (typeof s === 'string' ? { name: s, level: 'Intermediate' } : s)) 
         : [],
-      location: { city: cv.location || '' },
-      experienceLevel: cv.experienceLevel || '',
+      location: { city: source.location || cv.location || '' },
+      experience: source.experience || '',
+      is_main: Boolean(source.is_main),
+      pdf_url: source.pdf_url || '',
+      experienceLevel: cv.experienceLevel || source.experience_level || '',
     };
   }, [cv, formData]);
 
@@ -150,13 +156,17 @@ const EditCvModal: React.FC<EditCvModalProps> = ({
              </div>
           ) : (
              <>
-               {activeTab === 'manual' ? (
+              {activeTab === 'manual' ? (
                 <ProfileForm 
                   initialData={initialFormData}
                   onSubmit={onSave}
                   isSubmitting={isSaving}
                   mode="candidate"
                   isEditMode={true}
+                  editDeleteAction={{
+                    label: 'Xóa hồ sơ',
+                    onClick: () => setShowDeleteConfirm(true),
+                  }}
                 />
               ) : (
                 <div className="py-4">
@@ -165,7 +175,7 @@ const EditCvModal: React.FC<EditCvModalProps> = ({
                       Tải lên CV (PDF/Word) để hệ thống tự động cập nhật thông tin kỹ năng và kinh nghiệm.
                     </p>
                   </div>
-                  <BdfUploadParser onParseComplete={handleParseComplete} />
+                  <BdfUploadParser mode="cv" onParseComplete={handleParseComplete} />
                   <div className="mt-6 text-center">
                     <button 
                       onClick={() => setActiveTab('manual')}
@@ -180,19 +190,6 @@ const EditCvModal: React.FC<EditCvModalProps> = ({
           )}
         </div>
 
-         {/* Footer Actions */}
-         {!isLoading && activeTab === 'manual' && (
-           <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-between items-center">
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 px-4 py-2 rounded-lg transition-colors font-medium text-sm"
-              >
-                <Trash2 className="w-4 h-4" />
-                Xóa hồ sơ
-              </button>
-           </div>
-        )}
       </div>
 
        {/* Delete Confirmation Modal */}

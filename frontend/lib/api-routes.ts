@@ -42,6 +42,10 @@ export const apiRoutes = {
   matching: {
     runForJob: (jobId: RouteId) => `/matching/job/${toPathId(jobId)}/run`,
     runForCv: (cvId: RouteId) => `/matching/cv/${toPathId(cvId)}/run`,
+    runForJobAsync: (jobId: RouteId) => `/matching/job/${toPathId(jobId)}/run/async`,
+    runForCvAsync: (cvId: RouteId) => `/matching/cv/${toPathId(cvId)}/run/async`,
+    jobStatus: (jobTrackingId: RouteId) => `/matching/jobs/${toPathId(jobTrackingId)}`,
+    jobResult: (jobTrackingId: RouteId) => `/matching/jobs/${toPathId(jobTrackingId)}/result`,
     jobMatches: (jobId: RouteId) => `/matching/job/${toPathId(jobId)}/matches`,
     cvMatches: (cvId: RouteId) => `/matching/cv/${toPathId(cvId)}/matches`,
     clearJobMatches: (jobId: RouteId) => `/matching/job/${toPathId(jobId)}/matches`,

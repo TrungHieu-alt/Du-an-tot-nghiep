@@ -14,9 +14,14 @@ Purpose: concise system reality snapshot only. Do not duplicate policy rules fro
 - AI layer:
   - Gemini for translation, parsing, and LLM scoring.
   - SentenceTransformers (MiniLM) for embeddings.
+  - `AI_MODE=mock` bypasses Gemini translation/parsing during CV/JD ingestion for offline or low-cost testing.
+  - `AI_MODE=mock` also bypasses Gemini LLM reranking/evaluation in matching and uses weighted-vector fallback scoring.
 
 ## Current Behavior Reality
 - AI processing exists in ingestion and matching flows, not only one endpoint.
+- External Gemini API calls are routed through an internal worker queue with bounded wait timeout and retries.
+- Matching now supports asynchronous job execution endpoints (enqueue + status/result polling) to avoid long blocking requests.
+- Matching LLM evaluation is batched per run (single prompt for reranked candidates), with vector fallback on batch failure.
 - Matching pipeline is multi-stage:
   1. ANN retrieval on `emb_full`.
   2. Weighted rerank across semantic fields.

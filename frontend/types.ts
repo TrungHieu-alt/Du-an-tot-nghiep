@@ -137,6 +137,7 @@ export interface PaginationMeta {
   limit: number;
   total: number;
   totalPages: number;
+  lastMatchedAt?: string;
 }
 
 export interface SearchResponse<T> {

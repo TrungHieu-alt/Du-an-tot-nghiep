@@ -1,12 +1,15 @@
 # routes/matching_routes.py
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel
 from services.match_service import MatchingService
 from repositories.match_repo import MatchRepository
+from jobs.matching_jobs import matching_job_store, run_cv_to_job, run_job_to_cv
 from schemas.match_schema import (
     RunMatchingResponse,
     JobMatchesResponse,
-    CVMatchesResponse
+    CVMatchesResponse,
+    MatchingJobQueuedResponse,
+    MatchingJobStatusResponse,
 )
 
 router = APIRouter(prefix="/matching", tags=["matching"])
@@ -69,6 +72,87 @@ async def run_matching_for_cv(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/job/{job_id}/run/async", response_model=MatchingJobQueuedResponse)
+async def run_matching_for_job_async(
+    job_id: int,
+    request: RunMatchingRequest,
+    background_tasks: BackgroundTasks,
+):
+    job_tracking_id = await matching_job_store.create_job(
+        {
+            "kind": "job_to_cv",
+            "job_id": job_id,
+            "top_k": request.top_k,
+            "min_score": request.min_score,
+        }
+    )
+    background_tasks.add_task(
+        run_job_to_cv,
+        job_tracking_id,
+        job_id,
+        request.top_k,
+        request.min_score,
+    )
+    return {"job_tracking_id": job_tracking_id, "status": "queued"}
+
+
+@router.post("/cv/{cv_id}/run/async", response_model=MatchingJobQueuedResponse)
+async def run_matching_for_cv_async(
+    cv_id: int,
+    request: RunMatchingRequest,
+    background_tasks: BackgroundTasks,
+):
+    job_tracking_id = await matching_job_store.create_job(
+        {
+            "kind": "cv_to_job",
+            "cv_id": cv_id,
+            "top_k": request.top_k,
+            "min_score": request.min_score,
+        }
+    )
+    background_tasks.add_task(
+        run_cv_to_job,
+        job_tracking_id,
+        cv_id,
+        request.top_k,
+        request.min_score,
+    )
+    return {"job_tracking_id": job_tracking_id, "status": "queued"}
+
+
+@router.get("/jobs/{job_tracking_id}", response_model=MatchingJobStatusResponse)
+async def get_matching_job_status(job_tracking_id: str):
+    job = await matching_job_store.get_job(job_tracking_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Matching job not found")
+
+    return {
+        "job_tracking_id": job["job_id"],
+        "status": job["status"],
+        "created_at": job["created_at"],
+        "updated_at": job["updated_at"],
+        "error": job["error"],
+    }
+
+
+@router.get("/jobs/{job_tracking_id}/result", response_model=RunMatchingResponse)
+async def get_matching_job_result(job_tracking_id: str):
+    job = await matching_job_store.get_job(job_tracking_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Matching job not found")
+
+    if job["status"] == "failed":
+        raise HTTPException(status_code=500, detail=job["error"] or "Matching job failed")
+
+    if job["status"] != "succeeded":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Matching job is not finished yet (status={job['status']})",
+        )
+
+    return job["result"]
 
 
 @router.get("/job/{job_id}/matches", response_model=JobMatchesResponse)

@@ -1,5 +1,6 @@
 # services/match_service.py
 import logging
+import asyncio
 from typing import List, Dict
 from repositories.match_repo import MatchRepository
 from repositories.cv_repo import CVRepository
@@ -67,7 +68,7 @@ class MatchingService:
             logger.info(f"Starting matching for job_id={job_id}, top_k={top_k}")
             
             # Get matching CVs using RAG logic
-            matches = JobRepository.find_matching_cvs(job_id, top_k=top_k)
+            matches = await asyncio.to_thread(JobRepository.find_matching_cvs, job_id, top_k)
             
             if not matches:
                 logger.warning(f"No matches found for job_id={job_id}")
@@ -162,7 +163,7 @@ class MatchingService:
             logger.info(f"Starting matching for cv_id={cv_id}, top_k={top_k}")
             
             # Get matching Jobs using RAG logic
-            matches = CVRepository.find_matching_jobs(cv_id, top_k=top_k)
+            matches = await asyncio.to_thread(CVRepository.find_matching_jobs, cv_id, top_k)
             
             if not matches:
                 logger.warning(f"No matches found for cv_id={cv_id}")

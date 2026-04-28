@@ -3,14 +3,16 @@ import pytesseract
 from PIL import Image
 import docx2txt
 import langdetect
-import google.generativeai as genai
 import os
 import mimetypes
 import re
+import logging
 
-from ragmodel.config import GEMINI_API_KEY, MODEL
+from ragmodel.config import MODEL, AI_MODE
+from ragmodel.logics.ai_error_utils import log_quota_limit_if_detected
+from ragmodel.logics.gemini_client import generate_text
 
-genai.configure(api_key=GEMINI_API_KEY)
+logger = logging.getLogger(__name__)
 
 # ---------------------------
 # Detect type
@@ -66,6 +68,9 @@ def detect_lang(text):
         return "en"
 
 def translate_to_en(text):
+    if AI_MODE != "live":
+        return text
+
     if detect_lang(text) == "en":
         return text
 
@@ -76,8 +81,11 @@ Do NOT rewrite or reorganize. Keep meaning exactly same.
 TEXT:
 {text}
 """
-    resp = genai.GenerativeModel(MODEL).generate_content(prompt)
-    return resp.text.strip()
+    try:
+        return generate_text(prompt, model=MODEL)
+    except Exception as e:
+        log_quota_limit_if_detected(logger, e, stage="job_translate", model=MODEL)
+        raise
 
 # ---------------------------
 # Clean
@@ -105,6 +113,9 @@ def split_jd_blocks(text):
         clean_parts = [(p if isinstance(p, str) else "") for p in parts]
         return "\n".join(clean_parts)
 
+    if AI_MODE != "live":
+        return text
+
     # fallback LLM
     prompt = f"""
 Split this job posting into blocks:
@@ -118,8 +129,11 @@ Do NOT rewrite, only segment.
 TEXT:
 {text}
 """
-    resp = genai.GenerativeModel(MODEL).generate_content(prompt)
-    return resp.text.strip()
+    try:
+        return generate_text(prompt, model=MODEL)
+    except Exception as e:
+        log_quota_limit_if_detected(logger, e, stage="job_split_blocks", model=MODEL)
+        raise
 
 # ---------------------------
 # MAIN ENTRYPOINT FOR JD

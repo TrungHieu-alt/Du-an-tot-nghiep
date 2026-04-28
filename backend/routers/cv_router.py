@@ -2,6 +2,7 @@ from fastapi import APIRouter, status, UploadFile, File, Form, Query
 from typing import List, Dict
 from schemas.cv_schema import CandidateResumeRequest, CandidateResumeResponse
 from services.cv_service import CVService
+from services.match_service import MatchingService
 
 router = APIRouter(prefix="/cv", tags=["cv"])
 
@@ -122,7 +123,14 @@ async def find_matching_jobs(cv_id: int, top_k: int = Query(5, ge=1, le=20)):
         cv_id: CV ID
         top_k: Number of top matches (1-20, default: 5)
     """
-    return CVService.find_matching_jobs(cv_id, top_k)
+    # Legacy endpoint: return persisted matches only to avoid long blocking requests.
+    # Use /api/matching/cv/{cv_id}/run/async to trigger recalculation.
+    return await MatchingService.get_matches_for_cv(
+        cv_id=cv_id,
+        min_score=0.0,
+        limit=top_k,
+        skip=0,
+    )
 
 
 @router.get("/match/{cv_id}/jobs/{job_id}", response_model=Dict)

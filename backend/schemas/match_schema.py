@@ -88,3 +88,16 @@ class RunMatchingResponse(BaseModel):
     total_saved: int
     min_score: float
     matches: List[MatchSummary]  # Top 10 preview
+
+
+class MatchingJobQueuedResponse(BaseModel):
+    job_tracking_id: str
+    status: str
+
+
+class MatchingJobStatusResponse(BaseModel):
+    job_tracking_id: str
+    status: str
+    created_at: str
+    updated_at: str
+    error: Optional[str] = None

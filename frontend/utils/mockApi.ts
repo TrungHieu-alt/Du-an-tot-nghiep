@@ -8,8 +8,35 @@ import {
 } from '../types';
 import api from '../lib/api';
 import { apiRoutes } from '../lib/api-routes';
-import { calculateCandidateMatch, MOCK_REQUIREMENTS } from './matchingCandidates';
 import { getCurrentUserId } from '../lib/auth-session';
+import { isValidContextId } from '../lib/context-id';
+
+type MatchingJobQueued = {
+  job_tracking_id: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+};
+
+type MatchingJobStatus = {
+  job_tracking_id: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  error?: string | null;
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const waitForMatchingJob = async (jobTrackingId: string, maxWaitMs = 120000): Promise<void> => {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    const statusRes = await api.get<MatchingJobStatus>(apiRoutes.matching.jobStatus(jobTrackingId));
+    const status = statusRes.data?.status;
+    if (status === 'succeeded') return;
+    if (status === 'failed') {
+      throw new Error(statusRes.data?.error || 'Matching job failed');
+    }
+    await sleep(1000);
+  }
+  throw new Error('Matching job polling timed out');
+};
 
 const formatTimeAgo = (dateInput: string | Date | undefined) => {
   if (!dateInput) return 'Vừa xong';
@@ -31,23 +58,52 @@ const extractFieldFromPreview = (text: string, label: string): string => {
   return match ? match[1].trim() : '';
 };
 
+const getLastMatchedAt = (items: any[]): string | undefined => {
+  const stamps = items
+    .map((x) => x?.updated_at)
+    .filter((x): x is string => typeof x === 'string' && x.length > 0)
+    .map((x) => new Date(x).getTime())
+    .filter((x) => Number.isFinite(x) && x > 0);
+  if (!stamps.length) return undefined;
+  return new Date(Math.max(...stamps)).toISOString();
+};
+
 export const searchJobsApi = async (
   params: SearchState,
-  cvId?: string
+  cvId?: string,
+  options?: { forceRematch?: boolean }
 ): Promise<SearchResponse<JobWithMatch>> => {
   try {
-    if (cvId) {
-      const response = await api.get(apiRoutes.cv.matchJobs(cvId), {
-        params: { top_k: 20 },
+    if (isValidContextId(cvId)) {
+      let response = await api.get(apiRoutes.matching.cvMatches(cvId), {
+        params: { min_score: 0.0, limit: 20, skip: 0 },
       });
-      const rawItems = Array.isArray(response.data) ? response.data : [];
+      let rawItems = Array.isArray(response.data?.matches) ? response.data.matches : [];
+
+      // Recompute only when no persisted matches exist, or user explicitly forces rematch.
+      if (rawItems.length === 0 || options?.forceRematch) {
+        const enqueueRes = await api.post<MatchingJobQueued>(
+          apiRoutes.matching.runForCvAsync(cvId),
+          { top_k: 20, min_score: 0.0 }
+        );
+        const jobTrackingId = enqueueRes.data?.job_tracking_id;
+        if (!jobTrackingId) {
+          throw new Error('Missing job_tracking_id from async matching enqueue');
+        }
+        await waitForMatchingJob(jobTrackingId);
+        response = await api.get(apiRoutes.matching.cvMatches(cvId), {
+          params: { min_score: 0.0, limit: 20, skip: 0 },
+        });
+        rawItems = Array.isArray(response.data?.matches) ? response.data.matches : [];
+      }
+
       const mapped: JobWithMatch[] = rawItems.map((match: any) => {
-        const previewText = match.reason || match.jd?.full_text || '';
-        const title = match.jd?.title || match.job_title || `Job ${match.job_id ?? ''}`;
-        const company = match.jd?.company_name || 'Công ty';
-        const location = match.jd?.location || extractFieldFromPreview(previewText, 'Location') || 'Việt Nam';
-        const skills = Array.isArray(match.jd?.skills)
-          ? match.jd.skills
+        const previewText = match.metadata?.reason || match.job?.full_text || '';
+        const title = match.job?.title || match.job_title || `Job ${match.job_id ?? ''}`;
+        const company = match.job?.company_name || 'Công ty';
+        const location = match.job?.location || extractFieldFromPreview(previewText, 'Location') || 'Việt Nam';
+        const skills = Array.isArray(match.job?.skills)
+          ? match.job.skills
           : extractFieldFromPreview(previewText, 'Skills')
               .split(',')
               .map((s) => s.trim())
@@ -62,16 +118,16 @@ export const searchJobsApi = async (
           location,
           tags: [],
           skills,
-          experienceLevel: match.jd?.experience_level || '',
-          type: match.jd?.job_type || '',
+          experienceLevel: match.job?.experience_level || '',
+          type: match.job?.job_type || '',
           postedAt: 'Vừa xong',
           description: previewText,
           requirements: [],
           benefits: [],
           match: {
-            score: Math.round((match.llm_score ?? match.score ?? 0) * (match.llm_score ? 1 : 100)),
+            score: Math.round((match.score ?? 0) * 100),
             matchedSkills: [],
-            reason: match.reason || 'Không có mô tả',
+            reason: match.metadata?.reason || 'Không có mô tả',
           },
         };
       });
@@ -83,6 +139,7 @@ export const searchJobsApi = async (
           limit: 10,
           total: mapped.length,
           totalPages: 1,
+          lastMatchedAt: getLastMatchedAt(rawItems),
         },
       };
     }
@@ -126,18 +183,38 @@ export const searchJobsApi = async (
 
 export const searchCandidatesApi = async (
   params: SearchState,
-  reqId?: string
+  reqId?: string,
+  options?: { forceRematch?: boolean }
 ): Promise<SearchResponse<CandidateWithMatch>> => {
   try {
     let rawList: any[] = [];
 
-    if (reqId) {
+    if (isValidContextId(reqId)) {
       try {
-        const response = await api.get(apiRoutes.jobs.matchCvs(reqId), { params: { top_k: 20 } });
-        rawList = Array.isArray(response.data) ? response.data : [];
+        let response = await api.get(apiRoutes.matching.jobMatches(reqId), {
+          params: { min_score: 0.0, limit: 20, skip: 0 },
+        });
+        rawList = Array.isArray(response.data?.matches) ? response.data.matches : [];
+
+        // Recompute only when no persisted matches exist, or user explicitly forces rematch.
+        if (rawList.length === 0 || options?.forceRematch) {
+          const enqueueRes = await api.post<MatchingJobQueued>(
+            apiRoutes.matching.runForJobAsync(reqId),
+            { top_k: 20, min_score: 0.0 }
+          );
+          const jobTrackingId = enqueueRes.data?.job_tracking_id;
+          if (!jobTrackingId) {
+            throw new Error('Missing job_tracking_id from async matching enqueue');
+          }
+          await waitForMatchingJob(jobTrackingId);
+          response = await api.get(apiRoutes.matching.jobMatches(reqId), {
+            params: { min_score: 0.0, limit: 20, skip: 0 },
+          });
+          rawList = Array.isArray(response.data?.matches) ? response.data.matches : [];
+        }
 
         const candidates: CandidateWithMatch[] = rawList.map((match: any) => {
-          const preview = match.reason || match.cv?.full_text || '';
+          const preview = match.metadata?.reason || '';
           const skills = Array.isArray(match.cv?.skills) ? match.cv.skills : [];
           return {
             id: String(match.user_id ?? match.cv_id),
@@ -151,9 +228,9 @@ export const searchCandidatesApi = async (
             availability: 'Sẵn sàng',
             education: '',
             match: {
-              score: Math.round((match.llm_score ?? match.score ?? 0) * (match.llm_score ? 1 : 100)),
+              score: Math.round((match.score ?? 0) * 100),
               matchedSkills: [],
-              reason: match.reason || preview,
+              reason: match.metadata?.reason || preview,
             },
           };
         });
@@ -165,10 +242,12 @@ export const searchCandidatesApi = async (
             limit: 10,
             total: candidates.length,
             totalPages: 1,
+            lastMatchedAt: getLastMatchedAt(rawList),
           },
         };
       } catch (error: any) {
-        console.warn('Candidate matching endpoint failed, falling back to candidate profiles', error);
+        console.error('Candidate matching endpoint failed in match mode', error);
+        return { data: [], meta: { page: 1, limit: 10, total: 0, totalPages: 0 } };
       }
     }
 
@@ -187,25 +266,6 @@ export const searchCandidatesApi = async (
       availability: 'Sẵn sàng',
       education: '',
     }));
-
-    if (reqId && candidates.length) {
-      let req = MOCK_REQUIREMENTS.find((r) => r.id === reqId);
-      if (!req) {
-        try {
-          const stored = JSON.parse(localStorage.getItem('demo_requirements') || '[]');
-          req = stored.find((r: any) => r.id === reqId);
-        } catch {
-          req = undefined;
-        }
-      }
-
-      if (req) {
-        candidates = candidates.map((c) => ({ ...c, match: calculateCandidateMatch(req!, c) }));
-        if (params.sort === 'relevance') {
-          candidates.sort((a, b) => (b.match?.score || 0) - (a.match?.score || 0));
-        }
-      }
-    }
 
     return {
       data: candidates,

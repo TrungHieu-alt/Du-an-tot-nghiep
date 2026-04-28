@@ -8,11 +8,66 @@ from ragmodel.dataPreprocess.resumePreprocess import preprocess_resume
 from ragmodel.dataPreprocess.resumeParser import parse_resume
 from ragmodel.logics.embedder import embed_cv
 import ragmodel.db.vectorStore as vs
-from ragmodel.logics.matchingLogic import get_top_k_jds_for_cv, match_jd_to_cv
+from ragmodel.logics.matchingLogic import (
+    get_top_k_jds_for_cv,
+    match_jd_to_cv,
+    deserialize_embeddings,
+)
 
 logger = logging.getLogger(__name__)
 
 class CVRepository:
+    @staticmethod
+    def _compose_full_text(
+        title: str,
+        summary: Optional[str],
+        experience: Optional[str],
+        skills: List[str],
+        location: Optional[str],
+        full_text: Optional[str],
+    ) -> str:
+        if full_text and str(full_text).strip():
+            return str(full_text).strip()
+        blocks = [
+            f"Title: {title}" if title else "",
+            f"Location: {location}" if location else "",
+            f"Summary: {summary}" if summary else "",
+            f"Experience: {experience}" if experience else "",
+            f"Skills: {', '.join(skills)}" if skills else "",
+        ]
+        return "\n".join([b for b in blocks if b]).strip()
+
+    @staticmethod
+    async def _sync_cv_vector_index(cv: CandidateResume) -> None:
+        """
+        Keep ChromaDB in sync for manual create/update flows.
+        Upload flows already index vectors separately.
+        """
+        cv_data = {
+            "job_title": cv.title or "",
+            "location": cv.location or "",
+            "experience": cv.experience or "",
+            "skills": cv.skills or [],
+            "summary": cv.summary or "",
+            "full_text": CVRepository._compose_full_text(
+                title=cv.title or "",
+                summary=cv.summary,
+                experience=cv.experience,
+                skills=cv.skills or [],
+                location=cv.location,
+                full_text=cv.full_text,
+            ),
+            "user_id": cv.user_id,
+            "cv_id": cv.cv_id,
+        }
+        cv_embeddings = embed_cv(cv_data)
+        chroma_id = f"cv_{cv.cv_id}"
+        try:
+            vs.delete_cv(chroma_id)
+        except Exception:
+            # First insert path may not have existing vector.
+            pass
+        vs.store_cv(chroma_id, cv_embeddings, cv_data)
     
     # ============================
     # CRUD Operations
@@ -47,6 +102,10 @@ class CVRepository:
             is_main=is_main,
         )
         await cv.insert()
+        try:
+            await CVRepository._sync_cv_vector_index(cv)
+        except Exception as e:
+            logger.warning(f"Failed to sync CV vector index for cv_{cv_id}: {e}")
         return cv
     
     @staticmethod
@@ -67,7 +126,13 @@ class CVRepository:
         if cv:
             kwargs["updated_at"] = datetime.utcnow()
             await cv.update({"$set": kwargs})
-            return await CVRepository.get_by_id(cv_id)
+            refreshed = await CVRepository.get_by_id(cv_id)
+            if refreshed:
+                try:
+                    await CVRepository._sync_cv_vector_index(refreshed)
+                except Exception as e:
+                    logger.warning(f"Failed to sync CV vector index for cv_{cv_id}: {e}")
+            return refreshed
         return None
     
     @staticmethod
@@ -263,6 +328,8 @@ class CVRepository:
                 raise ValueError(f"CV {cv_id} not found in ChromaDB")
             
             cv_metadata = cv_result["metadatas"][0]
+            cv_emb_json = cv_metadata.get("embeddings", "{}")
+            cv_emb = deserialize_embeddings(cv_emb_json)
             
             # Prepare cv_json for matching
             cv_json = {
@@ -275,7 +342,7 @@ class CVRepository:
             }
             
             # Find matches
-            matches = get_top_k_jds_for_cv(cv_json, final_k=top_k)
+            matches = get_top_k_jds_for_cv(cv_json, cv_emb=cv_emb, final_k=top_k)
             
             # Extract job_id from chroma_id (format: "jd_{job_id}")
             for match in matches:

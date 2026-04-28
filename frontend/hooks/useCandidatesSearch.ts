@@ -7,6 +7,7 @@ import { ContextOption } from '../components/search/SearchBar';
 import api from '../lib/api';
 import { apiRoutes } from '../lib/api-routes';
 import { getCurrentUserId } from '../lib/auth-session';
+import { normalizeContextId } from '../lib/context-id';
 
 /**
  * Specialized hook for Candidate Search Page.
@@ -46,17 +47,26 @@ export const useCandidatesSearch = () => {
 
   // Convert to dropdown options
   const contextOptions: ContextOption[] = useMemo(() => {
-    return requirements.map(req => ({
-      id: req._id || req.id,
+    return requirements
+      .map(req => ({
+      id: normalizeContextId(req.job_id ?? req._id ?? req.id) || '',
       label: req.title || "Tin tuyển dụng không tên"
-    }));
+      }))
+      .filter(req => Boolean(req.id));
   }, [requirements]);
 
   // Encapsulated handler for switching requirement
   const handleReqChange = (newReqId: string) => {
+    const normalizedReqId = normalizeContextId(newReqId);
     setSearchParams(prev => {
       const p = new URLSearchParams(prev);
-      p.set('req', newReqId);
+      if (!normalizedReqId) {
+        p.delete('req');
+        p.set('sort', 'newest');
+        p.set('page', '1');
+        return p;
+      }
+      p.set('req', normalizedReqId);
       p.delete('manual'); // Remove manual flag if present
       p.set('page', '1'); // Reset to page 1
       p.set('sort', 'relevance'); // Force sort to relevance context

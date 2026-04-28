@@ -43,6 +43,12 @@ const JOB_FILTERS: FilterGroup[] = [
 ];
 
 const Jobs: React.FC = () => {
+  const formatLastMatchedAt = (value?: string) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString('vi-VN');
+  };
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const { isAuthenticated } = useAuth();
@@ -206,6 +212,20 @@ const Jobs: React.FC = () => {
               itemLabel="công việc"
               isMatchMode={!!contextId} // Lock to relevance if CV selected
             />
+            {!!contextId && (
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <p className="text-xs text-gray-500">
+                  {meta.lastMatchedAt ? `Last matched: ${formatLastMatchedAt(meta.lastMatchedAt)}` : ''}
+                </p>
+                <button
+                  onClick={() => refresh({ forceRematch: true })}
+                  disabled={loading}
+                  className="px-3 py-2 text-sm font-semibold rounded-lg border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  Re-match
+                </button>
+              </div>
+            )}
 
             {loading ? (
               <SkeletonList count={5} />

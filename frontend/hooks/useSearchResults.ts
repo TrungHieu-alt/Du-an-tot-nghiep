@@ -1,9 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { SearchState, SortOption, SearchResponse } from '../types';
+import { normalizeContextId } from '../lib/context-id';
 
 interface UseSearchResultsProps<T> {
-  apiCall: (params: SearchState, contextId?: string) => Promise<SearchResponse<T>>;
+  apiCall: (
+    params: SearchState,
+    contextId?: string,
+    options?: { forceRematch?: boolean }
+  ) => Promise<SearchResponse<T>>;
   initialSort?: SortOption;
   contextParamKey?: string; // 'cv' or 'req'
 }
@@ -23,8 +28,12 @@ export function useSearchResults<T>({ apiCall, initialSort = 'relevance', contex
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [meta, setMeta] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
+  const inflightKeyRef = useRef<string | null>(null);
+  const lastCompletedRef = useRef<{ key: string; at: number } | null>(null);
 
-  const contextId = contextParamKey ? searchParams.get(contextParamKey) || undefined : undefined;
+  const contextId = contextParamKey
+    ? normalizeContextId(searchParams.get(contextParamKey))
+    : undefined;
 
   // Sync state to URL (Debounced effect for text inputs could be added here)
   useEffect(() => {
@@ -41,19 +50,32 @@ export function useSearchResults<T>({ apiCall, initialSort = 'relevance', contex
   }, [state, contextId, setSearchParams, contextParamKey]);
 
   // Fetch Data
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (options?: { forceRematch?: boolean }) => {
+    const forceRematch = Boolean(options?.forceRematch);
+    const requestKey = JSON.stringify({ state, contextId: contextId || null, forceRematch });
+    const now = Date.now();
+    const lastCompleted = lastCompletedRef.current;
+
+    // Guard against immediate duplicate calls with the exact same inputs.
+    // This primarily prevents React StrictMode double-effect requests in dev.
+    if (inflightKeyRef.current === requestKey) return;
+    if (lastCompleted && lastCompleted.key === requestKey && now - lastCompleted.at < 500) return;
+
+    inflightKeyRef.current = requestKey;
     setLoading(true);
     try {
-      const response = await apiCall(state, contextId);
+      const response = await apiCall(state, contextId, options);
       // Safely handle missing data/meta to prevent crashes
       setData(response?.data || []);
       setMeta(response?.meta || { page: 1, limit: 10, total: 0, totalPages: 0 });
+      lastCompletedRef.current = { key: requestKey, at: Date.now() };
     } catch (error) {
       console.error("Search failed", error);
       // Reset to empty state on error
       setData([]);
       setMeta({ page: 1, limit: 10, total: 0, totalPages: 0 });
     } finally {
+      inflightKeyRef.current = null;
       setLoading(false);
     }
   }, [state, contextId, apiCall]);

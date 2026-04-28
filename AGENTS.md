@@ -90,6 +90,7 @@ Use this rule when the user explicitly requests chat output only (for example: "
 
 ## Hard Stops (Non-Negotiable)
 - Do not ship behavior changes without verification evidence.
+- When a bug/regression or uncovered case is identified, add or update an automated test that reproduces and guards that case before closing the task.
 - Do not change API behavior without OpenAPI contract sync notes.
 - Do not skip docs updates when behavior, flow, or assumptions change.
 - Do not make silent assumptions on security, auth, or tenant boundaries.
