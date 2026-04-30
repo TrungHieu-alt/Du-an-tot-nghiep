@@ -78,9 +78,28 @@ Use this rule when the user explicitly requests chat output only (for example: "
 - Ordered verification steps
 - Expected API/OpenAPI impact: `none`, `non-breaking`, or `breaking`
 
+## REQUIREMENTS.md — Product Spec Gate (Canonical)
+`docs/REQUIREMENTS.md` is the high-level source of truth for what the system builds, why, domain model, scoring formulas, and acceptance criteria.
+
+**Always read `docs/REQUIREMENTS.md` when:**
+- Starting a new feature
+- Changing behavior visible to users
+- Modifying domain/business logic (matching pipeline, data models, scoring)
+- Resolving ambiguity between code and spec
+- Writing tests for product behavior
+- Reviewing PRs for correctness against spec
+
+**Do NOT need to read it for:**
+- Pure formatting changes
+- Renaming variables without behavior change
+- Small local bug fixes already described clearly in the task
+- Dependency/config updates unrelated to behavior
+
+If code contradicts `docs/REQUIREMENTS.md`, treat the spec as authoritative and escalate before proceeding.
+
 ## Context Budget and Read Order
 - First pass (always): this file + all docs under `docs/agent-rules/` in startup order.
-- Second pass (targeted): only files in impacted workflows from `codemap.md`.
+- Second pass (targeted): load `docs/REQUIREMENTS.md` per the gate above, then only files in impacted workflows from `codemap.md`.
 - Avoid broad repo scanning when the task scope is already clear.
 
 ## Conflict and Escalation Protocol

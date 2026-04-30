@@ -14,6 +14,10 @@ read_order:
   - docs/agent-rules/working-contract.md
 
 doc_nodes:
+  - id: requirements
+    path: docs/REQUIREMENTS.md
+    purpose: high-level product spec — what we build, why, constraints, acceptance criteria, data model, scoring formula
+    triggers: [new_feature, behavior_change, domain_logic_change, test_writing, pr_review, ambiguity_resolution]
   - id: hld_overview
     path: docs/backend/HLD/00-overview-and-problem.md
     purpose: backend matching goals and architecture scope
@@ -77,10 +81,13 @@ load_profiles:
       - docs/backend/HLD/40-api-and-runtime-flows.md
 
 task_router:
-  API_contract_change: [hld_runtime_api, hld_architecture]
-  Matching_logic_change: [hld_pipeline, hld_storage]
-  Data_model_change: [hld_storage, hld_runtime_api]
-  Architecture_review: [hld_overview, hld_architecture, hld_pipeline, hld_storage, hld_runtime_api]
+  API_contract_change: [requirements, hld_runtime_api, hld_architecture]
+  Matching_logic_change: [requirements, hld_pipeline, hld_storage]
+  Data_model_change: [requirements, hld_storage, hld_runtime_api]
+  Architecture_review: [requirements, hld_overview, hld_architecture, hld_pipeline, hld_storage, hld_runtime_api]
+  New_feature: [requirements]
+  Behavior_change: [requirements]
+  Domain_logic_change: [requirements]
 
 constraints:
   - use_paths_as_source_of_truth
