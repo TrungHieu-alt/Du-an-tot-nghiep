@@ -618,71 +618,69 @@ or
 }
 ```
 
-## Matching (`/api/matching`)
+## Matching (`/api/v2/prototype/matching`)
 
-### `POST /api/matching/job/{job_id}/run`
+### `POST /api/v2/prototype/matching/job/{job_id}/run`
 - Path params: `job_id: int`
-- Request body: `RunMatchingRequest`
-- Success `200`: `RunMatchingResponse`
-- Common errors:
-  - `500` internal matching failure
+- Request body: `RunMatchingV2Request`
+- Success `200`: `RunMatchingV2Response`
+- Errors: `400`, `404`, `500`
 
-### `POST /api/matching/cv/{cv_id}/run`
+### `POST /api/v2/prototype/matching/cv/{cv_id}/run`
 - Path params: `cv_id: int`
-- Request body: `RunMatchingRequest`
-- Success `200`: `RunMatchingResponse`
-- Common errors:
-  - `500` internal matching failure
+- Request body: `RunMatchingV2Request`
+- Success `200`: `RunMatchingV2Response`
+- Errors: `400`, `404`, `500`
 
-### `GET /api/matching/job/{job_id}/matches`
-- Path params: `job_id: int`
-- Query params:
-  - `min_score: float` (default `0.0`, range `0.0..1.0`)
-  - `limit: int` (default `50`, range `1..100`)
-  - `skip: int` (default `0`, min `0`)
-- Success `200`: `JobMatchesResponse`
-- Common errors:
-  - `500` internal failure
+### `GET /api/v2/prototype/matching/job/{job_id}/matches`
+- Query params: `min_score`, `limit`, `offset`
+- Success `200`: `JobMatchesV2Response`
 
-### `GET /api/matching/cv/{cv_id}/matches`
-- Path params: `cv_id: int`
-- Query params:
-  - `min_score: float` (default `0.0`, range `0.0..1.0`)
-  - `limit: int` (default `50`, range `1..100`)
-  - `skip: int` (default `0`, min `0`)
-- Success `200`: `CVMatchesResponse`
-- Common errors:
-  - `500` internal failure
+### `GET /api/v2/prototype/matching/cv/{cv_id}/matches`
+- Query params: `min_score`, `limit`, `offset`
+- Success `200`: `CVMatchesV2Response`
 
-### `DELETE /api/matching/cv/{cv_id}/matches`
-- Path params: `cv_id: int`
-- Success `200`:
+### `DELETE /api/v2/prototype/matching/job/{job_id}/matches`
+- Success `200`: deleted count payload
+
+### `DELETE /api/v2/prototype/matching/cv/{cv_id}/matches`
+- Success `200`: deleted count payload
+
+### Matching V2 schemas
+
+`RunMatchingV2Request`:
 ```json
 {
-  "success": true,
-  "data": {
-    "cv_id": 10,
-    "deleted_count": 12
-  }
+  "top_k": 50,
+  "min_score": 0.7,
+  "feature_version": "v2",
+  "scoring_version": "v2_mvp"
 }
 ```
-- Common errors:
-  - `500` internal failure
 
-### `DELETE /api/matching/job/{job_id}/matches`
-- Path params: `job_id: int`
-- Success `200`:
+`RunMatchingV2Response`:
 ```json
 {
-  "success": true,
-  "data": {
-    "job_id": 100,
-    "deleted_count": 12
-  }
+  "anchor_type": "job",
+  "anchor_id": 100,
+  "total_found": 50,
+  "total_saved": 12,
+  "min_score": 0.7,
+  "matches": [
+    {
+      "cv_id": 10,
+      "job_id": 100,
+      "final_score": 0.84,
+      "title_score": 0.9,
+      "skills_score": 0.83,
+      "req_exp_score": 0.79,
+      "req_summary_score": 0.75,
+      "exact_skill_bonus": 0.03,
+      "required_penalty": 0.0
+    }
+  ]
 }
 ```
-- Common errors:
-  - `500` internal failure
 
 ## Applications (`/api/applications`)
 

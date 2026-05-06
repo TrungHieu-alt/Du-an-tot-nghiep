@@ -1,81 +1,44 @@
-# LLD: Embedding and ChromaDB Metadata Contract
+# LLD V2: Embedding and pgvector Contract
 
-## Source Anchors
-- `backend/ragmodel/logics/embedder.py`
-- `backend/ragmodel/db/vectorStore.py`
-- `backend/repositories/cv_repo.py`
-- `backend/repositories/job_repo.py`
+## Scope
 
-## Scope Boundary
-This file is authoritative for:
-- Embedding field schema
-- Chroma collection names
-- Metadata serialization/deserialization behavior
+Tài liệu này thay thế contract Chroma cũ cho prototype v2 dùng PostgreSQL + pgvector.
 
-## Embedding Model Contract
-Model:
-- `sentence-transformers/all-MiniLM-L6-v2`
+## Embedding Contract
 
-Helper:
-- `emb(text)` returns normalized vector or `None` for empty input.
+- Mỗi field semantic có một vector riêng.
+- Mỗi record embedding có version metadata:
+  - `embedding_model_version`
+  - `feature_version`
 
-Implications:
-- similarity uses dot product as cosine proxy.
-- missing field embeddings are explicit `None`, not zero vectors.
+## CV Embedding Fields
 
-## CV Embedding Schema (`embed_cv`)
-Produced keys:
+- `emb_title`
+- `emb_skills`
 - `emb_summary`
 - `emb_experience`
-- `emb_job_title`
+- `emb_full` (lưu cho mục đích mở rộng, không dùng scoring MVP)
+
+## JD Embedding Fields
+
+- `emb_title`
 - `emb_skills`
-- `emb_location`
-- `emb_full`
+- `emb_requirement`
+- `emb_full` (lưu cho mục đích mở rộng, không dùng scoring MVP)
 
-Input mapping:
-- skills list is joined into one text string before embedding.
+## Storage Contract
 
-## JD Embedding Schema (`embed_jd`)
-Produced keys:
-- `emb_job_description`
-- `emb_job_requirement`
-- `emb_job_title`
-- `emb_skills`
-- `emb_location`
-- `emb_full`
+Gợi ý tách bảng:
+- `candidate_embeddings_v2`
+- `job_embeddings_v2`
 
-## Vector Store Collections
-Persistent client path:
-- `backend/ragmodel/vector_store`
+Mỗi bảng lưu:
+- khóa business (`cv_id` hoặc `job_id`)
+- vector columns
+- model/version metadata
+- timestamps
 
-Collections:
-- `cv_full`
-- `jd_full`
+## Index Contract
 
-## Chroma Record ID Contract
-- CV: `cv_{cv_id}`
-- JD: `jd_{job_id}`
-
-Used consistently for add/get/delete across repositories and matching logic.
-
-## Metadata Serialization Rules
-Because Chroma metadata supports primitives only:
-- full embedding dict stored as JSON string in `metadata["embeddings"]`
-- `skills` stored as JSON string
-- text fields stored as strings
-
-## Deserialization Contract
-Matching logic expects:
-- `metadata["embeddings"]` JSON string -> dict -> numpy arrays
-
-If decode fails:
-- candidate skipped or score falls back to safe defaults.
-
-## Drift Notes
-1. `skills` is serialized JSON string in Chroma metadata, but consumer paths often read it as list-like data without explicit `json.loads`.
-2. Repositories provide extra metadata (for example `user_id`, `recruiter_id`) that `vectorStore.store_cv/store_jd` currently do not persist.
-
-## Related LLD
-- Matching algorithm consumers: `../matching/matching-core-algorithm-details.md`
-- CV/JD ingestion orchestrators: `../cv/cv-upload-parse-embed-store-flow.md`, `../jobs/job-upload-parse-embed-store-flow.md`
-- Cross-store risks: `../data/cross-store-consistency-and-failure-modes.md`
+- Dùng pgvector index theo benchmark (`hnsw` hoặc `ivfflat`).
+- ANN query dùng vector anchor tương ứng theo mode JD->CV hoặc CV->JD.

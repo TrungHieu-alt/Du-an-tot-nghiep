@@ -1,37 +1,26 @@
 # Quick Context
 
-Purpose: concise system reality snapshot only. Do not duplicate policy rules from `AGENTS.md`.
+Purpose: concise system reality snapshot for V2 target documentation.
 
 ## Product Snapshot
-- Backend-first job matching system.
-- Domain: candidates, recruiters, CVs, job posts, applications, and match results.
-- Core outcome: ranked CV <-> JD matching with score and reason.
+- Backend-first job matching system, V2 prototype direction.
+- Core outcome: ranked CV <-> JD matching with explicit score breakdown.
 
-## Runtime Components
+## Runtime Components (V2 Target)
 - API server: FastAPI (`backend/main.py`).
-- Operational data store: MongoDB via Beanie models.
-- Vector store: ChromaDB persistent client in `backend/ragmodel/vector_store`.
-- AI layer:
-  - Gemini for translation, parsing, and LLM scoring.
-  - SentenceTransformers (MiniLM) for embeddings.
-  - `AI_MODE=mock` bypasses Gemini translation/parsing during CV/JD ingestion for offline or low-cost testing.
-  - `AI_MODE=mock` also bypasses Gemini LLM reranking/evaluation in matching and uses weighted-vector fallback scoring.
+- Primary data store: PostgreSQL.
+- Vector retrieval: `pgvector` in PostgreSQL.
+- Matching engine (MVP): hard filters + embedding scoring + business rerank.
 
-## Current Behavior Reality
-- AI processing exists in ingestion and matching flows, not only one endpoint.
-- External Gemini API calls are routed through an internal worker queue with bounded wait timeout and retries.
-- Matching now supports asynchronous job execution endpoints (enqueue + status/result polling) to avoid long blocking requests.
-- Matching LLM evaluation is batched per run (single prompt for reranked candidates), with vector fallback on batch failure.
-- Matching pipeline is multi-stage:
-  1. ANN retrieval on `emb_full`.
-  2. Weighted rerank across semantic fields.
-  3. LLM evaluation with score and reason.
-  4. Hybrid final score and persistence to `MatchResult`.
-- Route-level auth/tenant enforcement is currently limited; treat as known risk in related tasks.
+## Current Behavior Target (V2)
+- Prototype route namespace: `/api/v2/prototype/matching/*`.
+- Matching MVP does not require LLM stage.
+- `full_text` and salary are excluded from MVP final scoring.
+- Score breakdown fields are persisted for audit and comparison.
 
 ## Current Constraints
-- No reliable full automated test suite yet.
-- Interim strict gate is smoke-contract verification (startup + OpenAPI + key endpoint checks).
+- Mapping quality for seniority/education/skills alias depends on normalization policy.
+- Vector index tuning (`hnsw`/`ivfflat`) is benchmark-dependent.
 
 ## Update Rule
-Update this file only when system behavior reality or constraints change.
+Update this file when V2 matching architecture or constraints change.
