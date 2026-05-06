@@ -632,19 +632,7 @@ or
 - Success `200`: `RunMatchingV2Response`
 - Errors: `400`, `404`, `500`
 
-### `GET /api/v2/prototype/matching/job/{job_id}/matches`
-- Query params: `min_score`, `limit`, `offset`
-- Success `200`: `JobMatchesV2Response`
-
-### `GET /api/v2/prototype/matching/cv/{cv_id}/matches`
-- Query params: `min_score`, `limit`, `offset`
-- Success `200`: `CVMatchesV2Response`
-
-### `DELETE /api/v2/prototype/matching/job/{job_id}/matches`
-- Success `200`: deleted count payload
-
-### `DELETE /api/v2/prototype/matching/cv/{cv_id}/matches`
-- Success `200`: deleted count payload
+Persisted match query/delete endpoints are outside the run-only prototype scope.
 
 ### Matching V2 schemas
 
@@ -652,9 +640,7 @@ or
 ```json
 {
   "top_k": 10,
-  "min_score": 0.7,
-  "scoring_version": "v2_mvp",
-  "return_debug": true
+  "min_score": 0.7
 }
 ```
 
@@ -672,6 +658,7 @@ or
   "runtime_ms_sort": 4,
   "matches": [
     {
+      "rank": 1,
       "cv_id": 10,
       "job_id": 100,
       "final_score": 0.84,
@@ -679,8 +666,6 @@ or
       "skills_score": 0.83,
       "req_exp_score": 0.79,
       "req_summary_score": 0.75,
-      "exact_skill_bonus": 0.03,
-      "required_penalty": 0.0,
       "reasoning": "Strong title and skills alignment; requirement-experience fit is good."
     }
   ]

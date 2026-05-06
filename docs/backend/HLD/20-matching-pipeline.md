@@ -1,14 +1,15 @@
-# Backend HLD V2: Matching-Only Pipeline (Evaluation)
+# Backend HLD V2: Matching Run-Only Pipeline
 
 ## Goal
 
-Đánh giá quality + runtime của matching method trên dữ liệu đã có trong PostgreSQL.
+Kiểm tra nhanh matching method trên dữ liệu đã có trong PostgreSQL bằng cách nhập `job_id` hoặc `cv_id` và nhận ranked matches có điểm + reasoning.
 
 ## Pipeline Stages
 
 1. Load anchor + candidate pool
 - Input là `job_id` hoặc `cv_id`.
-- Đọc record + embeddings hiện có trong PostgreSQL/pgvector.
+- Đọc record + embeddings hiện có trong PostgreSQL.
+- Prototype dùng exhaustive candidate scoring trên dataset test; chưa cần ANN/index tuning.
 
 2. Hard filters
 - Hard filter áp dụng hai chiều trên trường chung giữa JD và CV.
@@ -24,10 +25,10 @@
 - `title_sim`, `skills_sim`, `req_exp_sim`, `req_summary_sim`.
 - `skills_sim = 0.6 * semantic + 0.4 * exact_overlap`.
 
-4. Rerank and persist
+4. Rerank and return
 - apply bonus/penalty.
 - sort theo final score, lấy top 10.
-- persist `match_results_v2` kèm runtime metrics.
+- trả response trực tiếp, không persist kết quả.
 
 ## Final Score
 
@@ -44,6 +45,14 @@ final_score =
 
 Mỗi run trả:
 - top 10 matches.
+- `rank` cho từng match.
 - score breakdown.
 - rule-based reasoning.
 - `runtime_ms_total` và runtime theo stage.
+
+## Out of Scope For Run-Only Prototype
+
+- Persist/query/delete match results.
+- Benchmark quality bằng labeled set.
+- Auth/role guard riêng cho route prototype.
+- Compare old-vs-v2 hoặc deprecate route cũ.

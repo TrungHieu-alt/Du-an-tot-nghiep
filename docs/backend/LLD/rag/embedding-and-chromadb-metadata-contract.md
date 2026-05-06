@@ -2,14 +2,12 @@
 
 ## Scope
 
-Tài liệu này thay thế contract Chroma cũ cho prototype v2 dùng PostgreSQL + pgvector.
+Tài liệu này mô tả embedding fields tối thiểu cho prototype v2 run-only dùng PostgreSQL + pgvector.
 
 ## Embedding Contract
 
 - Mỗi field semantic có một vector riêng.
-- Mỗi record embedding có version metadata:
-  - `embedding_model_version`
-  - `feature_version`
+- Prototype run-only không yêu cầu version metadata hoặc timestamps trong embedding tables.
 
 ## CV Embedding Fields
 
@@ -17,14 +15,12 @@ Tài liệu này thay thế contract Chroma cũ cho prototype v2 dùng PostgreSQ
 - `emb_skills`
 - `emb_summary`
 - `emb_experience`
-- `emb_full` (lưu cho mục đích mở rộng, không dùng scoring MVP)
 
 ## JD Embedding Fields
 
 - `emb_title`
 - `emb_skills`
 - `emb_requirement`
-- `emb_full` (lưu cho mục đích mở rộng, không dùng scoring MVP)
 
 ## Storage Contract
 
@@ -35,10 +31,9 @@ Gợi ý tách bảng:
 Mỗi bảng lưu:
 - khóa business (`cv_id` hoặc `job_id`)
 - vector columns
-- model/version metadata
-- timestamps
 
 ## Index Contract
 
-- Dùng pgvector index theo benchmark (`hnsw` hoặc `ivfflat`).
-- ANN query dùng vector anchor tương ứng theo mode JD->CV hoặc CV->JD.
+- Prototype run-only không yêu cầu pgvector ANN index.
+- Dùng exhaustive scoring trên seed/test dataset.
+- `hnsw`/`ivfflat` chỉ chốt ở later phase khi có benchmark.

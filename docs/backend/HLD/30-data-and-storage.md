@@ -2,15 +2,15 @@
 
 ## Storage Ownership
 
-V2 dùng PostgreSQL làm storage thống nhất:
-- business entities
-- matching records
+V2 run-only prototype dùng PostgreSQL cho:
+- JD/CV prototype records
 - vector embeddings qua pgvector
 
 ## Data Boundaries
 
-- PostgreSQL: source of truth cho dữ liệu nghiệp vụ + kết quả matching.
-- pgvector: retrieval/index layer nằm trong PostgreSQL, không tách DB riêng.
+- PostgreSQL: source of truth cho dữ liệu JD/CV prototype.
+- pgvector: vector storage/scoring layer nằm trong PostgreSQL, không tách DB riêng.
+- Matching results được trả trực tiếp từ run endpoint, không persist trong scope hiện tại.
 
 ## Core Tables (V2)
 
@@ -18,20 +18,16 @@ V2 dùng PostgreSQL làm storage thống nhất:
 - `job_posts_v2`
 - `candidate_embeddings_v2`
 - `job_embeddings_v2`
-- `match_results_v2`
 
 ## Match Result Contract
 
-`match_results_v2` lưu:
-- ids: `cv_id`, `job_id`
-- `final_score`
-- breakdown: `title_score`, `skills_score`, `req_exp_score`, `req_summary_score`
-- adjustment: `exact_skill_bonus`, `required_penalty`
-- versioning: `feature_version`, `embedding_model_version`, `scoring_version`
-- audit timestamps
+Không có persisted result table trong run-only prototype.
+
+Nếu later phase cần lưu kết quả, schema `match_results_v2` phải được mở lại trong `docs/REQUIREMENTS.md` trước khi code.
 
 ## Vector and Index Contract
 
 - Column type: `vector(<dim>)`
-- Index strategy: benchmark-driven (`hnsw` hoặc `ivfflat`)
-- ANN query dùng embedding anchor của entity khởi chạy matching.
+- Prototype không yêu cầu `hnsw` hoặc `ivfflat` index.
+- Dùng exhaustive scoring trên seed/test dataset để dễ debug và kiểm chứng.
+- Index strategy chỉ chốt ở later phase khi có benchmark.

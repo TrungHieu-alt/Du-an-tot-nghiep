@@ -1,5 +1,7 @@
 # LLD: Match Query Enrichment and Cleanup Flows
 
+Status: legacy/current production matching doc. This is outside Matching V2 run-only prototype scope.
+
 ## Source Anchors
 - `backend/routers/match_router.py`
 - `backend/services/match_service.py`

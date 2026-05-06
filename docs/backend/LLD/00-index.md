@@ -9,7 +9,7 @@ Included workflows:
 - Identity and profile flows
 - CV and Job CRUD/upload/matching entrypoints
 - RAG preprocessing, parsing, embedding, vector-store contracts
-- Matching algorithm and persistence orchestration
+- Matching algorithm and run-only orchestration
 - Application submission lifecycle
 - Mongo/Chroma ownership boundaries and consistency risks
 
@@ -45,10 +45,10 @@ Included workflows:
 | Job upload pipeline (file/text -> parse -> embed -> store) | `jobs/job-upload-parse-embed-store-flow.md` |
 | Resume preprocess + parse contract | `rag/resume-preprocess-and-parse-details.md` |
 | JD preprocess + parse contract | `rag/job-preprocess-and-parse-details.md` |
-| Embedding schema + Chroma metadata serialization | `rag/embedding-and-chromadb-metadata-contract.md` |
+| Embedding schema + pgvector field contract | `rag/embedding-and-chromadb-metadata-contract.md` |
 | Matching algorithm stages and formulas | `matching/matching-core-algorithm-details.md` |
-| Run-matching orchestration + TOP-K sync persistence | `matching/matching-orchestration-and-topk-sync.md` |
-| Match query enrichment + delete/cleanup semantics | `matching/match-query-enrichment-and-cleanup-flows.md` |
+| Run-matching orchestration | `matching/matching-orchestration-and-topk-sync.md` |
+| Legacy match query enrichment + delete/cleanup semantics | `matching/match-query-enrichment-and-cleanup-flows.md` |
 | Application create/query/status flow | `applications/application-create-query-status-flow.md` |
 | Application delete drift note | `applications/application-delete-flow-drift-note.md` |
 | Mongo model IDs and index contracts | `data/mongodb-model-id-and-index-contracts.md` |

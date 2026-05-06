@@ -1,8 +1,8 @@
-# LLD V2: Matching Core Algorithm (Evaluation-Only)
+# LLD V2: Matching Core Algorithm (Run-Only)
 
 ## Scope
 
-Thuật toán matching MVP v2 chạy trên dữ liệu đã có trong PostgreSQL/pgvector.
+Thuật toán matching MVP v2 chạy trên dữ liệu đã có trong PostgreSQL/pgvector và trả kết quả trực tiếp, không persist.
 
 ## Inputs
 
@@ -11,8 +11,9 @@ Thuật toán matching MVP v2 chạy trên dữ liệu đã có trong PostgreSQL
 
 ## Defaults
 
-- `ANN_K = 100`
 - `FINAL_K = 10`
+- Candidate pool: exhaustive scan over prototype seed/test data.
+- ANN/index tuning is outside run-only prototype scope.
 
 ## Hard filters
 
@@ -51,6 +52,7 @@ Reasoning được sinh theo template rule-based:
 
 ## Data type notes
 
-- Score fields in persisted result: `DOUBLE PRECISION`.
+- Score fields in API response: `float64`.
 - `reasoning`: `TEXT`.
 - `education`: taxonomy `lop_9|lop_12|dai_hoc|thac_si|tien_si` and compared by rank order.
+- Each returned match includes deterministic `rank`.
