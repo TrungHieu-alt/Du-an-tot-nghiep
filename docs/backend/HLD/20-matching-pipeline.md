@@ -1,32 +1,35 @@
-# Backend HLD V2: Matching Pipeline
+# Backend HLD V2: Matching-Only Pipeline (Evaluation)
 
 ## Goal
 
-Pipeline V2 tối ưu cho prototype tách biệt: dễ đo lường, dễ debug, không phụ thuộc LLM.
+Đánh giá quality + runtime của matching method trên dữ liệu đã có trong PostgreSQL.
 
 ## Pipeline Stages
 
-1. Hard Filter
-- location
-- job_type
-- seniority
-- education (nếu bắt buộc)
-- required_certifications (nếu bắt buộc)
+1. Load anchor + candidate pool
+- Input là `job_id` hoặc `cv_id`.
+- Đọc record + embeddings hiện có trong PostgreSQL/pgvector.
 
-2. Semantic + Exact Scoring
-- title <-> title (embedding cosine)
-- skills <-> skills (embedding + exact overlap)
-- requirement <-> experience (embedding cosine)
-- requirement <-> summary (embedding cosine)
+2. Hard filters
+- Hard filter áp dụng hai chiều trên trường chung giữa JD và CV.
+- `job_type` chỉ nhận `remote|fulltime|parttime`.
+- Nếu JD `job_type=remote` thì bỏ qua hard filter `location`.
+- Nếu JD `job_type!=remote` thì `job_type` và `location` phải khớp exact giữa JD và CV.
+- `seniority`: cả JD và CV đều phải có và phải khớp.
+- `education` hard filter theo thứ bậc taxonomy: `lop_9` < `lop_12` < `dai_hoc` < `thac_si` < `tien_si` (cả JD và CV đều phải có).
+- Rule pass: education CV >= education JD.
+- `required_certifications`: nếu JD flagged required thì CV phải có đầy đủ.
 
-3. Rule Rerank
-- boost exact skill overlap
-- penalty thiếu required skills/certifications
+3. Scoring
+- `title_sim`, `skills_sim`, `req_exp_sim`, `req_summary_sim`.
+- `skills_sim = 0.6 * semantic + 0.4 * exact_overlap`.
 
-4. Persist
-- lưu kết quả top-k và score breakdown vào `match_results_v2`
+4. Rerank and persist
+- apply bonus/penalty.
+- sort theo final score, lấy top 10.
+- persist `match_results_v2` kèm runtime metrics.
 
-## Scoring Formula
+## Final Score
 
 ```
 final_score =
@@ -37,17 +40,10 @@ final_score =
   bonus_exact_skill - penalty_missing_required
 ```
 
-`skills_sim = 0.6 * semantic_skills + 0.4 * exact_overlap_ratio`
+## Output Contract
 
-## Exclusions in MVP
-
-- No LLM stage.
-- No full_text semantic scoring in final score.
-- No salary scoring.
-
-## Directional Modes
-
-- JD -> CV: query candidates theo job anchor.
-- CV -> JD: query jobs theo cv anchor.
-
-Cả hai dùng chung trọng số và rule.
+Mỗi run trả:
+- top 10 matches.
+- score breakdown.
+- rule-based reasoning.
+- `runtime_ms_total` và runtime theo stage.

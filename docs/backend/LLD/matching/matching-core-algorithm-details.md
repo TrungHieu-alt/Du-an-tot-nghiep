@@ -1,38 +1,38 @@
-# LLD V2: Matching Core Algorithm Details
+# LLD V2: Matching Core Algorithm (Evaluation-Only)
 
 ## Scope
 
-Tài liệu này mô tả thuật toán matching MVP v2 (không LLM) cho prototype.
+Thuật toán matching MVP v2 chạy trên dữ liệu đã có trong PostgreSQL/pgvector.
 
-## Constants
+## Inputs
 
-- `ANN_K` default: 100
-- `RERANK_K` default: 30
-- `FINAL_K` default: 10
+- Mode 1: `job_id` (`BIGINT`) -> top CVs.
+- Mode 2: `cv_id` (`BIGINT`) -> top Jobs.
 
-## Hard Filters
+## Defaults
 
-Bắt buộc kiểm tra trước scoring:
-- `location`
-- `job_type`
-- `seniority`
-- `education` (khi JD yêu cầu)
-- `required_certifications` (khi JD yêu cầu)
+- `ANN_K = 100`
+- `FINAL_K = 10`
 
-## Field Mapping
+## Hard filters
 
-- `title_sim`: `job.title` <-> `cv.title`
-- `skills_semantic`: `job.skills` <-> `cv.skills`
-- `req_exp_sim`: `job.requirement` <-> `cv.experience`
-- `req_summary_sim`: `job.requirement` <-> `cv.summary`
+- Hard filter áp dụng hai chiều trên trường chung giữa JD và CV.
+- `job_type`: chỉ nhận `remote|fulltime|parttime`.
+- Nếu JD `job_type=remote` thì bỏ qua hard filter `location`.
+- Nếu JD `job_type!=remote` thì `job_type` và `location` phải khớp exact giữa JD và CV.
+- `seniority`: cả JD và CV đều phải có và phải khớp.
+- `education` hard filter theo thứ bậc taxonomy: `lop_9` < `lop_12` < `dai_hoc` < `thac_si` < `tien_si` (cả JD và CV đều phải có).
+- Rule pass: education CV >= education JD.
+- `required_certifications`: nếu JD đánh dấu required thì CV phải có đầy đủ.
 
-## Skills Hybrid Score
+## Component scores
 
-```
-skills_sim = 0.6 * semantic_skills + 0.4 * exact_overlap_ratio
-```
+- `title_sim`: semantic(title, title)
+- `skills_sim`: `0.6 * semantic(skills) + 0.4 * exact_overlap(skills)`
+- `req_exp_sim`: semantic(requirement, experience)
+- `req_summary_sim`: semantic(requirement, summary)
 
-## Final Score
+## Final score
 
 ```
 final_score =
@@ -43,8 +43,14 @@ final_score =
   bonus_exact_skill - penalty_missing_required
 ```
 
-## Notes
+## Reasoning
 
-- `full_text` không dùng trong điểm MVP.
-- Salary không dùng trong điểm MVP.
-- Kết quả luôn trả breakdown từng thành phần để audit.
+Reasoning được sinh theo template rule-based:
+- Nêu 2-3 tín hiệu mạnh nhất theo component scores.
+- Nêu penalty nếu thiếu required skills/certifications.
+
+## Data type notes
+
+- Score fields in persisted result: `DOUBLE PRECISION`.
+- `reasoning`: `TEXT`.
+- `education`: taxonomy `lop_9|lop_12|dai_hoc|thac_si|tien_si` and compared by rank order.

@@ -1,6 +1,6 @@
-# Backend HLD V2: API Surface and Runtime Flows
+# Backend HLD V2: API and Runtime Flow (Matching-Only)
 
-## Prototype API Surface
+## API Surface
 
 Namespace: `/api/v2/prototype/matching`
 
@@ -13,16 +13,23 @@ Namespace: `/api/v2/prototype/matching`
 
 ## Run Flow
 
-1. Validate request (`top_k`, `min_score`, version flags nếu có).
-2. Read anchor record + embeddings from PostgreSQL.
-3. Apply hard filters.
-4. Calculate semantic+exact component scores.
-5. Apply rule rerank.
-6. Persist top-k to `match_results_v2`.
-7. Return summary + score breakdown preview.
+1. Validate request (`top_k`, `min_score`, `scoring_version`).
+2. Load anchor by ID from PostgreSQL.
+3. Query candidate pool through pgvector.
+4. Apply hard filters (`location` strict exact text + business filters).
+5. Compute component scores and final score.
+6. Build deterministic reasoning text.
+7. Persist top 10 to `match_results_v2`.
+8. Return result with score breakdown and runtime metrics.
 
-## Runtime Contract
+## Runtime Metrics in Response
 
-- V2 routes chạy độc lập với production matching routes.
-- Lỗi matching trả về error contract rõ ràng theo router schema.
-- Read endpoints trả enriched payload để frontend quan sát kết quả.
+- `runtime_ms_total`
+- `runtime_ms_filter`
+- `runtime_ms_scoring`
+- `runtime_ms_sort`
+
+## Contract Notes
+
+- Prototype is evaluation-only and does not depend on ingestion pipeline. Test data is inserted directly into PostgreSQL; extract/parse flows are excluded.
+- Route v2 runs independently from production matching routes.

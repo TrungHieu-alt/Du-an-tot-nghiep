@@ -651,10 +651,10 @@ or
 `RunMatchingV2Request`:
 ```json
 {
-  "top_k": 50,
+  "top_k": 10,
   "min_score": 0.7,
-  "feature_version": "v2",
-  "scoring_version": "v2_mvp"
+  "scoring_version": "v2_mvp",
+  "return_debug": true
 }
 ```
 
@@ -663,9 +663,13 @@ or
 {
   "anchor_type": "job",
   "anchor_id": 100,
-  "total_found": 50,
-  "total_saved": 12,
-  "min_score": 0.7,
+  "total_candidates": 500,
+  "total_after_filter": 73,
+  "total_returned": 10,
+  "runtime_ms_total": 182,
+  "runtime_ms_filter": 21,
+  "runtime_ms_scoring": 134,
+  "runtime_ms_sort": 4,
   "matches": [
     {
       "cv_id": 10,
@@ -676,7 +680,8 @@ or
       "req_exp_score": 0.79,
       "req_summary_score": 0.75,
       "exact_skill_bonus": 0.03,
-      "required_penalty": 0.0
+      "required_penalty": 0.0,
+      "reasoning": "Strong title and skills alignment; requirement-experience fit is good."
     }
   ]
 }

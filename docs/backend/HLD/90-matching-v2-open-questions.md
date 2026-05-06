@@ -1,39 +1,27 @@
 # Matching V2 Open Questions
 
-Mục tiêu file: gom tất cả điểm cần quyết định trước khi code/rollout.
+Location đã chốt: `ha_noi|tp_hcm|da_nang` (remote bỏ qua location filter).
 
-## 1. Taxonomy và normalization
+Mục tiêu file: chỉ giữ các quyết định chưa chốt cho prototype matching-only (database có thể reset và seed trực tiếp).
 
-- Bộ mapping seniority canonical giữa CV/JD (junior, mid, senior, lead...) chốt như thế nào?
-- Mapping education level tương đương giữa nguồn dữ liệu khác nhau?
-- Dictionary kỹ năng alias/synonym dùng nguồn nào và ai ownership?
+## 1. Taxonomy/normalization
 
-## 2. Hard filter policy chi tiết
+- Mapping seniority canonical giữa CV/JD chốt danh mục cụ thể nào?
+- Dictionary skills alias/synonym dùng nguồn nào và ai ownership?
 
-- `location` có strict tuyệt đối hay cho phép remote/hybrid fallback?
-- `job_type` có mapping giữa contract/full-time/part-time khi CV không khai báo rõ?
-- Education/certification bắt buộc: nếu dữ liệu CV thiếu thì loại ngay hay đưa vào trạng thái "insufficient_data"?
+## 2. Score policy
 
-## 3. pgvector/index tuning
+- `min_score` mặc định nên là bao nhiêu?
+- `bonus_exact_skill` và `penalty_missing_required` có cap/max cụ thể không?
+- Quy tắc tie-break khi `final_score` bằng nhau?
 
-- Chốt strategy ban đầu: `hnsw` hay `ivfflat`?
-- Tiêu chí benchmark để đổi index strategy?
-- Reindex policy khi đổi `embedding_model_version`?
+## 3. pgvector/index
 
-## 4. Score threshold và xếp hạng
+- Chốt strategy ban đầu `hnsw` hay `ivfflat`?
+- Điều kiện benchmark để đổi strategy?
+- Reindex policy khi đổi embedding/model version?
 
-- `min_score` mặc định của v2 là bao nhiêu?
-- `bonus_exact_skill` và `penalty_missing_required` có cap/max cụ thể?
-- Quy tắc tie-break khi final_score bằng nhau?
+## 4. API compatibility
 
-## 5. Data lifecycle
-
-- TTL hoặc retention cho `match_results_v2`?
-- Shadow-run result có lưu bảng riêng không?
-- Chính sách backfill khi schema/feature_version thay đổi?
-
-## 6. API và tương thích
-
-- Route v2 có auth/role guard khác route cũ không?
-- Có cần endpoint compare old-vs-v2 trong cùng response cho internal QA?
-- Thời điểm deprecate route matching cũ sau khi v2 ổn định?
+- Route v2 có auth/role guard riêng ngay từ đầu không?
+- Có cần endpoint compare old-vs-v2 cho internal QA không?

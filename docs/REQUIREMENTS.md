@@ -1,65 +1,69 @@
-# REQUIREMENTS.md — Job Matcher V2 (Prototype Target)
+# REQUIREMENTS.md — Matching Prototype V2 (Evaluation-Only)
 
 ## 1. Mục tiêu
 
-Job Matcher V2 là prototype matching CV–JD hai chiều, ưu tiên tính khả thi và khả năng đo lường trước khi thay đổi hệ thống production.
+Prototype V2 dùng để đánh giá thiết kế matching method trên dữ liệu đã có trong PostgreSQL:
+- Logic matching chạy như thế nào.
+- Thời gian chạy theo từng stage.
+- Độ chính xác trên tập benchmark gán nhãn.
 
-Mục tiêu V2:
-- Chuyển storage matching sang PostgreSQL + pgvector.
-- Tách API prototype riêng dưới `/api/v2/prototype/*`.
-- Dùng engine matching MVP không phụ thuộc LLM.
-- Giữ logic dễ audit: hard filters + embedding score + rule rerank.
+Prototype này không xử lý ingestion/parse/extract dữ liệu. Dữ liệu test được insert trực tiếp vào PostgreSQL để đánh giá matching logic.
 
-## 2. Phạm vi và vai trò
+## 2. Phạm vi
 
-- Candidate: upload CV, chạy match CV -> jobs.
-- Recruiter: upload JD, chạy match JD -> CVs.
+In scope:
+- Chạy matching từ input ID có sẵn trong DB (`job_id` hoặc `cv_id`).
+- Trả top 10 kết quả tốt nhất.
+- Trả score breakdown, reasoning, runtime metrics.
+- Persist kết quả phục vụ so sánh phương pháp.
 
-Out of scope cho MVP V2:
-- LLM reasoning trong scoring.
-- Matching dựa full text end-to-end.
-- Salary-based ranking.
+Out of scope:
+- Thu thập/bóc tách/chuẩn hóa dữ liệu đầu vào
+- Mọi flow extract/upload/parse tài liệu.
+- LLM scoring/reasoning.
+- Salary và full_text trong scoring MVP.
 
 ## 3. Functional Requirements
 
-### FR1. Ingestion và chuẩn hóa dữ liệu
+### FR1. Input/Output runtime
 
-Pipeline ingestion V2:
-1. Parse CV/JD thành structured fields.
-2. Normalize text theo dictionary/domain rules.
-3. Tạo embeddings cho các field có dùng semantic match.
-4. Ghi records vào PostgreSQL.
-5. Ghi vector vào cột `vector` (pgvector) cùng version metadata.
+Input:
+- `job_id` cho mode JD -> CV.
+- `cv_id` cho mode CV -> JD.
 
-Field chính V2:
-- CV: `title`, `skills`, `summary`, `experience`, `location`, `job_type`, `seniority`, `education`, `certifications`, `full_text`.
-- JD: `title`, `skills`, `requirement`, `location`, `job_type`, `seniority`, `education_required`, `required_certifications`, `salary_min`, `salary_max`, `full_text`.
+Output mỗi run:
+- top 10 matches.
+- score breakdown từng thành phần.
+- reasoning dạng rule-based.
 
-### FR2. Matching Pipeline V2 (MVP)
+### FR2. Matching pipeline MVP
 
-Stage 1 — Hard filters:
-- `location`
-- `job_type`
-- `seniority`
-- `education` (khi JD đánh dấu bắt buộc)
-- `required_certifications` (khi JD đánh dấu bắt buộc)
+Stage 1: Load data
+- Đọc anchor và candidate pool từ PostgreSQL/pgvector.
 
-Stage 2 — Embedding + exact scoring:
-- `title` <-> `title` (semantic)
-- `skills` <-> `skills` (semantic + exact overlap)
-- `requirement` <-> `summary` (semantic)
-- `requirement` <-> `experience` (semantic, ưu tiên cao hơn summary khi CV ngắn)
+Stage 2: Hard filter
+- Hard filter áp dụng hai chiều trên trường chung giữa JD và CV.
+- `job_type` chỉ nhận: `remote | fulltime | parttime` (cả JD và CV đều phải có).
+- Rule `job_type`:
+  - Nếu JD `job_type = remote` thì bỏ qua hard filter `location`.
+  - Nếu JD `job_type != remote` thì `job_type` và `location` phải match chính xác giữa JD và CV.
+- `seniority`: cả JD và CV đều phải có và phải khớp.
+- `education` là hard filter theo thứ bậc taxonomy: `lop_9` < `lop_12` < `dai_hoc` < `thac_si` < `tien_si` (cả JD và CV đều phải có).
+- Rule pass: education của CV phải >= education yêu cầu của JD.
+- `required_certifications`: nếu JD đánh dấu bắt buộc thì CV phải có đầy đủ.
 
-Stage 3 — Business rerank:
-- Boost theo số lượng skill exact match.
-- Penalty khi thiếu skill/certification bắt buộc.
+Stage 3: Scoring
+- `title` <-> `title` semantic.
+- `skills` <-> `skills` semantic + exact overlap.
+- `requirement` <-> `experience` semantic.
+- `requirement` <-> `summary` semantic.
 
-Không dùng ở MVP:
-- `full_text` semantic matching.
-- Salary trong final score.
-- LLM evaluation.
+Stage 4: Rerank + Persist
+- apply bonus/penalty rules.
+- sort final score, lấy top 10.
+- persist vào `match_results_v2`.
 
-### FR3. Công thức điểm MVP
+### FR3. Công thức điểm
 
 ```
 final_score =
@@ -70,72 +74,120 @@ final_score =
   bonus_exact_skill - penalty_missing_required
 ```
 
-Trong đó:
-- `skills_sim = 0.6 * cosine(emb_skills) + 0.4 * exact_overlap_ratio`
-- Tất cả điểm chuẩn hóa về `[0,1]` trước khi tổng hợp.
+```
+skills_sim = 0.6 * semantic_skills + 0.4 * exact_overlap_ratio
+```
 
-### FR4. Persistence
+### FR4. Reasoning
 
-`match_results_v2` lưu:
-- `cv_id`, `job_id`
-- `final_score`
-- `title_score`, `skills_score`, `req_exp_score`, `req_summary_score`
-- `exact_skill_bonus`, `required_penalty`
-- `filter_fail_reasons` (nếu cần debug/shadow)
-- `feature_version`, `embedding_model_version`, `scoring_version`
-- `created_at`, `updated_at`
+Reasoning là deterministic template, sinh từ:
+- field scores cao nhất.
+- số lượng skill exact match.
+- penalty nếu thiếu required conditions.
+
+Không dùng LLM.
 
 ### FR5. API Surface V2
 
-Namespace chính:
-- `POST /api/v2/prototype/matching/job/{job_id}/run`
-- `POST /api/v2/prototype/matching/cv/{cv_id}/run`
-- `GET /api/v2/prototype/matching/job/{job_id}/matches`
-- `GET /api/v2/prototype/matching/cv/{cv_id}/matches`
-- `DELETE /api/v2/prototype/matching/job/{job_id}/matches`
-- `DELETE /api/v2/prototype/matching/cv/{cv_id}/matches`
+Namespace: `/api/v2/prototype/matching`
+- `POST /job/{job_id}/run`
+- `POST /cv/{cv_id}/run`
+- `GET /job/{job_id}/matches`
+- `GET /cv/{cv_id}/matches`
+- `DELETE /job/{job_id}/matches`
+- `DELETE /cv/{cv_id}/matches`
 
-Nguyên tắc:
-- Route v2 chạy tách biệt với route production hiện hữu.
-- Response phải trả score breakdown để audit.
+## 4. Data Model (Evaluation)
 
-## 4. Data Model Canonical V2
+`match_results_v2` lưu:
+- `cv_id`, `job_id`, `final_score`
+- `title_score`, `skills_score`, `req_exp_score`, `req_summary_score`
+- `reasoning`
 
-Bảng chính (đặt tên gợi ý):
-- `candidate_profiles_v2`
-- `job_posts_v2`
-- `candidate_embeddings_v2`
-- `job_embeddings_v2`
-- `match_results_v2`
+## 5. Canonical Data Types (Locked)
 
-Vector/index:
-- pgvector column: `embedding vector(<dim>)`
-- ANN index theo lựa chọn benchmark (`hnsw` hoặc `ivfflat`)
+### 5.1 PostgreSQL - Candidate fields dùng cho matching
+- `cv_id`: `BIGINT` (PK/unique business id)
+- `title`: `TEXT NOT NULL`
+- `skills`: `TEXT[] NOT NULL DEFAULT '{}'`
+- `summary`: `TEXT NOT NULL DEFAULT ''`
+- `experience`: `TEXT NOT NULL DEFAULT ''`
+- `location`: `TEXT NOT NULL` (chỉ nhận `ha_noi|tp_hcm|da_nang`)
+- `job_type`: `TEXT NOT NULL` (chỉ nhận `remote|fulltime|parttime`)
+- `seniority`: `TEXT NOT NULL`
+- `education`: `TEXT NOT NULL` (chỉ nhận `lop_9|lop_12|dai_hoc|thac_si|tien_si`)
+- `certifications`: `TEXT[] NOT NULL DEFAULT '{}'`
 
-## 5. Non-functional Requirements
+### 5.2 PostgreSQL - Job fields dùng cho matching
+- `job_id`: `BIGINT` (PK/unique business id)
+- `title`: `TEXT NOT NULL`
+- `skills`: `TEXT[] NOT NULL DEFAULT '{}'`
+- `requirement`: `TEXT NOT NULL DEFAULT ''`
+- `location`: `TEXT NOT NULL` (chỉ nhận `ha_noi|tp_hcm|da_nang`)
+- `job_type`: `TEXT NOT NULL` (chỉ nhận `remote|fulltime|parttime`)
+- `seniority`: `TEXT NOT NULL`
+- `education`: `TEXT NOT NULL` (chỉ nhận `lop_9|lop_12|dai_hoc|thac_si|tien_si`)
+- `required_certifications`: `TEXT[] NOT NULL DEFAULT '{}'`
 
-- p95 latency match run theo target nội bộ của team.
-- Mọi run phải reproducible theo `feature_version` và `scoring_version`.
-- Có khả năng shadow run để so sánh với pipeline hiện tại.
-- Không ảnh hưởng API production hiện hữu trong giai đoạn thử nghiệm.
+### 5.3 PostgreSQL - Embedding fields
+- Semantic vectors dùng `VECTOR(384)` (pgvector) cho:
+  - `emb_title`, `emb_skills`, `emb_requirement`, `emb_summary`, `emb_experience`
 
-## 6. Acceptance Criteria (Prototype V2)
+### 5.4 PostgreSQL - match_results_v2
+- `cv_id`: `BIGINT NOT NULL`
+- `job_id`: `BIGINT NOT NULL`
+- `final_score`: `DOUBLE PRECISION NOT NULL`
+- `title_score`: `DOUBLE PRECISION NOT NULL`
+- `skills_score`: `DOUBLE PRECISION NOT NULL`
+- `req_exp_score`: `DOUBLE PRECISION NOT NULL`
+- `req_summary_score`: `DOUBLE PRECISION NOT NULL`
+- `reasoning`: `TEXT NOT NULL`
+- Unique key: `(cv_id, job_id)`
 
-Prototype V2 đạt khi:
-- [ ] Chạy end-to-end CV->JD và JD->CV trên PostgreSQL + pgvector.
-- [ ] Hard filters hoạt động đúng theo rule bắt buộc.
-- [ ] Kết quả có đầy đủ score breakdown từng thành phần.
-- [ ] Không phụ thuộc LLM để hoàn thành pipeline.
-- [ ] Route `/api/v2/prototype/*` hoạt động độc lập.
-- [ ] Có benchmark cơ bản so sánh chất lượng/latency với baseline.
+### 5.5 API types (matching v2)
+- Path params:
+  - `job_id`: `int64`
+  - `cv_id`: `int64`
+- `RunMatchingV2Request`:
+  - `top_k`: `int32` (`1..10`, default `10`)
+  - `min_score`: `float64` (`0..1`, default `0.7`)
+- `RunMatchingV2Response.matches[*]`:
+  - ids: `int64`
+  - score fields: `float64`
+  - `reasoning`: `string`
 
-## 7. Rủi ro và ghi chú
+## 6. Metrics đánh giá prototype
 
-- Mapping seniority/education liên miền cần taxonomy thống nhất.
-- Index tuning (`hnsw`/`ivfflat`) ảnh hưởng mạnh đến recall/latency.
-- Exact skill matching cần normalizer (alias/synonym) để tránh miss.
+Accuracy:
+- `Precision`
+- `Recall`
+- `NDCG`
 
-## 8. Open Questions
+## 7. Test Data Policy
 
-Các quyết định chưa chốt được tập trung trong:
+- Cho phép drop/reset toàn bộ database prototype.
+- Team có thể seed/insert dữ liệu trực tiếp vào PostgreSQL.
+- Không yêu cầu tương thích dữ liệu legacy production.
+
+## 8. Acceptance Criteria
+
+- [ ] Chạy được cả JD -> CV và CV -> JD từ ID có sẵn.
+- [ ] Mỗi run trả tối đa top 10 + breakdown + reasoning.
+- [ ] Nếu JD `job_type=remote` thì không áp dụng hard filter `location`.
+- [ ] Nếu JD `job_type!=remote` thì `location` filter strict đúng theo text tỉnh/thành.
+- [ ] `education` hard filter đúng theo 5 mức taxonomy đã chốt.
+- [ ] Không có dependency ingestion/LLM.
+- [ ] Có báo cáo benchmark accuracy + latency từ labeled set.
+
+## 9. Default Decisions (AI-proposed)
+
+- `top_k` default: `10`
+- `min_score` default: `0.7`
+- Skills normalization mặc định: lowercase + trim + unique theo token, chưa áp dụng synonym dictionary ở MVP.
+- Nếu thiếu embedding của một field semantic thì score field đó = `0` (không fail toàn run).
+- Nếu thiếu dữ liệu cho hard filter ở JD hoặc CV thì coi như fail hard filter cho cặp đó.
+
+## 10. Open Questions
+
+Xem file:
 - `docs/backend/HLD/90-matching-v2-open-questions.md`
