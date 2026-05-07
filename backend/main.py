@@ -10,6 +10,7 @@ from routers import (
     cv_router,
     application_router,
     match_router,
+    match_v2_router,
     system_router,
 )
 
@@ -57,6 +58,7 @@ app.include_router(job_router.router, prefix="/api")
 app.include_router(cv_router.router, prefix="/api")
 app.include_router(application_router.router, prefix="/api")
 app.include_router(match_router.router, prefix="/api")
+app.include_router(match_v2_router.router, prefix="/api")
 app.include_router(system_router.router, prefix="/api")
 
 

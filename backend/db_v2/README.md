@@ -56,3 +56,11 @@ docker compose exec postgres psql -U jobmatcher -d jobmatcher_v2 -c "
 ```
 
 Expected after seed: 5 rows in each table.
+
+## Read-only verification (DoD guard)
+
+Run full slice-1 checks without mutating data:
+
+```bash
+python backend/db_v2/verify.py
+```
