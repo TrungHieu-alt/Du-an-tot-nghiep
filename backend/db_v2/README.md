@@ -91,6 +91,30 @@ The backend listens on `http://localhost:8000`. OpenAPI is available at:
 curl "http://localhost:8000/openapi.json"
 ```
 
+## Live DB integration smoke
+
+Use this as the slice-5 live-stack evidence path. It starts `postgres`, `mongo`,
+and `backend`, resets and seeds PostgreSQL from scratch, waits for OpenAPI, then
+calls both run-only endpoints against the real backend:
+
+```bash
+bash scripts/smoke_match_v2_live.sh
+```
+
+Assertions covered:
+
+- JD -> CV: `POST /api/v2/prototype/matching/job/2003/run` returns `200`.
+- CV -> JD: `POST /api/v2/prototype/matching/cv/1003/run` returns `200`.
+- Response includes `rank`, score components, `reasoning`, and runtime metrics.
+- Deterministic top match for JD `2003` is CV `1003`.
+- Deterministic top match for CV `1003` is JD `2003`.
+
+Test labels:
+
+- Router contract test: FastAPI `TestClient` with mocked DB/matching.
+- Live DB integration smoke: `bash scripts/smoke_match_v2_live.sh`.
+- Manual smoke: the `curl` commands below.
+
 For local host-only debugging, run from `backend/` after installing backend
 dependencies and setting PostgreSQL env vars:
 

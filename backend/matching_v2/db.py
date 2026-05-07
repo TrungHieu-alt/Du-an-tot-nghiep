@@ -98,7 +98,7 @@ def load_job(conn: psycopg.Connection, job_id: int) -> Optional[JobPostV2]:
 
 def load_all_jobs(conn: psycopg.Connection) -> list[JobPostV2]:
     with conn.cursor() as cur:
-        cur.execute(f"SELECT {_JOB_COLS} FROM job_posts_v2")
+        cur.execute(f"SELECT {_JOB_COLS} FROM job_posts_v2 ORDER BY job_id ASC")
         rows = cur.fetchall()
     return [_row_to_job(r) for r in rows]
 
@@ -140,7 +140,7 @@ def load_candidate(conn: psycopg.Connection, cv_id: int) -> Optional[CandidatePr
 
 def load_all_candidates(conn: psycopg.Connection) -> list[CandidateProfileV2]:
     with conn.cursor() as cur:
-        cur.execute(f"SELECT {_CV_COLS} FROM candidate_profiles_v2")
+        cur.execute(f"SELECT {_CV_COLS} FROM candidate_profiles_v2 ORDER BY cv_id ASC")
         rows = cur.fetchall()
     return [_row_to_cv(r) for r in rows]
 
@@ -187,6 +187,7 @@ def load_all_candidate_embeddings(
                    emb_summary::text,
                    emb_experience::text
             FROM candidate_embeddings_v2
+            ORDER BY cv_id ASC
             """
         )
         rows = cur.fetchall()
@@ -242,6 +243,7 @@ def load_all_job_embeddings(
                    emb_skills::text,
                    emb_requirement::text
             FROM job_embeddings_v2
+            ORDER BY job_id ASC
             """
         )
         rows = cur.fetchall()

@@ -136,6 +136,33 @@ class MatchingV2CoreTests(unittest.TestCase):
             0.35 * 1.0 + 0.35 * 0.4 + 0.20 * 0.5 + 0.10 * 0.25,
         )
 
+    def test_negative_cosine_similarity_is_clamped_to_zero(self):
+        self.assertEqual(cosine_similarity([1.0, 0.0], [-1.0, 0.0]), 0.0)
+
+    def test_negative_semantic_signals_do_not_make_final_score_negative(self):
+        job = self._job(skills=("python",))
+        cv = self._cv(skills=("java",), certifications=("aws",))
+        job_emb = self._job_emb(
+            emb_title=[1.0, 0.0],
+            emb_skills=[1.0, 0.0],
+            emb_requirement=[1.0, 0.0],
+        )
+        cv_emb = self._cv_emb(
+            emb_title=[-1.0, 0.0],
+            emb_skills=[-1.0, 0.0],
+            emb_summary=[-1.0, 0.0],
+            emb_experience=[-1.0, 0.0],
+        )
+
+        scores, missing = _score_pair(job, job_emb, cv, cv_emb)
+
+        self.assertEqual(missing, [])
+        self.assertEqual(scores["title_score"], 0.0)
+        self.assertEqual(scores["skills_score"], 0.0)
+        self.assertEqual(scores["req_exp_score"], 0.0)
+        self.assertEqual(scores["req_summary_score"], 0.0)
+        self.assertEqual(scores["final_score"], 0.0)
+
     def test_missing_embeddings_score_zero_no_crash(self):
         job_emb = self._job_emb(emb_title=None, emb_requirement=None)
         cv_emb = self._cv_emb(emb_skills=None, emb_summary=None)

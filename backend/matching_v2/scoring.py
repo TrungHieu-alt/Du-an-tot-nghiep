@@ -20,10 +20,11 @@ def cosine_similarity(
     a: Optional[list[float]],
     b: Optional[list[float]],
 ) -> float:
-    """Return cosine similarity in [0, 1].
+    """Return cosine similarity clamped to [0, 1].
 
     Returns 0.0 if either vector is None, empty, or has zero magnitude.
-    This satisfies the spec requirement: missing embedding → score component = 0.
+    Negative cosine means no positive semantic match in this prototype, so it
+    is clamped to 0.0 to keep score components inside the API contract.
     """
     if a is None or b is None:
         return 0.0
@@ -35,7 +36,8 @@ def cosine_similarity(
     nb = float(np.linalg.norm(vb))
     if na == 0.0 or nb == 0.0:
         return 0.0
-    return float(np.dot(va, vb) / (na * nb))
+    raw = float(np.dot(va, vb) / (na * nb))
+    return max(0.0, min(1.0, raw))
 
 
 # ---------------------------------------------------------------------------
