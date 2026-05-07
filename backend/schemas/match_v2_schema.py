@@ -2,8 +2,12 @@ from pydantic import BaseModel, Field
 
 
 class RunMatchingV2Request(BaseModel):
-    top_k: int = Field(default=10)
-    min_score: float = Field(default=0.7)
+    top_k: int = Field(default=10, ge=1, le=10)
+    min_score: float = Field(default=0.7, ge=0.0, le=1.0)
+
+
+class ErrorDetailResponse(BaseModel):
+    detail: str
 
 
 class MatchItemV2Response(BaseModel):

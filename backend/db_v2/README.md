@@ -16,7 +16,7 @@ There are exactly **four** tables: `candidate_profiles_v2`, `job_posts_v2`,
 `candidate_embeddings_v2`, `job_embeddings_v2`. There is **no** `match_results_v2`
 table — the prototype is run-only.
 
-## One-shot reset + migrate + seed
+## Start the database
 
 Start the database (docker compose service `postgres`, exposed on host port 5433):
 
@@ -24,7 +24,9 @@ Start the database (docker compose service `postgres`, exposed on host port 5433
 docker compose up -d postgres
 ```
 
-Then run the reset script from the repo root:
+## Reset, migrate, and seed
+
+Run the reset script from the repo root after `postgres` is healthy:
 
 ```bash
 python backend/db_v2/reset.py
@@ -32,6 +34,16 @@ python backend/db_v2/reset.py
 
 This drops the `public` schema, re-applies every SQL file in
 `migrations/` (lexical order), then every SQL file in `seeds/` (lexical order).
+The seed is deterministic and currently inserts 5 CV rows, 5 JD rows, and their
+384-dimensional pgvector embeddings.
+
+If you prefer to run the command inside the backend container, start the backend
+service first and use the compose-network PostgreSQL host:
+
+```bash
+docker compose up -d postgres mongo backend
+docker compose exec backend python db_v2/reset.py
+```
 
 ## Connection settings
 
@@ -64,3 +76,90 @@ Run full slice-1 checks without mutating data:
 ```bash
 python backend/db_v2/verify.py
 ```
+
+## Run the app
+
+Start the API with Docker Compose:
+
+```bash
+docker compose up -d postgres mongo backend
+```
+
+The backend listens on `http://localhost:8000`. OpenAPI is available at:
+
+```bash
+curl "http://localhost:8000/openapi.json"
+```
+
+For local host-only debugging, run from `backend/` after installing backend
+dependencies and setting PostgreSQL env vars:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+## Prototype run endpoint examples
+
+JD -> CV:
+
+```bash
+curl -X POST "http://localhost:8000/api/v2/prototype/matching/job/2003/run" \
+  -H "Content-Type: application/json" \
+  -d '{"top_k":10,"min_score":0.7}'
+```
+
+CV -> JD:
+
+```bash
+curl -X POST "http://localhost:8000/api/v2/prototype/matching/cv/1003/run" \
+  -H "Content-Type: application/json" \
+  -d '{"top_k":10,"min_score":0.7}'
+```
+
+`top_k` must be between `1` and `10`. `min_score` must be between `0.0` and
+`1.0`. Both endpoints accept an omitted body and use defaults:
+`{"top_k": 10, "min_score": 0.7}`.
+
+## Example response shape
+
+```json
+{
+  "anchor_type": "job",
+  "anchor_id": 2003,
+  "total_candidates": 5,
+  "total_after_filter": 1,
+  "total_returned": 1,
+  "runtime_ms_total": 4.31,
+  "runtime_ms_filter": 0.02,
+  "runtime_ms_scoring": 0.18,
+  "runtime_ms_sort": 0.01,
+  "matches": [
+    {
+      "rank": 1,
+      "cv_id": 1003,
+      "job_id": 2003,
+      "final_score": 0.965,
+      "title_score": 1.0,
+      "skills_score": 0.95,
+      "req_exp_score": 0.9,
+      "req_summary_score": 0.9,
+      "reasoning": "Strongest signal: 'title' (score 1.000). Exact skill matches (3): aws, python, sql."
+    }
+  ]
+}
+```
+
+Runtime values can vary by machine. For unchanged data, ranks, IDs, scores, and
+reasoning are expected to stay deterministic.
+
+## Scope limitations
+
+- Run-only prototype.
+- No persistence of matching results.
+- No `match_results_v2` table.
+- No GET/DELETE match result APIs.
+- No benchmark or labeled quality metrics.
+- No ANN tuning requirement (`hnsw`/`ivfflat` are out of scope).
+- No LLM scoring or LLM reasoning.
+- No dedicated auth for this prototype unless already present in the project.
+- No legacy Chroma/RAG matching dependency in the V2 prototype path.
