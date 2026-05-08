@@ -45,13 +45,34 @@ flowchart TB
 3. Match query path:
 - list endpoint -> service -> repository read -> on-the-fly enrichment with CV/Job summaries.
 
+## Matching V2 Run-Only Prototype Override
+
+The runtime layers above describe the legacy/current production matching system. Matching V2 run-only prototype is intentionally narrower and overrides that path for `/api/v2/prototype/matching/*`.
+
+V2 prototype path:
+- API namespace: `/api/v2/prototype/matching`.
+- Runtime storage: PostgreSQL tables `job_posts_v2`, `candidate_profiles_v2`, `job_embeddings_v2`, `candidate_embeddings_v2`.
+- Vector storage/scoring: pgvector in PostgreSQL.
+- Execution model: load anchor and candidate pool from PostgreSQL, apply hard filters, score exhaustively, rerank deterministically, return response directly.
+
+V2 prototype exclusions:
+- No MongoDB or ChromaDB dependency for prototype JD/CV matching data.
+- No Gemini/LLM evaluation stage.
+- No persisted match result table, including `match_results_v2`.
+- No GET/DELETE persisted match result APIs.
+- No old-vs-v2 comparison or legacy route deprecation.
+
+For V2 implementation tasks, use `docs/REQUIREMENTS.md`, `docs/backend/HLD/20-matching-pipeline.md`, `docs/backend/HLD/30-data-and-storage.md`, `docs/backend/HLD/40-api-and-runtime-flows.md`, and `docs/matching-v2-scenario-test-cases.md` as the relevant architecture sources before loading legacy matching LLDs.
+
 ## Non-Goals of This Layering
 - No event bus or async queue orchestration in current implementation.
 - No separate model-serving microservice.
 - No strict tenancy boundary enforcement in matching routes today.
 
 ## Important Operational Dependency
-The LLM evaluation stage depends on Gemini availability. If unavailable, pipeline falls back to vector-driven proxy scoring for the LLM slot.
+Legacy/current production matching LLM evaluation depends on Gemini availability. If unavailable, that pipeline falls back to vector-driven proxy scoring for the LLM slot.
+
+Matching V2 run-only prototype does not use Gemini or any LLM stage.
 
 ## Related LLD (Load only if needed)
 Strict rule: only load these LLD files when the current task requires low-level implementation detail that HLD does not cover.

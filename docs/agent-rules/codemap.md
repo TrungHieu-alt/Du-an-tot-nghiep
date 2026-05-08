@@ -38,6 +38,8 @@ Purpose: workflow ownership and path mapping. Policy and process rules are canon
 - `backend/models/jobPost.py`
 
 ## 5) Matching Workflow (Retrieve -> Rerank -> LLM Evaluate -> Persist)
+Legacy/current production matching path. Do not use this workflow for Matching V2 run-only prototype unless a task explicitly asks for legacy comparison or migration work.
+
 - `backend/routers/match_router.py`
 - `backend/routers/cv_router.py` and `backend/routers/job_router.py` match endpoints
 - `backend/ragmodel/logics/matchingLogic.py`
@@ -46,6 +48,33 @@ Purpose: workflow ownership and path mapping. Policy and process rules are canon
 - `backend/repositories/match_repo.py`
 - `backend/models/matchResult.py`
 
+## 5A) Matching V2 Prototype Workflow (Run-Only PostgreSQL + pgvector)
+Use this workflow for `/api/v2/prototype/matching/*` and Slice 6 work.
+
+Primary docs:
+- `docs/REQUIREMENTS.md`
+- `docs/backend/HLD/20-matching-pipeline.md`
+- `docs/backend/HLD/30-data-and-storage.md`
+- `docs/backend/HLD/40-api-and-runtime-flows.md`
+- `docs/matching-v2-scenario-test-cases.md`
+
+Runtime boundary:
+- Prototype data lives in PostgreSQL V2 tables: `job_posts_v2`, `candidate_profiles_v2`, `job_embeddings_v2`, `candidate_embeddings_v2`.
+- Vector storage/scoring uses pgvector in PostgreSQL.
+- Matching returns run results directly from the V2 prototype endpoints and does not persist match results.
+
+Expected code areas vary by slice:
+- DB/schema/seed tooling: `backend/db_v2/*` and related tests.
+- V2 API/runtime: V2 prototype matching router/service/runner modules if present in `backend/`.
+- OpenAPI contract checks: FastAPI generated `/openapi.json`.
+
+Out of scope for V2 run-only prototype unless the task says otherwise:
+- MongoDB business entity lifecycle.
+- ChromaDB retrieval.
+- Gemini/LLM evaluation.
+- `match_results_v2` or persisted result query/delete APIs.
+- Legacy matching route changes.
+
 ## 6) Application Tracking Workflow
 - `backend/routers/application_router.py`
 - `backend/services/application_service.py`
@@ -53,9 +82,15 @@ Purpose: workflow ownership and path mapping. Policy and process rules are canon
 - `backend/models/application.py`
 
 ## 7) Data Ownership Boundaries
+Legacy/current production boundaries:
 - MongoDB is source of truth for business entities and lifecycle status.
 - ChromaDB is retrieval infrastructure and semantic index.
 - AI outputs are advisory ranking signals; persisted decisions live in MongoDB match records.
+
+Matching V2 run-only prototype exception:
+- PostgreSQL is source of truth for prototype JD/CV records and embeddings.
+- pgvector in PostgreSQL is the prototype vector storage/scoring layer.
+- Run results are returned directly and are not persisted.
 
 ## 8) Integration Boundary For Frontend
 - Frontend integrates through `/api/*` contracts.
