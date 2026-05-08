@@ -1,0 +1,24 @@
+SUMMARY
+Backend developer with 3 years of experience building REST APIs using Python, FastAPI, and PostgreSQL. Strong in database design, API integration, and writing clean, maintainable backend logic. Experienced with Docker-based deployments.
+
+SKILLS
+Python, FastAPI, PostgreSQL, Docker, Git, REST API, JWT, SQLAlchemy, Redis, Linux
+
+EXPERIENCE
+- Backend Developer at TechViet JSC (2021–2024)
+- Built RESTful API services for e-commerce platform handling 50k daily requests
+- Designed PostgreSQL schemas and optimized slow queries reducing latency by 35%
+- Implemented JWT authentication and RBAC authorization modules
+- Containerized services with Docker and docker-compose
+- Collaborated with frontend team to deliver 12 product features
+
+PROJECTS
+Order Management System
+Backend service for order processing with async task queue (Celery + Redis).
+Stack: Python, FastAPI, PostgreSQL, Redis, Docker.
+
+EDUCATION
+B.S. Computer Science – Hanoi University of Science and Technology (2017–2021)
+
+LOCATION
+Hanoi, Vietnam

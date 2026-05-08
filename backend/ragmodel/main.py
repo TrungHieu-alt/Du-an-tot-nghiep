@@ -49,8 +49,8 @@ def run_test(cv_path, jd_path):
     cv_id = "cv_" + str(uuid.uuid4())
     jd_id = "jd_" + str(uuid.uuid4())
 
-    store_cv(cv_id, cv_emb)
-    store_jd(jd_id, jd_emb)
+    store_cv(cv_id, cv_emb, cv_json)
+    store_jd(jd_id, jd_emb, jd_json)
 
     print("Stored CV ID:", cv_id)
     print("Stored JD ID:", jd_id)

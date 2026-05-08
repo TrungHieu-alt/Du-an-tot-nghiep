@@ -1,0 +1,27 @@
+JOB TITLE
+Frontend Developer (React/TypeScript)
+
+LOCATION
+Ho Chi Minh City, Vietnam
+
+JOB DESCRIPTION
+We are hiring a Frontend Developer to build high-quality user interfaces for our e-commerce platform. You will work in an agile team, implement new features, and maintain existing components in a large-scale React codebase.
+
+REQUIREMENTS
+- 2+ years frontend development experience
+- Proficiency in JavaScript and TypeScript
+- Strong React skills including hooks, context, state management
+- Experience integrating REST APIs
+- Familiarity with responsive design (HTML, CSS, Tailwind)
+- Knowledge of CI/CD and deployment workflows (AWS, GitHub Actions)
+- Good communication skills
+
+RESPONSIBILITIES
+- Build and maintain React components and pages
+- Integrate backend REST APIs
+- Optimize frontend performance
+- Write unit and integration tests
+- Participate in code reviews and technical discussions
+
+TECH STACK
+React, TypeScript, Node.js, MongoDB, Docker, AWS

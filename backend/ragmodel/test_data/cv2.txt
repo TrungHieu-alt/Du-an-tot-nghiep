@@ -1,0 +1,24 @@
+SUMMARY
+Full-stack developer with 5 years of experience. Specializes in React frontend and Node.js/Express backend. Strong in building SPAs, REST APIs, and working with MongoDB. Led small teams of 3–5 engineers.
+
+SKILLS
+JavaScript, TypeScript, React, Node.js, Express, MongoDB, HTML, CSS, Docker, AWS, Git
+
+EXPERIENCE
+- Senior Frontend Developer at Sapo Technologies (2020–2024)
+- Led development of merchant dashboard using React + TypeScript, serving 10k+ users
+- Built BFF (Backend for Frontend) services in Node.js/Express
+- Integrated payment gateways (VNPay, MoMo) via REST APIs
+- Set up CI/CD pipelines on GitHub Actions + AWS EC2
+- Mentored 2 junior developers and conducted code reviews
+
+PROJECTS
+Merchant Analytics Dashboard
+Real-time sales dashboard with charts and export features.
+Stack: React, TypeScript, Node.js, MongoDB, Docker, AWS S3.
+
+EDUCATION
+B.S. Information Technology – Ho Chi Minh City University of Technology (2016–2020)
+
+LOCATION
+Ho Chi Minh City, Vietnam

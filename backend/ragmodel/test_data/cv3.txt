@@ -1,0 +1,24 @@
+SUMMARY
+Data engineer with 4 years of experience building data pipelines, ETL workflows, and analytics infrastructure. Proficient in Python, Apache Airflow, Spark, and cloud data warehouses. Experienced with ML model deployment using MLflow.
+
+SKILLS
+Python, Apache Airflow, Apache Spark, PySpark, PostgreSQL, BigQuery, dbt, Docker, Kubernetes, AWS S3, MLflow, Pandas, SQL
+
+EXPERIENCE
+- Data Engineer at VNG Corporation (2020–2024)
+- Designed and maintained 20+ ETL pipelines processing 5TB daily data with Airflow
+- Migrated on-premise data warehouse to BigQuery, reducing storage costs by 40%
+- Built real-time streaming pipelines using Kafka and Spark Structured Streaming
+- Deployed ML models to production with MLflow and served via FastAPI microservices
+- Wrote dbt transformations for analytics layer
+
+PROJECTS
+Real-Time User Behavior Analytics
+Kafka + Spark Streaming pipeline ingesting clickstream events, aggregating to BigQuery.
+Stack: Python, Kafka, Spark, BigQuery, Airflow, dbt.
+
+EDUCATION
+B.S. Computer Science – Vietnam National University (2016–2020)
+
+LOCATION
+Hanoi, Vietnam

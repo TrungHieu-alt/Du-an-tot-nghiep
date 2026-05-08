@@ -1,0 +1,28 @@
+JOB TITLE
+Backend Developer (Python/FastAPI)
+
+LOCATION
+Hanoi, Vietnam
+
+JOB DESCRIPTION
+We are looking for a Backend Developer to join our product engineering team in Hanoi. You will build and maintain API services powering our SaaS platform, work closely with frontend engineers, and contribute to system reliability.
+
+REQUIREMENTS
+- 2+ years backend development experience
+- Strong Python skills
+- Hands-on experience with FastAPI or Flask
+- Solid understanding of relational databases (PostgreSQL preferred)
+- Experience with Docker and containerized deployments
+- Familiarity with JWT authentication and REST API design
+- Clean code practices and willingness to do code reviews
+
+RESPONSIBILITIES
+- Design and build RESTful API endpoints
+- Write and optimize SQL queries
+- Implement authentication and authorization modules
+- Integrate third-party APIs
+- Containerize services and assist in deployment
+- Participate in sprint planning and daily standups
+
+TECH STACK
+Python, FastAPI, PostgreSQL, Redis, Docker, Git
