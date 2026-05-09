@@ -102,6 +102,42 @@ If code contradicts `docs/REQUIREMENTS.md`, treat the spec as authoritative and 
 - Second pass (targeted): load `docs/REQUIREMENTS.md` per the gate above, then only files in impacted workflows from `codemap.md`.
 - Avoid broad repo scanning when the task scope is already clear.
 
+## Notion MCP Trigger Rule (Canonical)
+- If the user prompt contains the word `notion` (case-insensitive), the agent must use Notion MCP tools for retrieval/update workflows when relevant to the request.
+- Prefer Notion MCP as the primary execution path over ad-hoc alternatives for Notion workspace operations.
+- If the prompt includes `notion` but the requested action is clearly outside Notion scope, state that constraint explicitly in the handoff.
+
+## Playwright MCP Trigger Rule (Canonical)
+- Only use Playwright MCP tools when the user prompt contains the word `playwright` (case-insensitive).
+- If the prompt does not contain `playwright`, do not use Playwright MCP tools.
+
+## Context7 Usage Rule (Canonical)
+- Default to reading and reasoning from local source code first.
+- Use Context7 only when at least one condition is true:
+  1. The task depends on external library/framework APIs, configuration, or best practices.
+  2. Relevant behavior is not clear from source code.
+  3. There is risk that built-in knowledge may be outdated.
+  4. Version-specific usage must be verified.
+- Do not use Context7 for:
+  1. Pure business logic already implemented in the repo.
+  2. Simple refactors, renames, formatting, or type fixes.
+  3. Explaining code that is fully understandable from source.
+  4. Searching files, symbols, or project-local behavior.
+- When using Context7:
+  - Query narrowly for the specific library/topic.
+  - Avoid broad documentation dumps.
+  - Stop after one query unless result is insufficient.
+  - Briefly state that Context7 was used and why.
+
+## MCP and Action Tool Approval Gate (Canonical)
+- Before using any MCP tool, the agent must ask for user confirmation and state exactly which tool will be used and why.
+- Do not call MCP tools until user confirmation is explicitly received in the current conversation.
+- User approval scope must be explicit (single tool call or a clearly listed tool set). No implicit blanket approval.
+- If approval is not granted, stop at read/reasoning only and ask again; do not execute MCP calls.
+- Never use write/action tools without explicit approval. This includes, at minimum, Notion create/update/move tools and Playwright interaction tools such as click/type/fill/select/drag/drop.
+- This approval gate also applies to Context7 tools (`resolve_library_id`, `query_docs`).
+- If another rule requires a specific MCP path (for example, the Notion MCP trigger rule), that requirement is still gated by this approval rule.
+
 ## Conflict and Escalation Protocol
 - If two sources disagree, apply Rule Priority and document the conflict in handoff.
 - If requirement ambiguity can change API/security/data behavior, stop and escalate.

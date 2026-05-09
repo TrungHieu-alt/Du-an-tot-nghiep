@@ -4,6 +4,12 @@ Purpose: source of truth for Matching V2 test coverage, including executed basel
 
 This file replaces the previous standalone baseline test report.
 
+## Locked Decisions (2026-05-09)
+
+1. Slice 6C verification runs on the compact scenario dataset (6 JD / 36 CV), not on the broad dataset.
+2. Missing-embedding simulation uses missing embedding rows (`candidate_embeddings_v2` or `job_embeddings_v2`), not partial null embedding fields.
+3. CV design is flexible: each JD still has 6 designed CV cases, and CVs may be reused across reverse CV -> JD expectations when useful.
+
 ## Scope
 
 Target dataset:
@@ -355,7 +361,7 @@ The scenario dataset should focus on these uncovered or weakly covered cases:
 | Tie-break deterministic | Same score should sort by `cv_id asc` for JD -> CV and `job_id asc` for CV -> JD where feasible. |
 | `top_k` truncation | More candidates pass filter than `top_k`; only `top_k` returned. |
 | `total_after_filter=0` | A request should show no candidates survive hard filters. |
-| Partial missing embeddings | Missing one semantic field should not crash; affected score field is `0`. |
+| Missing embedding row | Missing embedding row should not crash; semantic score components become `0` and reasoning mentions missing embedding. |
 | Reverse CV -> JD beyond happy path | At least one reverse expectation should include `expected_top_id` and `must_rank_above`. |
 | Normalization | Skills/certifications are lowercase, trimmed, unique. |
 
@@ -385,7 +391,7 @@ Use deterministic IDs when implementing, for example JD `4001..4006` and CV `300
 | 3c. Noisy analytics pass | JD-3 -> CV-15 | mid, fulltime, tp_hcm, `thac_si`, adjacent analytics profile | CV-15 passes but ranks below CV-13/CV-14 | Planned |
 | 3d. Education lower fail | JD-3 -> CV-16 | all hard-filter fields match, but `education=lop_12` | CV-16 excluded by education only | Planned |
 | 3e. Low skill overlap pass | JD-3 -> CV-17 | hard filters pass, very low skill overlap | With `min_score=0`, visible low score; otherwise may be thresholded out | Planned |
-| 3f. Partial missing embedding | JD-3 -> CV-18 | hard filters pass, one semantic embedding field missing or zeroed | No crash; affected score field is `0`; reasoning mentions missing embedding | Planned |
+| 3f. Missing embedding row | JD-3 -> CV-18 | hard filters pass, CV has no embedding row | No crash; semantic score components are `0`; reasoning mentions missing embedding | Planned |
 | 4. Product/BA non-remote strict location/job type | JD-4 Product/BA fulltime da_nang mid | `job_type=fulltime`, `location=da_nang`, `seniority=mid` | isolated location and job type failures are distinguishable | Planned |
 | 4a. Strong Product/BA pass | JD-4 -> CV-19 | fulltime, da_nang, mid, strong BA/product skills | CV-19 rank 1 | Planned |
 | 4b. Good Product/BA pass | JD-4 -> CV-20 | fulltime, da_nang, mid, good product analyst profile | CV-20 ranks below CV-19 | Planned |
@@ -492,7 +498,7 @@ For hard-filter separation expectations:
 3. Each JD has exactly 6 designed CV.
 4. Dataset contains only JD/CV prototype data and embeddings.
 5. There are exactly 6 `job_embeddings_v2` rows.
-6. There are exactly 36 `candidate_embeddings_v2` rows unless a documented field-level missing embedding case is represented differently.
+6. There are exactly 36 `candidate_embeddings_v2` rows, except explicitly documented missing-row scenarios.
 7. JSON schema validation passes for `location`, `job_type`, `seniority`, and `education`.
 8. Skills/certifications are lowercase, trimmed, and unique.
 9. All gaps listed above are covered.
