@@ -27,6 +27,10 @@ docx2txt==0.8
 langdetect==1.0.9
 
 
+# === SQLAlchemy ORM (seed tooling for V2 prototype only) ===
+sqlalchemy==2.0.36
+pgvector==0.3.6
+
 # === Web Server ===
 fastapi==0.115.6
 uvicorn[standard]==0.24.0
