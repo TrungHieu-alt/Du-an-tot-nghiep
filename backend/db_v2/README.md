@@ -9,7 +9,10 @@ Schema is the source of truth defined in `docs/REQUIREMENTS.md` §5.
 backend/db_v2/
 ├── migrations/001_init.sql   # 4 prototype tables + CHECK constraints + pgvector
 ├── seeds/001_seed.sql        # deterministic JD/CV rows + 384-dim embeddings
+├── seeds/002_extra_test_data.sql
+├── seeds/003_broad_ranking_test_data.sql
 ├── scenarios/                # Slice 6B compact scenario JSON + schema
+│   └── matching_v2_slice_6c_rank_expectations.json
 ├── scenario_embeddings.py    # deterministic local 384-dim embedding generator
 ├── seed_scenario.py          # non-additive scenario seed
 ├── validate_scenario_dataset.py
@@ -103,8 +106,23 @@ docker compose exec postgres psql -U jobmatcher -d jobmatcher_v2 -c "
 ```
 
 Expected after the default SQL seed path: use the current SQL files under
-`seeds/`. Expected after the Slice 6B scenario profile: 6 JD, 36 CV, 6 job
-embedding rows, and 35 candidate embedding rows.
+`seeds/`.
+
+| Table | Expected count after default SQL seed |
+|---|---:|
+| `job_posts_v2` | 10 |
+| `candidate_profiles_v2` | 34 |
+| `job_embeddings_v2` | 10 |
+| `candidate_embeddings_v2` | 33 |
+
+The default SQL seed path is the Slice 6C broad ranking verification dataset.
+It contains 10 representative JD anchors (`2001..2010`) and deterministic
+strong/good/noisy candidate rows for ranking checks. CV `1010` intentionally has
+no embedding row so min_score exclusion can be tested separately from hard
+filters.
+
+Expected after the Slice 6B scenario profile: 6 JD, 36 CV, 6 job embedding
+rows, and 35 candidate embedding rows.
 
 ## Read-only verification (DoD guard)
 
@@ -130,9 +148,10 @@ curl "http://localhost:8000/openapi.json"
 
 ## Live DB integration smoke
 
-Use this as the slice-5 live-stack evidence path. It starts `postgres`, `mongo`,
-and `backend`, resets and seeds PostgreSQL from scratch, waits for OpenAPI, then
-calls both run-only endpoints against the real backend:
+Use this as the Slice 6C live-stack evidence path. It starts `postgres`,
+`mongo`, and `backend`, resets and seeds PostgreSQL from scratch through the
+default broad SQL seed path, waits for OpenAPI, then calls both run-only
+endpoints against the real backend:
 
 ```bash
 bash scripts/smoke_match_v2_live.sh
@@ -140,11 +159,14 @@ bash scripts/smoke_match_v2_live.sh
 
 Assertions covered:
 
-- JD -> CV: `POST /api/v2/prototype/matching/job/2003/run` returns `200`.
-- CV -> JD: `POST /api/v2/prototype/matching/cv/1003/run` returns `200`.
+- JD -> CV: `POST /api/v2/prototype/matching/job/2006/run` returns `200`.
+- CV -> JD: `POST /api/v2/prototype/matching/cv/1006/run` returns `200`.
 - Response includes `rank`, score components, `reasoning`, and runtime metrics.
-- Deterministic top match for JD `2003` is CV `1003`.
-- Deterministic top match for CV `1003` is JD `2003`.
+- Deterministic top match for JD `2006` is CV `1006`.
+- Deterministic top match for CV `1006` is JD `2006`.
+- OpenAPI V2 prototype namespace contains exactly:
+  `/api/v2/prototype/matching/job/{job_id}/run` and
+  `/api/v2/prototype/matching/cv/{cv_id}/run`.
 
 Test labels:
 
@@ -164,7 +186,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 JD -> CV:
 
 ```bash
-curl -X POST "http://localhost:8000/api/v2/prototype/matching/job/2003/run" \
+curl -X POST "http://localhost:8000/api/v2/prototype/matching/job/2006/run" \
   -H "Content-Type: application/json" \
   -d '{"top_k":10,"min_score":0.7}'
 ```
@@ -172,7 +194,7 @@ curl -X POST "http://localhost:8000/api/v2/prototype/matching/job/2003/run" \
 CV -> JD:
 
 ```bash
-curl -X POST "http://localhost:8000/api/v2/prototype/matching/cv/1003/run" \
+curl -X POST "http://localhost:8000/api/v2/prototype/matching/cv/1006/run" \
   -H "Content-Type: application/json" \
   -d '{"top_k":10,"min_score":0.7}'
 ```
@@ -186,10 +208,10 @@ curl -X POST "http://localhost:8000/api/v2/prototype/matching/cv/1003/run" \
 ```json
 {
   "anchor_type": "job",
-  "anchor_id": 2003,
-  "total_candidates": 5,
-  "total_after_filter": 1,
-  "total_returned": 1,
+  "anchor_id": 2006,
+  "total_candidates": 34,
+  "total_after_filter": 4,
+  "total_returned": 4,
   "runtime_ms_total": 4.31,
   "runtime_ms_filter": 0.02,
   "runtime_ms_scoring": 0.18,
@@ -197,14 +219,14 @@ curl -X POST "http://localhost:8000/api/v2/prototype/matching/cv/1003/run" \
   "matches": [
     {
       "rank": 1,
-      "cv_id": 1003,
-      "job_id": 2003,
-      "final_score": 0.965,
+      "cv_id": 1006,
+      "job_id": 2006,
+      "final_score": 1.0,
       "title_score": 1.0,
-      "skills_score": 0.95,
-      "req_exp_score": 0.9,
-      "req_summary_score": 0.9,
-      "reasoning": "Strongest signal: 'title' (score 1.000). Exact skill matches (3): aws, python, sql."
+      "skills_score": 1.0,
+      "req_exp_score": 1.0,
+      "req_summary_score": 1.0,
+      "reasoning": "Strongest signal: 'title' (score 1.000). Exact skill matches (4): aws, docker, kubernetes, terraform."
     }
   ]
 }

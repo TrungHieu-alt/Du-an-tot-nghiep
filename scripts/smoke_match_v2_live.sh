@@ -2,6 +2,8 @@
 set -euo pipefail
 
 API_BASE_URL="${API_BASE_URL:-http://localhost:8000}"
+EXPECTATIONS_PATH="${EXPECTATIONS_PATH:-backend/db_v2/scenarios/matching_v2_slice_6c_rank_expectations.json}"
+export GEMINI_API_KEY="${GEMINI_API_KEY:-dummy}"
 
 echo "[live-smoke] starting postgres, mongo, backend"
 docker compose up -d postgres mongo backend
@@ -23,8 +25,11 @@ import json
 import os
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
+expectations_path = Path(os.getenv("EXPECTATIONS_PATH", "backend/db_v2/scenarios/matching_v2_slice_6c_rank_expectations.json"))
+fixture = json.loads(expectations_path.read_text(encoding="utf-8"))
 
 required_response_fields = {
     "anchor_type",
@@ -64,8 +69,8 @@ score_fields = {
 }
 
 
-def post_json(path: str) -> dict:
-    payload = json.dumps({"top_k": 10, "min_score": 0.7}).encode("utf-8")
+def post_json(path: str, *, top_k: int, min_score: float) -> dict:
+    payload = json.dumps({"top_k": top_k, "min_score": min_score}).encode("utf-8")
     req = urllib.request.Request(
         f"{base_url}{path}",
         data=payload,
@@ -81,12 +86,22 @@ def post_json(path: str) -> dict:
         raise AssertionError(f"{path}: expected 200, got {exc.code}: {body}") from exc
 
 
-def assert_contract(data: dict, *, anchor_type: str, anchor_id: int) -> dict:
+def get_json(path: str) -> dict:
+    with urllib.request.urlopen(f"{base_url}{path}", timeout=20) as res:
+        assert res.status == 200, f"{path}: expected 200, got {res.status}"
+        return json.loads(res.read().decode("utf-8"))
+
+
+def assert_contract(data: dict, expectation: dict) -> dict:
+    anchor_type = expectation["anchor_type"]
+    anchor_id = expectation["anchor_id"]
     missing = required_response_fields - set(data)
     assert not missing, f"{anchor_type}: missing response fields {sorted(missing)}"
     assert data["anchor_type"] == anchor_type, data
     assert data["anchor_id"] == anchor_id, data
-    assert data["total_candidates"] == 5, data
+    assert data["total_candidates"] == (34 if anchor_type == "job" else 10), data
+    if "total_after_filter" in expectation:
+        assert data["total_after_filter"] == expectation["total_after_filter"], data
     assert data["total_after_filter"] >= 1, data
     assert data["total_returned"] >= 1, data
     for field in runtime_fields:
@@ -104,17 +119,56 @@ def assert_contract(data: dict, *, anchor_type: str, anchor_id: int) -> dict:
     return first
 
 
-job_response = post_json("/api/v2/prototype/matching/job/2003/run")
-job_top = assert_contract(job_response, anchor_type="job", anchor_id=2003)
-assert job_top["cv_id"] == 1003, job_response
-assert job_top["job_id"] == 2003, job_response
+def target_ids(data: dict, anchor_type: str) -> list[int]:
+    field = "cv_id" if anchor_type == "job" else "job_id"
+    return [match[field] for match in data["matches"]]
 
-cv_response = post_json("/api/v2/prototype/matching/cv/1003/run")
-cv_top = assert_contract(cv_response, anchor_type="cv", anchor_id=1003)
-assert cv_top["cv_id"] == 1003, cv_response
-assert cv_top["job_id"] == 2003, cv_response
+
+def assert_expectation(data: dict, expectation: dict) -> None:
+    ids = target_ids(data, expectation["anchor_type"])
+    assert ids[0] == expectation["expected_top_id"], (expectation["id"], ids)
+    for entity_id in expectation["must_include"]:
+        assert entity_id in ids, (expectation["id"], entity_id, ids)
+    for entity_id in expectation["must_exclude"]:
+        assert entity_id not in ids, (expectation["id"], entity_id, ids)
+    positions = {entity_id: idx for idx, entity_id in enumerate(ids)}
+    for higher, lower in expectation["must_rank_above"]:
+        assert positions[higher] < positions[lower], (expectation["id"], higher, lower, ids)
+
+
+schema = get_json("/openapi.json")
+expected_paths = set(fixture["v2_prototype_paths"])
+actual_v2_paths = {
+    path
+    for path in schema["paths"]
+    if path.startswith("/api/v2/prototype/matching/")
+}
+assert actual_v2_paths == expected_paths, actual_v2_paths
+
+job_expectation = next(
+    item for item in fixture["main_expectations"] if item["id"] == "job2006_devops_cert_ranking"
+)
+job_response = post_json(
+    f"/api/v2/prototype/matching/job/{job_expectation['anchor_id']}/run",
+    top_k=job_expectation["top_k"],
+    min_score=job_expectation["min_score"],
+)
+job_top = assert_contract(job_response, job_expectation)
+assert_expectation(job_response, job_expectation)
+
+cv_expectation = next(
+    item for item in fixture["cv_to_jd_expectations"] if item["id"] == "cv1006_devops_reverse_ranking"
+)
+cv_response = post_json(
+    f"/api/v2/prototype/matching/cv/{cv_expectation['anchor_id']}/run",
+    top_k=cv_expectation["top_k"],
+    min_score=cv_expectation["min_score"],
+)
+cv_top = assert_contract(cv_response, cv_expectation)
+assert_expectation(cv_response, cv_expectation)
 
 print("[live-smoke] JD -> CV top match:", json.dumps(job_top, sort_keys=True))
 print("[live-smoke] CV -> JD top match:", json.dumps(cv_top, sort_keys=True))
+print("[live-smoke] OpenAPI V2 paths:", json.dumps(sorted(actual_v2_paths)))
 print("[live-smoke] OK")
 PY
