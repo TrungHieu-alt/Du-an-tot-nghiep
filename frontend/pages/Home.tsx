@@ -1,15 +1,28 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Search, MapPin, ArrowRight, Code, PenTool, BarChart3, 
-  Megaphone, HeartHandshake, Coins, Bookmark, Briefcase, Users
+import {
+  Search, MapPin, ArrowRight, Code, PenTool, BarChart3,
+  Megaphone, HeartHandshake, Coins, Bookmark, Briefcase, Users, UserCircle
 } from 'lucide-react';
-import { Job, Company, Category, Testimonial } from '../types';
+import { Job, Company, Category, Testimonial, AnchorTypeV2 } from '../types';
 import { PageFindJobsButton, PageFindCandidatesButton } from '../components/PageActionButtons';
-import LocationSelect from '../components/LocationSelect';
+import V2LocationSelect from '../components/v2/V2LocationSelect';
+import type { V2LocationValue } from '../components/v2/V2LocationSelect';
 import { useModal } from '../contexts/ModalContext';
 import { useAuth } from '../contexts/AuthContext';
+
+// Persisted user preference: which side of the V2 search the home defaults to.
+const SEARCH_TYPE_LS_KEY = 'v2_search_type';
+
+const readPersistedSearchType = (): AnchorTypeV2 => {
+  try {
+    const v = localStorage.getItem(SEARCH_TYPE_LS_KEY);
+    return v === 'cv' ? 'cv' : 'job';
+  } catch {
+    return 'job';
+  }
+};
 
 // --- Mock Data ---
 
@@ -152,9 +165,19 @@ const Home: React.FC = () => {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  // Search State
+  // Search State — wired to V2 catalog search via /v2/search.
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchLocation, setSearchLocation] = useState('');
+  const [searchLocation, setSearchLocation] = useState<V2LocationValue>('');
+  const [searchType, setSearchType] = useState<AnchorTypeV2>(readPersistedSearchType);
+
+  // Persist tab choice so reloading Home keeps the user's preference.
+  useEffect(() => {
+    try {
+      localStorage.setItem(SEARCH_TYPE_LS_KEY, searchType);
+    } catch {
+      /* storage unavailable (private mode etc.) — ignore */
+    }
+  }, [searchType]);
 
   const handleJobsClick = () => {
     if (isAuthenticated) {
@@ -173,16 +196,19 @@ const Home: React.FC = () => {
   };
 
   const handleMainSearch = () => {
+    // Route every Home search into the V2 catalog search experience.
+    // - q & type are always set (type is also kept in localStorage above).
+    // - location only travels when searching jobs; the CV side intentionally
+    //   omits the location filter on Home to keep the layout simple.
     const params = new URLSearchParams();
-    if (searchQuery.trim()) params.append('q', searchQuery.trim());
-    if (searchLocation) params.append('location', searchLocation);
-    
-    // Default to manual search if coming from home without a CV selected
-    params.append('manual', 'true');
-    
+    if (searchQuery.trim()) params.set('q', searchQuery.trim());
+    params.set('type', searchType);
+    if (searchType === 'job' && searchLocation) {
+      params.set('location', searchLocation);
+    }
     navigate({
-      pathname: '/jobs',
-      search: params.toString()
+      pathname: '/v2/search',
+      search: params.toString(),
     });
   };
 
@@ -215,23 +241,64 @@ const Home: React.FC = () => {
             <PageFindCandidatesButton onClick={handleCandidatesClick} />
           </div>
 
+          {/* Search Type Toggle (Job / CV) */}
+          <div
+            role="tablist"
+            aria-label="Loại tìm kiếm"
+            className="inline-flex items-center gap-1 p-1 mb-3 rounded-full bg-white/15 backdrop-blur-sm"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={searchType === 'job'}
+              onClick={() => setSearchType('job')}
+              className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${
+                searchType === 'job'
+                  ? 'bg-white text-[#0A65CC] shadow-sm'
+                  : 'text-white/85 hover:text-white'
+              }`}
+            >
+              <Briefcase className="w-4 h-4" /> Tìm Job
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={searchType === 'cv'}
+              onClick={() => setSearchType('cv')}
+              className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${
+                searchType === 'cv'
+                  ? 'bg-white text-[#00B14F] shadow-sm'
+                  : 'text-white/85 hover:text-white'
+              }`}
+            >
+              <UserCircle className="w-4 h-4" /> Tìm CV
+            </button>
+          </div>
+
           {/* Search Bar - Floating */}
           <div className="bg-white p-2.5 rounded-2xl shadow-xl max-w-4xl mx-auto flex flex-col md:flex-row items-center gap-2">
             <div className="flex-1 w-full md:w-auto relative group px-2">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#0A65CC]" size={20} />
-              <input 
-                type="text" 
-                placeholder="Tên công việc, vị trí..." 
+              <input
+                type="text"
+                placeholder={
+                  searchType === 'job'
+                    ? 'Tên công việc, kỹ năng, level…'
+                    : 'Vị trí, kỹ năng ứng viên cần tìm…'
+                }
                 className="w-full pl-12 pr-4 py-3 bg-transparent text-gray-800 placeholder-gray-400 focus:outline-none text-[15px]"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
+                aria-label="Từ khóa tìm kiếm"
               />
             </div>
-            <div className="w-full md:w-1/3 relative px-2">
-              <LocationSelect value={searchLocation} onChange={setSearchLocation} />
-            </div>
-            <button 
+            {searchType === 'job' && (
+              <div className="w-full md:w-1/3 relative px-2">
+                <V2LocationSelect value={searchLocation} onChange={setSearchLocation} />
+              </div>
+            )}
+            <button
               onClick={handleMainSearch}
               className="w-full md:w-auto bg-[#2563EB] text-white px-8 py-3.5 rounded-xl font-semibold hover:bg-blue-700 transition whitespace-nowrap text-[15px] shadow-sm"
             >

@@ -375,3 +375,39 @@ export interface RunMatchingV2Response {
   runtime_ms_sort: number;
   matches: MatchItemV2[];
 }
+
+// ---- Catalog semantic search (pgvector-backed) ----
+//
+// Mirror of backend pydantic schemas in backend/schemas/v2_catalog_schema.py.
+// All filters are optional; passing an out-of-enum value yields 422 from BE.
+
+export interface CatalogSearchRequest {
+  /** 1..200 chars; trimmed-empty short-circuits to {items:[], total:0}. */
+  q: string;
+  /** 1..50, default 20 server-side. */
+  top_k?: number;
+  /** 0..1, default 0.3 server-side. */
+  blend_skills?: number;
+  location?: LocationV2;
+  job_type?: JobTypeV2;
+  seniority?: SeniorityV2;
+}
+
+export interface JobSearchItem extends JobV2ListItem {
+  /** Cosine-blend score, clamped to [0,1] by the backend. */
+  score: number;
+}
+
+export interface CVSearchItem extends CVV2ListItem {
+  score: number;
+}
+
+export interface JobSearchResponse {
+  items: JobSearchItem[];
+  total: number;
+}
+
+export interface CVSearchResponse {
+  items: CVSearchItem[];
+  total: number;
+}

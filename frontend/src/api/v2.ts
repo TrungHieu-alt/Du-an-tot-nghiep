@@ -11,8 +11,11 @@
 import api from '../../lib/api';
 import { apiRoutes } from '../../lib/api-routes';
 import type {
+  CatalogSearchRequest,
+  CVSearchResponse,
   CVV2Detail,
   CVV2ListResponse,
+  JobSearchResponse,
   JobV2Detail,
   JobV2ListResponse,
   RunMatchingV2Request,
@@ -53,6 +56,30 @@ export async function getV2Cv(cvId: number): Promise<CVV2Detail> {
 }
 
 // ---------------------------------------------------------------------------
+// Catalog semantic search (pgvector cosine, blended title + skills)
+// ---------------------------------------------------------------------------
+//
+// Backend short-circuits empty/whitespace `q` to {items:[],total:0} without
+// hitting Postgres. Filters (location/job_type/seniority) are applied in the
+// SQL CTE before scoring. Score is clamped to [0,1] server-side.
+
+export async function searchV2Jobs(
+  body: CatalogSearchRequest
+): Promise<JobSearchResponse> {
+  const url = apiRoutes.v2.catalog.searchJobs();
+  const response = await api.post<JobSearchResponse>(url, body);
+  return response.data;
+}
+
+export async function searchV2Cvs(
+  body: CatalogSearchRequest
+): Promise<CVSearchResponse> {
+  const url = apiRoutes.v2.catalog.searchCvs();
+  const response = await api.post<CVSearchResponse>(url, body);
+  return response.data;
+}
+
+// ---------------------------------------------------------------------------
 // Matching (run-only, synchronous)
 // ---------------------------------------------------------------------------
 
@@ -79,6 +106,8 @@ export const v2Api = {
   getV2Job,
   listV2Cvs,
   getV2Cv,
+  searchV2Jobs,
+  searchV2Cvs,
   runV2MatchForJob,
   runV2MatchForCv,
 };

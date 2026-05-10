@@ -16,7 +16,7 @@ Endpoints (prefix /v2/prototype/catalog):
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional  # noqa: F401  (used in type hints + helper signature)
 
 import psycopg
 from fastapi import APIRouter, Body, HTTPException, Query
@@ -243,7 +243,7 @@ def get_cv_v2(cv_id: int) -> CVV2Detail:
 # vectors and a non-negative blend, the score stays in [-1,1]; we clamp the
 # small negative tail to 0 for a clean UI percentage.
 
-_JOB_SEARCH_SQL = """
+_JOB_SEARCH_SQL_TEMPLATE = """
 WITH ranked AS (
     SELECT j.job_id,
            j.title,
@@ -258,6 +258,7 @@ WITH ranked AS (
     FROM job_posts_v2 j
     JOIN job_embeddings_v2 e USING (job_id)
     WHERE e.emb_title IS NOT NULL
+    {extra_where}
 )
 SELECT job_id, title, location, job_type, seniority, skills,
        (1 - %s) * sim_title + %s * sim_skills AS score
@@ -266,7 +267,7 @@ ORDER BY score DESC, job_id ASC
 LIMIT %s
 """
 
-_CV_SEARCH_SQL = """
+_CV_SEARCH_SQL_TEMPLATE = """
 WITH ranked AS (
     SELECT c.cv_id,
            c.title,
@@ -281,6 +282,7 @@ WITH ranked AS (
     FROM candidate_profiles_v2 c
     JOIN candidate_embeddings_v2 e USING (cv_id)
     WHERE e.emb_title IS NOT NULL
+    {extra_where}
 )
 SELECT cv_id, title, location, job_type, seniority, skills,
        (1 - %s) * sim_title + %s * sim_skills AS score
@@ -288,6 +290,41 @@ FROM ranked
 ORDER BY score DESC, cv_id ASC
 LIMIT %s
 """
+
+
+def _build_filter_clause(
+    alias: str,
+    location: Optional[str],
+    job_type: Optional[str],
+    seniority: Optional[str],
+) -> tuple[str, list[str]]:
+    """Build dynamic WHERE additions for catalog search filters.
+
+    Only `%s` placeholders are emitted — user input is never interpolated
+    into the SQL string. Values are returned in the same positional order
+    as the placeholders so the caller can splice them into the params tuple.
+
+    Args:
+        alias: Table alias used in the SELECT (`j` for jobs, `c` for cvs).
+        location, job_type, seniority: Optional enum values already validated
+            by Pydantic Literal at the schema layer.
+
+    Returns:
+        (extra_where, values): the SQL fragment (may be empty string) and
+        the corresponding list of bind values, in placeholder order.
+    """
+    parts: list[str] = []
+    values: list[str] = []
+    if location is not None:
+        parts.append(f"AND {alias}.location = %s")
+        values.append(location)
+    if job_type is not None:
+        parts.append(f"AND {alias}.job_type = %s")
+        values.append(job_type)
+    if seniority is not None:
+        parts.append(f"AND {alias}.seniority = %s")
+        values.append(seniority)
+    return (" ".join(parts), values)
 
 
 def _clamp_score(s: float) -> float:
@@ -314,10 +351,19 @@ def search_jobs_v2(
     blend = request.blend_skills
     top_k = request.top_k
 
+    extra_where, filter_values = _build_filter_clause(
+        alias="j",
+        location=request.location,
+        job_type=request.job_type,
+        seniority=request.seniority,
+    )
+    sql = _JOB_SEARCH_SQL_TEMPLATE.format(extra_where=extra_where)
+    params: tuple = (q_vec, q_vec, *filter_values, blend, blend, top_k)
+
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute(_JOB_SEARCH_SQL, (q_vec, q_vec, blend, blend, top_k))
+            cur.execute(sql, params)
             rows = cur.fetchall()
     except psycopg.Error as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -354,10 +400,19 @@ def search_cvs_v2(
     blend = request.blend_skills
     top_k = request.top_k
 
+    extra_where, filter_values = _build_filter_clause(
+        alias="c",
+        location=request.location,
+        job_type=request.job_type,
+        seniority=request.seniority,
+    )
+    sql = _CV_SEARCH_SQL_TEMPLATE.format(extra_where=extra_where)
+    params: tuple = (q_vec, q_vec, *filter_values, blend, blend, top_k)
+
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute(_CV_SEARCH_SQL, (q_vec, q_vec, blend, blend, top_k))
+            cur.execute(sql, params)
             rows = cur.fetchall()
     except psycopg.Error as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

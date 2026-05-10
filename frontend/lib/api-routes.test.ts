@@ -56,6 +56,20 @@ describe('apiRoutes', () => {
     });
   });
 
+  describe('v2 catalog search', () => {
+    it('searchJobs returns the canonical search endpoint', () => {
+      expect(apiRoutes.v2.catalog.searchJobs()).toBe(
+        '/v2/prototype/catalog/jobs/search'
+      );
+    });
+
+    it('searchCvs returns the canonical search endpoint', () => {
+      expect(apiRoutes.v2.catalog.searchCvs()).toBe(
+        '/v2/prototype/catalog/cvs/search'
+      );
+    });
+  });
+
   describe('v2 matching', () => {
     it('runForJob points to the prototype job endpoint', () => {
       expect(apiRoutes.v2.matching.runForJob(4001)).toBe(

@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Sparkles, Info, AlertCircle, FileSearch, Clock, Filter as FilterIcon } from 'lucide-react';
 import type {
   AnchorTypeV2,
@@ -90,13 +91,64 @@ const SENIORITY_ORDER: Record<string, number> = {
 };
 const formatSeniority = (s: string) => s.toUpperCase();
 
+// Strict URL param parsers — reject malformed deep-links rather than guess.
+const parseAnchorParam = (raw: string | null): AnchorTypeV2 | null =>
+  raw === 'job' || raw === 'cv' ? raw : null;
+
+const parseIdParam = (raw: string | null): number | null => {
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null;
+  return n;
+};
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
 const V2Matching: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [state, dispatch] = useReducer(reducer, initialState);
   const { anchorType, selectedId, topK, minScore, isRunning, result, runError } = state;
+
+  // ---------------- Deep-link: hydrate state from URL on mount ----------------
+  //
+  // Reads ?anchor=job|cv&id=<int>. Invalid combinations (missing/non-positive
+  // id, unknown anchor) are silently ignored — page falls back to default state.
+  // We dispatch only the deltas needed; SET_ANCHOR_TYPE clears selection so we
+  // run it BEFORE SELECT to avoid wiping a freshly hydrated id.
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+
+    const anchor = parseAnchorParam(searchParams.get('anchor'));
+    const id = parseIdParam(searchParams.get('id'));
+    if (anchor === null || id === null) return;
+
+    if (anchor !== state.anchorType) {
+      dispatch({ type: 'SET_ANCHOR_TYPE', payload: anchor });
+    }
+    dispatch({ type: 'SELECT', payload: id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---------------- State → URL sync ----------------
+  //
+  // After hydration, mirror anchorType/selectedId back into URL using replace
+  // (so the address bar stays canonical for share/bookmark, without polluting
+  // browser history). We compare strings to skip no-op writes that would
+  // otherwise re-render router consumers.
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('anchor', anchorType);
+    if (selectedId !== null) next.set('id', String(selectedId));
+    else next.delete('id');
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [anchorType, selectedId, searchParams, setSearchParams]);
 
   // Anchor detail (memoized fetch by selectedId+type)
   const [anchorDetail, setAnchorDetail] = useState<JobV2Detail | CVV2Detail | null>(null);

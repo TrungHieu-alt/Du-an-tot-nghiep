@@ -88,6 +88,8 @@ export const apiRoutes = {
       cvs: (params?: PaginationParams) =>
         `/v2/prototype/catalog/cvs${buildQueryString(params)}`,
       cvById: (cvId: number) => `/v2/prototype/catalog/cvs/${toPathId(cvId)}`,
+      searchJobs: () => '/v2/prototype/catalog/jobs/search',
+      searchCvs: () => '/v2/prototype/catalog/cvs/search',
     },
     matching: {
       runForJob: (jobId: number) => `/v2/prototype/matching/job/${toPathId(jobId)}/run`,

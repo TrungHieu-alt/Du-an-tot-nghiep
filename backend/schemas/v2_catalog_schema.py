@@ -7,7 +7,17 @@ does NOT import the ORM module to keep the matching_v2 scope-lock intact.
 
 from __future__ import annotations
 
+from typing import Literal, Optional
+
 from pydantic import BaseModel, Field
+
+# ---------------------------------------------------------------------------
+# Enum literal types (mirror CHECK constraints in db_v2/orm_models.py)
+# ---------------------------------------------------------------------------
+
+LocationV2 = Literal["ha_noi", "tp_hcm", "da_nang"]
+JobTypeV2 = Literal["remote", "fulltime", "parttime"]
+SeniorityV2 = Literal["intern", "fresher", "junior", "mid", "senior", "lead"]
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +102,11 @@ class CatalogSearchRequest(BaseModel):
     q: str = Field(min_length=1, max_length=200)
     top_k: int = Field(default=20, ge=1, le=50)
     blend_skills: float = Field(default=0.3, ge=0.0, le=1.0)
+    # Optional hard filters applied in SQL WHERE before scoring/ranking.
+    # Pydantic Literal validation rejects out-of-enum values with 422.
+    location: Optional[LocationV2] = None
+    job_type: Optional[JobTypeV2] = None
+    seniority: Optional[SeniorityV2] = None
 
 
 class JobSearchItem(JobV2ListItem):

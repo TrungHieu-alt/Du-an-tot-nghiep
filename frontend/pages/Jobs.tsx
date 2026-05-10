@@ -11,6 +11,7 @@ import api from '../lib/api';
 import { apiRoutes } from '../lib/api-routes';
 import { getCurrentUserId } from '../lib/auth-session';
 
+import V2DeprecatedV1Banner from '../components/v2/V2DeprecatedV1Banner';
 import SearchBar from '../components/search/SearchBar';
 import FiltersPanel from '../components/search/FiltersPanel';
 import SortAndViewControls from '../components/search/SortAndViewControls';
@@ -140,9 +141,13 @@ const Jobs: React.FC = () => {
   return (
     <div className="bg-[#F5F7FC] min-h-screen font-sans pb-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
+
+        {/* Deprecation banner — Home no longer routes here; this hint helps
+            users who arrived via stale bookmarks or the legacy Header buttons. */}
+        <V2DeprecatedV1Banner type="job" />
+
         {/* Top Search Bar */}
-        <SearchBar 
+        <SearchBar
           query={state.q}
           location={state.location}
           onQueryChange={handleQueryChange}

@@ -16,10 +16,14 @@ import {
   listV2Jobs,
   runV2MatchForCv,
   runV2MatchForJob,
+  searchV2Cvs,
+  searchV2Jobs,
 } from './v2';
 import type {
+  CVSearchResponse,
   CVV2Detail,
   CVV2ListResponse,
+  JobSearchResponse,
   JobV2Detail,
   JobV2ListResponse,
   RunMatchingV2Response,
@@ -201,6 +205,83 @@ describe('v2Api', () => {
         '/v2/prototype/matching/job/4001/run',
         {}
       );
+    });
+  });
+
+  describe('searchV2Jobs', () => {
+    it('POSTs to the search endpoint with the query body', async () => {
+      const payload: JobSearchResponse = {
+        items: [
+          {
+            job_id: 4001,
+            title: 'Senior Backend',
+            location: 'ha_noi',
+            job_type: 'remote',
+            seniority: 'senior',
+            skills: ['python'],
+            score: 0.83,
+          },
+        ],
+        total: 1,
+      };
+      mockedApi.post.mockResolvedValueOnce({ data: payload });
+
+      const body = { q: 'backend', top_k: 10 };
+      const result = await searchV2Jobs(body);
+
+      expect(mockedApi.post).toHaveBeenCalledWith(
+        '/v2/prototype/catalog/jobs/search',
+        body
+      );
+      expect(result).toEqual(payload);
+      expect(result.items[0].score).toBeCloseTo(0.83, 5);
+    });
+
+    it('forwards optional filters in the body', async () => {
+      mockedApi.post.mockResolvedValueOnce({ data: { items: [], total: 0 } });
+
+      const body = {
+        q: 'backend',
+        top_k: 5,
+        blend_skills: 0.4,
+        location: 'ha_noi' as const,
+        job_type: 'remote' as const,
+        seniority: 'senior' as const,
+      };
+      await searchV2Jobs(body);
+
+      expect(mockedApi.post).toHaveBeenCalledWith(
+        '/v2/prototype/catalog/jobs/search',
+        body
+      );
+    });
+  });
+
+  describe('searchV2Cvs', () => {
+    it('POSTs to the cv search endpoint with the query body', async () => {
+      const payload: CVSearchResponse = {
+        items: [
+          {
+            cv_id: 3001,
+            title: 'Senior Backend',
+            location: 'ha_noi',
+            job_type: 'remote',
+            seniority: 'senior',
+            skills: [],
+            score: 0.77,
+          },
+        ],
+        total: 1,
+      };
+      mockedApi.post.mockResolvedValueOnce({ data: payload });
+
+      const result = await searchV2Cvs({ q: 'python', seniority: 'senior' });
+
+      expect(mockedApi.post).toHaveBeenCalledWith(
+        '/v2/prototype/catalog/cvs/search',
+        { q: 'python', seniority: 'senior' }
+      );
+      expect(result).toEqual(payload);
     });
   });
 

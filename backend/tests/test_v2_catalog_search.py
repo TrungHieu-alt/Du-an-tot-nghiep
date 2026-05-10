@@ -240,6 +240,112 @@ class CatalogSearchTests(unittest.TestCase):
         self.assertEqual(res.json(), {"items": [], "total": 0})
         mock_conn.assert_not_called()
 
+    # ---------------- Filters ----------------
+
+    def test_search_jobs_with_location_filter(self):
+        conn, cur = _make_conn(responses=[[]])
+        with patch("routers.v2_catalog_router.get_connection", return_value=conn):
+            res = self.client.post(
+                "/api/v2/prototype/catalog/jobs/search",
+                json={"q": "backend", "location": "ha_noi"},
+            )
+        self.assertEqual(res.status_code, 200)
+        sql, params = cur.executed[0]
+        # SQL must contain alias-prefixed condition
+        self.assertIn("AND j.location = %s", sql)
+        # Params: (q_vec, q_vec, 'ha_noi', blend, blend, top_k)
+        self.assertEqual(len(params), 6)
+        self.assertEqual(params[2], "ha_noi")
+        self.assertAlmostEqual(params[3], 0.3, places=6)  # default blend
+        self.assertEqual(params[5], 20)                   # default top_k
+
+    def test_search_jobs_with_all_three_filters(self):
+        conn, cur = _make_conn(responses=[[]])
+        with patch("routers.v2_catalog_router.get_connection", return_value=conn):
+            res = self.client.post(
+                "/api/v2/prototype/catalog/jobs/search",
+                json={
+                    "q": "backend",
+                    "location": "ha_noi",
+                    "job_type": "remote",
+                    "seniority": "senior",
+                    "blend_skills": 0.4,
+                    "top_k": 10,
+                },
+            )
+        self.assertEqual(res.status_code, 200)
+        sql, params = cur.executed[0]
+        self.assertIn("AND j.location = %s", sql)
+        self.assertIn("AND j.job_type = %s", sql)
+        self.assertIn("AND j.seniority = %s", sql)
+        # Params order: q_vec, q_vec, location, job_type, seniority, blend, blend, top_k
+        self.assertEqual(len(params), 8)
+        self.assertEqual(params[2], "ha_noi")
+        self.assertEqual(params[3], "remote")
+        self.assertEqual(params[4], "senior")
+        self.assertAlmostEqual(params[5], 0.4, places=6)
+        self.assertAlmostEqual(params[6], 0.4, places=6)
+        self.assertEqual(params[7], 10)
+
+    def test_search_jobs_no_filters_emits_no_extra_where(self):
+        conn, cur = _make_conn(responses=[[]])
+        with patch("routers.v2_catalog_router.get_connection", return_value=conn):
+            res = self.client.post(
+                "/api/v2/prototype/catalog/jobs/search",
+                json={"q": "backend"},
+            )
+        self.assertEqual(res.status_code, 200)
+        sql, params = cur.executed[0]
+        self.assertNotIn("AND j.location", sql)
+        self.assertNotIn("AND j.job_type", sql)
+        self.assertNotIn("AND j.seniority", sql)
+        self.assertEqual(len(params), 5)  # unchanged from no-filter contract
+
+    def test_search_cvs_with_filters_uses_c_alias(self):
+        conn, cur = _make_conn(responses=[[]])
+        with patch("routers.v2_catalog_router.get_connection", return_value=conn):
+            res = self.client.post(
+                "/api/v2/prototype/catalog/cvs/search",
+                json={"q": "python", "seniority": "mid", "job_type": "fulltime"},
+            )
+        self.assertEqual(res.status_code, 200)
+        sql, params = cur.executed[0]
+        # CV table aliased as `c`, not `j`
+        self.assertIn("AND c.job_type = %s", sql)
+        self.assertIn("AND c.seniority = %s", sql)
+        self.assertNotIn(" j.location", sql)  # belt-and-braces
+        # Order matches helper: location absent → skipped; job_type before seniority
+        self.assertEqual(params[2], "fulltime")
+        self.assertEqual(params[3], "mid")
+
+    def test_invalid_location_enum_rejected(self):
+        res = self.client.post(
+            "/api/v2/prototype/catalog/jobs/search",
+            json={"q": "x", "location": "saigon"},
+        )
+        self.assertEqual(res.status_code, 422)
+
+    def test_invalid_job_type_enum_rejected(self):
+        res = self.client.post(
+            "/api/v2/prototype/catalog/jobs/search",
+            json={"q": "x", "job_type": "contract"},
+        )
+        self.assertEqual(res.status_code, 422)
+
+    def test_invalid_seniority_enum_rejected(self):
+        res = self.client.post(
+            "/api/v2/prototype/catalog/jobs/search",
+            json={"q": "x", "seniority": "principal"},
+        )
+        self.assertEqual(res.status_code, 422)
+
+    def test_cv_search_invalid_location_rejected(self):
+        res = self.client.post(
+            "/api/v2/prototype/catalog/cvs/search",
+            json={"q": "x", "location": "hanoi"},  # missing underscore
+        )
+        self.assertEqual(res.status_code, 422)
+
     # ---------------- OpenAPI ----------------
 
     def test_openapi_advertises_search_paths(self):

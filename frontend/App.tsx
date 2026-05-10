@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { MemoryRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import Home from './pages/Home';
@@ -13,6 +13,9 @@ import CandidateDetail from './pages/CandidateDetail';
 import CreateProfile from './pages/CreateProfile';
 import ProfilePage from './pages/ProfilePage';
 import V2Matching from './pages/V2Matching';
+import V2JobDetail from './pages/V2JobDetail';
+import V2CvDetail from './pages/V2CvDetail';
+import V2Search from './pages/V2Search';
 import { ModalProvider, useModal } from './contexts/ModalContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { ErrorToastProvider } from './contexts/ErrorToastContext';
@@ -109,6 +112,9 @@ const Layout: React.FC = () => {
           <Route path="/create-profile" element={<CreateProfile />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/v2/matching" element={<V2Matching />} />
+          <Route path="/v2/search" element={<V2Search />} />
+          <Route path="/v2/jobs/:id" element={<V2JobDetail />} />
+          <Route path="/v2/cvs/:id" element={<V2CvDetail />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
         </Routes>
