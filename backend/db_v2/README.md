@@ -9,6 +9,10 @@ Schema is the source of truth defined in `docs/REQUIREMENTS.md` §5.
 backend/db_v2/
 ├── migrations/001_init.sql   # 4 prototype tables + CHECK constraints + pgvector
 ├── seeds/001_seed.sql        # deterministic JD/CV rows + 384-dim embeddings
+├── scenarios/                # Slice 6B compact scenario JSON + schema
+├── scenario_embeddings.py    # deterministic local 384-dim embedding generator
+├── seed_scenario.py          # non-additive scenario seed
+├── validate_scenario_dataset.py
 └── reset.py                  # reset + migrate + seed in one command
 ```
 
@@ -34,8 +38,7 @@ python backend/db_v2/reset.py
 
 This drops the `public` schema, re-applies every SQL file in
 `migrations/` (lexical order), then every SQL file in `seeds/` (lexical order).
-The seed is deterministic and currently inserts 5 CV rows, 5 JD rows, and their
-384-dimensional pgvector embeddings.
+The default `base` profile preserves the historical SQL seed path.
 
 If you prefer to run the command inside the backend container, start the backend
 service first and use the compose-network PostgreSQL host:
@@ -43,6 +46,38 @@ service first and use the compose-network PostgreSQL host:
 ```bash
 docker compose up -d postgres mongo backend
 docker compose exec backend python db_v2/reset.py
+```
+
+## Slice 6B scenario reset and seed
+
+Use the `scenario` profile for the compact Matching V2 scenario dataset:
+
+```bash
+docker compose up -d postgres mongo backend
+docker compose exec backend python db_v2/reset.py --profile scenario
+docker compose exec backend python db_v2/validate_scenario_dataset.py --db
+```
+
+The scenario profile is non-additive. It drops and recreates the schema, applies
+the V2 migration, validates `scenarios/matching_v2_slice_6b.json`, generates
+deterministic local embeddings, and inserts only:
+
+| Table | Expected count |
+|---|---:|
+| `job_posts_v2` | 6 |
+| `candidate_profiles_v2` | 36 |
+| `job_embeddings_v2` | 6 |
+| `candidate_embeddings_v2` | 35 |
+
+CV `3018` intentionally has no row in `candidate_embeddings_v2` to exercise the
+missing embedding-row behavior. Matching still returns the hard-filter pass with
+semantic components defaulted to `0` and missing-embedding reasoning.
+
+To validate the scenario JSON and deterministic embedding workflow without a
+database connection:
+
+```bash
+python backend/db_v2/validate_scenario_dataset.py
 ```
 
 ## Connection settings
@@ -67,7 +102,9 @@ docker compose exec postgres psql -U jobmatcher -d jobmatcher_v2 -c "
   UNION ALL SELECT 'job_embeddings_v2',       COUNT(*) FROM job_embeddings_v2;"
 ```
 
-Expected after seed: 5 rows in each table.
+Expected after the default SQL seed path: use the current SQL files under
+`seeds/`. Expected after the Slice 6B scenario profile: 6 JD, 36 CV, 6 job
+embedding rows, and 35 candidate embedding rows.
 
 ## Read-only verification (DoD guard)
 

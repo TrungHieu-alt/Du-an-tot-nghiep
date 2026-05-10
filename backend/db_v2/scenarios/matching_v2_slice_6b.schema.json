@@ -1,0 +1,338 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "matching_v2_slice_6b.schema.json",
+  "title": "Matching V2 Slice 6B Scenario Dataset",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "name",
+    "broad_dataset_deferred",
+    "partial_embedding_case",
+    "jobs",
+    "candidates",
+    "scenario_groups",
+    "expectations",
+    "coverage"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "matching-v2-slice-6b-v1"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "broad_dataset_deferred": {
+      "const": true
+    },
+    "partial_embedding_case": {
+      "type": "object",
+      "required": ["cv_id", "field", "mode", "reason"],
+      "properties": {
+        "cv_id": {
+          "type": "integer"
+        },
+        "field": {
+          "enum": ["emb_title", "emb_skills", "emb_summary", "emb_experience", "candidate_embedding_row"]
+        },
+        "mode": {
+          "enum": ["null", "missing_row"]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "jobs": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "$ref": "#/$defs/job"
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 36,
+      "maxItems": 36,
+      "items": {
+        "$ref": "#/$defs/candidate"
+      }
+    },
+    "scenario_groups": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "$ref": "#/$defs/scenario_group"
+      }
+    },
+    "expectations": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "$ref": "#/$defs/expectation"
+      }
+    },
+    "coverage": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "location": {
+      "enum": ["ha_noi", "tp_hcm", "da_nang"]
+    },
+    "job_type": {
+      "enum": ["remote", "fulltime", "parttime"]
+    },
+    "seniority": {
+      "enum": ["intern", "fresher", "junior", "mid", "senior", "lead"]
+    },
+    "education": {
+      "enum": ["lop_9", "lop_12", "dai_hoc", "thac_si", "tien_si"]
+    },
+    "string_array": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "job": {
+      "type": "object",
+      "required": [
+        "job_id",
+        "scenario_id",
+        "title",
+        "skills",
+        "requirement",
+        "location",
+        "job_type",
+        "seniority",
+        "education",
+        "required_certifications"
+      ],
+      "properties": {
+        "job_id": {
+          "type": "integer"
+        },
+        "scenario_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "skills": {
+          "$ref": "#/$defs/string_array"
+        },
+        "requirement": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "job_type": {
+          "$ref": "#/$defs/job_type"
+        },
+        "seniority": {
+          "$ref": "#/$defs/seniority"
+        },
+        "education": {
+          "$ref": "#/$defs/education"
+        },
+        "required_certifications": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "required": [
+        "cv_id",
+        "designed_for_job_id",
+        "scenario_role",
+        "purpose",
+        "title",
+        "skills",
+        "summary",
+        "experience",
+        "location",
+        "job_type",
+        "seniority",
+        "education",
+        "certifications",
+        "expected_hard_filter"
+      ],
+      "properties": {
+        "cv_id": {
+          "type": "integer"
+        },
+        "designed_for_job_id": {
+          "type": "integer"
+        },
+        "scenario_role": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1
+        },
+        "normalization_case": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "skills": {
+          "$ref": "#/$defs/string_array"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "experience": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "job_type": {
+          "$ref": "#/$defs/job_type"
+        },
+        "seniority": {
+          "$ref": "#/$defs/seniority"
+        },
+        "education": {
+          "$ref": "#/$defs/education"
+        },
+        "certifications": {
+          "$ref": "#/$defs/string_array"
+        },
+        "expected_hard_filter": {
+          "enum": ["pass", "fail"]
+        },
+        "expected_fail_reason": {
+          "type": "string"
+        },
+        "expected_ranking_note": {
+          "type": "string"
+        }
+      }
+    },
+    "scenario_group": {
+      "type": "object",
+      "required": [
+        "job_id",
+        "label",
+        "designed_cv_ids",
+        "expected_hard_filter_pass",
+        "expected_hard_filter_fail",
+        "expected_rank_order"
+      ],
+      "properties": {
+        "job_id": {
+          "type": "integer"
+        },
+        "label": {
+          "type": "string"
+        },
+        "designed_cv_ids": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "expected_hard_filter_pass": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "expected_hard_filter_fail": {
+          "type": "object"
+        },
+        "expected_rank_order": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "expected_tie_pair": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "expectation": {
+      "type": "object",
+      "required": ["id", "anchor_type", "anchor_id", "top_k", "min_score"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "anchor_type": {
+          "enum": ["job", "cv"]
+        },
+        "anchor_id": {
+          "type": "integer"
+        },
+        "top_k": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "min_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "expected_top_id": {
+          "type": "integer"
+        },
+        "total_after_filter": {
+          "type": "integer"
+        },
+        "total_after_filter_min": {
+          "type": "integer"
+        },
+        "total_returned": {
+          "type": "integer"
+        },
+        "must_include": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "must_exclude": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "must_exclude_reason": {
+          "type": "object"
+        },
+        "must_rank_above": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "integer"
+            }
+          }
+        },
+        "must_have_missing_embedding": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

@@ -13,6 +13,7 @@ POSTGRES_DB.
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -22,6 +23,10 @@ import psycopg
 DB_V2_DIR = Path(__file__).resolve().parent
 MIGRATIONS_DIR = DB_V2_DIR / "migrations"
 SEEDS_DIR = DB_V2_DIR / "seeds"
+BACKEND_DIR = DB_V2_DIR.parent
+
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 
 def _conninfo() -> str:
@@ -48,6 +53,15 @@ def _apply_sql_files(cur: psycopg.Cursor, directory: Path, label: str) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--profile",
+        choices=("base", "scenario"),
+        default=os.getenv("DB_V2_SEED_PROFILE", "base"),
+        help="Seed profile after migration. base applies SQL seeds; scenario applies Slice 6B JSON seed.",
+    )
+    args = parser.parse_args()
+
     conninfo = _conninfo()
     print(f"[reset] connecting: {conninfo}")
     with psycopg.connect(conninfo, autocommit=False) as conn:
@@ -56,9 +70,15 @@ def main() -> int:
             cur.execute("DROP SCHEMA IF EXISTS public CASCADE;")
             cur.execute("CREATE SCHEMA public;")
             _apply_sql_files(cur, MIGRATIONS_DIR, "migrate")
-            _apply_sql_files(cur, SEEDS_DIR, "seed")
+            if args.profile == "base":
+                _apply_sql_files(cur, SEEDS_DIR, "seed")
+            else:
+                from db_v2.seed_scenario import seed_scenario
+
+                print("[seed] applying scenario profile matching_v2_slice_6b.json")
+                seed_scenario(conn)
         conn.commit()
-    print("[reset] done")
+    print(f"[reset] done profile={args.profile}")
     return 0
 
 
