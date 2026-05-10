@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Matching V2 Scenario Dataset",
+  "type": "object",
+  "required": ["jobs", "candidates"],
+  "additionalProperties": false,
+  "properties": {
+    "jobs": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/job" }
+    },
+    "candidates": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/candidate" }
+    }
+  },
+  "definitions": {
+    "location_enum": {
+      "type": "string",
+      "enum": ["ha_noi", "tp_hcm", "da_nang"]
+    },
+    "job_type_enum": {
+      "type": "string",
+      "enum": ["remote", "fulltime", "parttime"]
+    },
+    "seniority_enum": {
+      "type": "string",
+      "enum": ["intern", "fresher", "junior", "mid", "senior", "lead"]
+    },
+    "education_enum": {
+      "type": "string",
+      "enum": ["lop_9", "lop_12", "dai_hoc", "thac_si", "tien_si"]
+    },
+    "job": {
+      "type": "object",
+      "required": [
+        "job_id", "title", "skills", "requirement",
+        "location", "job_type", "seniority", "education",
+        "required_certifications"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "job_id":                  { "type": "integer" },
+        "title":                   { "type": "string", "minLength": 1 },
+        "skills":                  { "type": "array", "items": { "type": "string" } },
+        "requirement":             { "type": "string", "minLength": 1 },
+        "location":                { "$ref": "#/definitions/location_enum" },
+        "job_type":                { "$ref": "#/definitions/job_type_enum" },
+        "seniority":               { "$ref": "#/definitions/seniority_enum" },
+        "education":               { "$ref": "#/definitions/education_enum" },
+        "required_certifications": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "required": [
+        "cv_id", "jd_group", "role",
+        "title", "skills", "summary", "experience",
+        "location", "job_type", "seniority", "education",
+        "certifications", "has_embedding"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "cv_id":         { "type": "integer" },
+        "jd_group":      { "type": "integer" },
+        "role":          { "type": "string" },
+        "title":         { "type": "string", "minLength": 1 },
+        "skills":        { "type": "array", "items": { "type": "string" } },
+        "summary":       { "type": "string" },
+        "experience":    { "type": "string" },
+        "location":      { "$ref": "#/definitions/location_enum" },
+        "job_type":      { "$ref": "#/definitions/job_type_enum" },
+        "seniority":     { "$ref": "#/definitions/seniority_enum" },
+        "education":     { "$ref": "#/definitions/education_enum" },
+        "certifications":{ "type": "array", "items": { "type": "string" } },
+        "has_embedding": { "type": "boolean" }
+      }
+    }
+  }
+}
