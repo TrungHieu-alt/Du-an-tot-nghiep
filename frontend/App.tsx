@@ -12,6 +12,7 @@ import Candidates from './pages/Candidates';
 import CandidateDetail from './pages/CandidateDetail';
 import CreateProfile from './pages/CreateProfile';
 import ProfilePage from './pages/ProfilePage';
+import V2Matching from './pages/V2Matching';
 import { ModalProvider, useModal } from './contexts/ModalContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { ErrorToastProvider } from './contexts/ErrorToastContext';
@@ -107,6 +108,7 @@ const Layout: React.FC = () => {
           <Route path="/candidates/:id" element={<CandidateDetail />} />
           <Route path="/create-profile" element={<CreateProfile />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/v2/matching" element={<V2Matching />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
         </Routes>

@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Briefcase, LogOut, User as UserIcon, ChevronDown, Settings, FileText } from 'lucide-react';
+import { Briefcase, LogOut, User as UserIcon, ChevronDown, Settings, FileText, Sparkles } from 'lucide-react';
 import { HeaderFindJobsBtn, HeaderFindCandidatesBtn } from './HeaderButtonsAdapter';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -56,6 +56,16 @@ const Header: React.FC = () => {
               
               <Link to="/" className="text-gray-600 hover:text-[#0A65CC] font-medium transition-colors text-sm">Công ty</Link>
               <Link to="/" className="text-gray-600 hover:text-[#0A65CC] font-medium transition-colors text-sm">Blog</Link>
+              <Link
+                to="/v2/matching"
+                className="flex items-center gap-1.5 text-gray-600 hover:text-[#0A65CC] font-medium transition-colors text-sm"
+              >
+                <Sparkles className="w-4 h-4 text-[#0A65CC]" />
+                V2 Matching
+                <span className="ml-1 inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide rounded-full bg-amber-100 text-amber-700">
+                  beta
+                </span>
+              </Link>
             </div>
           </nav>
 

@@ -1,0 +1,84 @@
+/**
+ * V2 prototype API client.
+ *
+ * Wraps the axios instance from `lib/api.ts` (baseURL already includes `/api`)
+ * for the v2 catalog + matching endpoints. Returned shapes are exact mirrors
+ * of the backend pydantic schemas in:
+ *   - backend/schemas/v2_catalog_schema.py
+ *   - backend/schemas/match_v2_schema.py
+ */
+
+import api from '../../lib/api';
+import { apiRoutes } from '../../lib/api-routes';
+import type {
+  CVV2Detail,
+  CVV2ListResponse,
+  JobV2Detail,
+  JobV2ListResponse,
+  RunMatchingV2Request,
+  RunMatchingV2Response,
+} from '../../types';
+
+export interface ListV2Params {
+  limit?: number;
+  offset?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Catalog
+// ---------------------------------------------------------------------------
+
+export async function listV2Jobs(params?: ListV2Params): Promise<JobV2ListResponse> {
+  const url = apiRoutes.v2.catalog.jobs(params);
+  const response = await api.get<JobV2ListResponse>(url);
+  return response.data;
+}
+
+export async function getV2Job(jobId: number): Promise<JobV2Detail> {
+  const url = apiRoutes.v2.catalog.jobById(jobId);
+  const response = await api.get<JobV2Detail>(url);
+  return response.data;
+}
+
+export async function listV2Cvs(params?: ListV2Params): Promise<CVV2ListResponse> {
+  const url = apiRoutes.v2.catalog.cvs(params);
+  const response = await api.get<CVV2ListResponse>(url);
+  return response.data;
+}
+
+export async function getV2Cv(cvId: number): Promise<CVV2Detail> {
+  const url = apiRoutes.v2.catalog.cvById(cvId);
+  const response = await api.get<CVV2Detail>(url);
+  return response.data;
+}
+
+// ---------------------------------------------------------------------------
+// Matching (run-only, synchronous)
+// ---------------------------------------------------------------------------
+
+export async function runV2MatchForJob(
+  jobId: number,
+  body: RunMatchingV2Request = {}
+): Promise<RunMatchingV2Response> {
+  const url = apiRoutes.v2.matching.runForJob(jobId);
+  const response = await api.post<RunMatchingV2Response>(url, body);
+  return response.data;
+}
+
+export async function runV2MatchForCv(
+  cvId: number,
+  body: RunMatchingV2Request = {}
+): Promise<RunMatchingV2Response> {
+  const url = apiRoutes.v2.matching.runForCv(cvId);
+  const response = await api.post<RunMatchingV2Response>(url, body);
+  return response.data;
+}
+
+export const v2Api = {
+  listV2Jobs,
+  getV2Job,
+  listV2Cvs,
+  getV2Cv,
+  runV2MatchForJob,
+  runV2MatchForCv,
+};
