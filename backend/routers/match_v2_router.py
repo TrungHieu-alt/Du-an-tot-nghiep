@@ -16,6 +16,13 @@ router = APIRouter(prefix="/v2/prototype/matching", tags=["matching-v2-prototype
     "/job/{job_id}/run",
     response_model=RunMatchingV2Response,
     responses={404: {"model": ErrorDetailResponse}},
+    summary="Run matching for a job anchor",
+    description=(
+        "Anchor a `job_id` from `job_posts_v2` and rank candidate CVs by "
+        "blended cosine similarity (title + skills) with a hard filter on "
+        "location / job_type / seniority. Synchronous; no persistence. "
+        "Returns at most `top_k` matches (capped at 10) above `min_score`."
+    ),
 )
 def run_matching_v2_for_job(
     job_id: int,
@@ -48,6 +55,12 @@ def run_matching_v2_for_job(
     "/cv/{cv_id}/run",
     response_model=RunMatchingV2Response,
     responses={404: {"model": ErrorDetailResponse}},
+    summary="Run matching for a CV anchor",
+    description=(
+        "Mirror of the job endpoint: anchor a `cv_id` from "
+        "`candidate_profiles_v2` and rank job posts. Same scoring blend, "
+        "same synchronous semantics, same `top_k`/`min_score` constraints."
+    ),
 )
 def run_matching_v2_for_cv(
     cv_id: int,

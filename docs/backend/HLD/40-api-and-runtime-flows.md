@@ -9,6 +9,26 @@ Namespace: `/api/v2/prototype/matching`
 
 GET/DELETE persisted match endpoints are outside run-only prototype scope.
 
+## Catalog Helper Surface
+
+Namespace: `/api/v2/prototype/catalog`
+
+Added to let the frontend browse, look up, and semantically search the V2 prototype dataset before invoking a `run`. All endpoints are **read-only** and therefore preserve the run-only constraint of the matching surface.
+
+Browse (paginated, ordered by id ASC):
+- `GET /jobs?limit=&offset=`
+- `GET /cvs?limit=&offset=`
+
+Detail (404 when id missing):
+- `GET /jobs/{job_id}`
+- `GET /cvs/{cv_id}`
+
+Semantic search (pgvector cosine, blended `title` + `skills`):
+- `POST /jobs/search`
+- `POST /cvs/search`
+
+Body for search: `{q (1..200), top_k (1..50, default 20), blend_skills (0..1, default 0.3), location?, job_type?, seniority?}`. Empty/whitespace `q` short-circuits to `{items:[],total:0}` without touching the database. Embedder reused from `backend/v2_search/embedder.py` — the same hash-based 384-d algorithm that seeded the stored embeddings, so query vectors are cosine-comparable.
+
 ## Run Flow
 
 1. Validate request (`top_k`, `min_score`).

@@ -199,3 +199,29 @@ Prototype run-only cần dữ liệu JD/CV và embeddings trong PostgreSQL. Khô
 
 Prototype run-only không còn open question blocking implementation. Later-phase questions nếu cần sẽ mở lại trong file:
 - `docs/backend/HLD/90-matching-v2-open-questions.md`
+
+---
+
+## Addendum A — Catalog Helper Surface (post-spec extension)
+
+Phạm vi spec gốc (mục 1–9) **không đổi**. Phần này ghi lại một bổ sung **read-only** đã được thêm sau khi spec gốc đóng băng, mục đích để frontend có thể duyệt và tìm kiếm dataset V2 trước khi gọi `run`. Bổ sung này **không vi phạm** các invariant của spec gốc (run-only, no persistence, no LLM, 4-table scope-lock).
+
+### Endpoints thêm vào (`/api/v2/prototype/catalog`)
+- `GET /jobs`, `GET /cvs` — paginated browse (`limit`, `offset`), order by id ASC.
+- `GET /jobs/{job_id}`, `GET /cvs/{cv_id}` — single record, 404 khi không tồn tại.
+- `POST /jobs/search`, `POST /cvs/search` — pgvector cosine semantic search; body `{q, top_k≤50, blend_skills∈[0,1], location?, job_type?, seniority?}`.
+
+### Tại sao không vi phạm scope gốc
+- Không có endpoint nào ghi vào DB.
+- Không tạo thêm bảng (vẫn 4 bảng: `job_posts_v2`, `candidate_profiles_v2`, `job_embeddings_v2`, `candidate_embeddings_v2`).
+- Không gọi LLM runtime; embedder hash-based deterministic dùng cho query là chính module đã sinh ra embeddings lưu trữ (`backend/v2_search/embedder.py` → `db_v2/scenario/embedder.py`). Cosine giữa query vector và stored vector valid về mặt toán học.
+- Search blend formula: `score = (1 - blend_skills) * cos(emb_title, q_vec) + blend_skills * cos(emb_skills, q_vec)`, clamp `[0, 1]`. Không phải `final_score` của FR3 và không persist.
+
+### Filter contract
+Filter `location/job_type/seniority` áp dụng trong SQL CTE WHERE trước khi scoring, dùng cùng enum cứng đã định nghĩa ở mục 3 (`ha_noi/tp_hcm/da_nang`, `remote/fulltime/parttime`, `intern/fresher/junior/mid/senior/lead`). Pydantic Literal reject 422 nếu sai enum.
+
+### Out-of-scope addendum
+- KHÔNG có ingestion / parse / upload (giống spec gốc).
+- KHÔNG persist search results.
+- KHÔNG có "save anchor to catalog" — anchor chỉ qua `POST /run` với ID có sẵn.
+- KHÔNG thay đổi formula `final_score` của matching (mục FR3).

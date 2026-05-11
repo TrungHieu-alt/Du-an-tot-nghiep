@@ -672,6 +672,77 @@ Persisted match query/delete endpoints are outside the run-only prototype scope.
 }
 ```
 
+## Catalog V2 Prototype (`/api/v2/prototype/catalog`)
+
+Read-only helpers added to support the frontend V2 search & detail pages. They do not violate the run-only scope of the matching surface — no writes, no persistence.
+
+### `GET /api/v2/prototype/catalog/jobs`
+- Query params: `limit (int, 1..200, default 50)`, `offset (int, >=0, default 0)`
+- Success `200`: `JobV2ListResponse` — `{items: JobV2ListItem[], total: int}`
+- Errors: `422` on invalid pagination
+
+### `GET /api/v2/prototype/catalog/jobs/{job_id}`
+- Path params: `job_id: int`
+- Success `200`: `JobV2Detail`
+- Errors: `404 {"detail":"job not found"}`
+
+### `GET /api/v2/prototype/catalog/cvs`
+- Query params: same as `/jobs`
+- Success `200`: `CVV2ListResponse`
+
+### `GET /api/v2/prototype/catalog/cvs/{cv_id}`
+- Path params: `cv_id: int`
+- Success `200`: `CVV2Detail`
+- Errors: `404 {"detail":"cv not found"}`
+
+### `POST /api/v2/prototype/catalog/jobs/search`
+- Request body: `CatalogSearchRequest`
+- Success `200`: `JobSearchResponse` — `{items: JobSearchItem[], total: int}`
+- Errors: `422` on out-of-range fields or unknown enum values; `500` on DB error
+- Behavior: trimmed-empty `q` short-circuits to `{items:[],total:0}` without DB call. SQL CTE joins `job_posts_v2` with `job_embeddings_v2`, requires `emb_title IS NOT NULL`, blends `(1 - blend_skills) * cos(emb_title, q_vec) + blend_skills * cos(emb_skills, q_vec)`. Optional filters appended to the CTE WHERE.
+
+### `POST /api/v2/prototype/catalog/cvs/search`
+- Mirror of `/jobs/search` against `candidate_profiles_v2 + candidate_embeddings_v2`.
+- Success `200`: `CVSearchResponse`.
+
+### Catalog V2 schemas
+
+`CatalogSearchRequest`:
+```json
+{
+  "q": "backend devops",
+  "top_k": 20,
+  "blend_skills": 0.3,
+  "location": "ha_noi",
+  "job_type": "remote",
+  "seniority": "senior"
+}
+```
+- `q`: string, 1..200 chars
+- `top_k`: int, 1..50
+- `blend_skills`: float, 0..1
+- `location`: optional, one of `{ha_noi, tp_hcm, da_nang}`
+- `job_type`: optional, one of `{remote, fulltime, parttime}`
+- `seniority`: optional, one of `{intern, fresher, junior, mid, senior, lead}`
+
+`JobV2ListItem`:
+```json
+{
+  "job_id": 4001,
+  "title": "Senior Backend DevOps Engineer",
+  "location": "ha_noi",
+  "job_type": "remote",
+  "seniority": "senior",
+  "skills": ["python", "docker", "kubernetes"]
+}
+```
+
+`JobV2Detail` extends the list item with `requirement: str`, `education: str`, `required_certifications: list[str]`.
+
+`CVV2ListItem` mirrors `JobV2ListItem` with `cv_id` instead of `job_id`. `CVV2Detail` adds `summary`, `experience`, `education`, `certifications`.
+
+`JobSearchItem` / `CVSearchItem` extend the list shapes with `score: float (clamped to [0,1])`. Response wrappers `JobSearchResponse` / `CVSearchResponse` are `{items, total}` with `total = len(items)` (post-`top_k`).
+
 ## Applications (`/api/applications`)
 
 ### `POST /api/applications/`

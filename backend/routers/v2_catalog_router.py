@@ -69,6 +69,12 @@ def _as_list(pg_array: Optional[list]) -> list[str]:
 @router.get(
     "/jobs",
     response_model=JobV2ListResponse,
+    summary="List jobs (paginated browse)",
+    description=(
+        "Paginated catalog of `job_posts_v2`. Ordered by `job_id` ASC. "
+        "Use this to populate browse UIs; for keyword queries prefer "
+        "`POST /jobs/search` which runs pgvector cosine ranking."
+    ),
 )
 def list_jobs_v2(
     limit: int = Query(default=50, ge=1, le=200),
@@ -112,6 +118,11 @@ def list_jobs_v2(
     "/jobs/{job_id}",
     response_model=JobV2Detail,
     responses={404: {"model": CatalogErrorResponse}},
+    summary="Get a single job",
+    description=(
+        "Return the full row for `job_id`. Returns 404 when the id is "
+        "not present in `job_posts_v2`."
+    ),
 )
 def get_job_v2(job_id: int) -> JobV2Detail:
     conn = get_connection()
@@ -150,6 +161,11 @@ def get_job_v2(job_id: int) -> JobV2Detail:
 @router.get(
     "/cvs",
     response_model=CVV2ListResponse,
+    summary="List CVs (paginated browse)",
+    description=(
+        "Paginated catalog of `candidate_profiles_v2`. Ordered by `cv_id` "
+        "ASC. Symmetric to `GET /jobs`."
+    ),
 )
 def list_cvs_v2(
     limit: int = Query(default=50, ge=1, le=200),
@@ -193,6 +209,11 @@ def list_cvs_v2(
     "/cvs/{cv_id}",
     response_model=CVV2Detail,
     responses={404: {"model": CatalogErrorResponse}},
+    summary="Get a single CV",
+    description=(
+        "Return the full row for `cv_id`. Returns 404 when the id is "
+        "not present in `candidate_profiles_v2`."
+    ),
 )
 def get_cv_v2(cv_id: int) -> CVV2Detail:
     conn = get_connection()
@@ -338,6 +359,15 @@ def _clamp_score(s: float) -> float:
 @router.post(
     "/jobs/search",
     response_model=JobSearchResponse,
+    summary="Semantic search jobs (pgvector blend)",
+    description=(
+        "Embed the query via the hash-based 384-d embedder, then rank "
+        "`job_posts_v2` by `(1 - blend_skills) * cos(emb_title, q) + "
+        "blend_skills * cos(emb_skills, q)`. Optional hard filters "
+        "(`location`, `job_type`, `seniority`) are applied in SQL before "
+        "scoring. Empty/whitespace `q` short-circuits to `{items:[],total:0}` "
+        "without touching the DB. Score is clamped to [0,1]."
+    ),
 )
 def search_jobs_v2(
     request: CatalogSearchRequest = Body(...),
@@ -388,6 +418,12 @@ def search_jobs_v2(
 @router.post(
     "/cvs/search",
     response_model=CVSearchResponse,
+    summary="Semantic search CVs (pgvector blend)",
+    description=(
+        "Mirror of `POST /jobs/search` against `candidate_profiles_v2` + "
+        "`candidate_embeddings_v2`. Same blend formula, same filter set, "
+        "same short-circuit on empty query."
+    ),
 )
 def search_cvs_v2(
     request: CatalogSearchRequest = Body(...),

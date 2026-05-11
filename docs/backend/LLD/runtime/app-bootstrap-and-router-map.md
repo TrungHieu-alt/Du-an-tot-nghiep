@@ -35,6 +35,8 @@ All below are mounted under `/api`:
 - `cv_router` -> `/cv`
 - `application_router` -> `/applications`
 - `match_router` -> `/matching`
+- `match_v2_router` -> `/v2/prototype/matching` (V2 prototype, run-only)
+- `v2_catalog_router` -> `/v2/prototype/catalog` (V2 prototype, read-only catalog + semantic search)
 - `system_router` -> no local prefix, exposes `/health`
 
 ## Endpoint Count by Router
@@ -44,8 +46,12 @@ All below are mounted under `/api`:
 - jobs: 10
 - cv: 10
 - applications: 5
-- matching: 6
+- matching: 10
+- matching-v2-prototype: 2
+- catalog-v2-prototype: 6
 - system: 1
+
+Reference: `GET /openapi.json` is the canonical source of truth; counts above are kept synchronized with the live FastAPI schema. The root endpoint `GET /` is tagged `root` and is intentionally outside `/api`.
 
 ## Layer Invocation Pattern
 For most flows, call chain is:

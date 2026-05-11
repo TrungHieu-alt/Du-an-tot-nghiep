@@ -141,3 +141,32 @@ Use backend contracts directly (preferred for immediate integration):
 - `MATCHED`: frontend request paths now target canonical backend families (`/users`, `/candidate`, `/cv`, `/jobs`, `/matching`, `/applications`) through shared route builders.
 - `PARTIAL`: response-shape adapters still exist in UI mapping layers because backend payloads differ from historical UI models.
 - `MISSING`: unsupported features remain intentionally disabled in UI (`change-password`, avatar upload persistence, parse-bdf endpoint, chatbot network ask endpoint).
+
+## V2 Prototype Integration (May 2026)
+
+Independent of the V1 comparison above. The frontend has been extended with a parallel V2 surface that lives under `/v2/*` routes and consumes the Postgres-backed prototype API. The V1 mock pages (`/jobs`, `/candidates`) remain functional and show a deprecation banner pointing at the V2 search.
+
+### Frontend route map (V2)
+
+| Frontend route | Backend endpoint(s) | Status |
+| --- | --- | --- |
+| `pages/Home.tsx` form submit | `/api/v2/prototype/catalog/{jobs\|cvs}/search` (POST) | MATCHED — Home redirects all searches into `/v2/search?q=&type=` |
+| `pages/V2Search.tsx` | `/api/v2/prototype/catalog/{jobs\|cvs}/search` (POST) | MATCHED — sticky filter bar + score-threshold collapse |
+| `pages/V2JobDetail.tsx`, `pages/V2CvDetail.tsx` | `/api/v2/prototype/catalog/{jobs\|cvs}/{id}` (GET) | MATCHED — handles 404 separately from generic error |
+| `pages/V2Matching.tsx` | `/api/v2/prototype/matching/{job\|cv}/{id}/run` (POST) | MATCHED — supports deep-link via `?anchor=&id=` |
+| `components/v2/V2AnchorList.tsx` | List endpoints + search endpoints | MATCHED — browses paginated list when `q` is empty, switches to BE semantic search with 300 ms debounce when `q` is non-empty |
+
+### Client surface
+
+- Type definitions: `frontend/types.ts` — `CatalogSearchRequest`, `JobSearchItem`/`CVSearchItem`, `JobSearchResponse`/`CVSearchResponse`, plus enum literals `LocationV2/JobTypeV2/SeniorityV2/EducationV2/AnchorTypeV2`.
+- URL builders: `frontend/lib/api-routes.ts::apiRoutes.v2.{catalog,matching}.*`.
+- API wrappers: `frontend/src/api/v2.ts` — `listV2Jobs/getV2Job/searchV2Jobs/runV2MatchForJob` and CV mirrors.
+- Routing mode: `App.tsx` uses `BrowserRouter` (switched from `MemoryRouter` so deep-links are bookmarkable).
+
+### V2 ID contract
+
+V2 entities use integer primary keys (`job_id`, `cv_id`) from PostgreSQL BigInt. They are **not** interchangeable with Mongo `_id` strings used elsewhere in this matrix. Any future bridge will need an explicit mapping table.
+
+### Out of scope here
+- Track B (upload-and-match) is not yet implemented in the frontend; when added it will produce a new section in this document.
+- Auth gating for V2 is intentionally absent in the current prototype; the surface is open.

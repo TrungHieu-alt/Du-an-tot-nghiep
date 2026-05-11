@@ -17,10 +17,11 @@ Dự án gồm backend + frontend để quản lý hồ sơ ứng viên, bài đ
 
 ## Kiến trúc hệ thống
 - **Backend**: FastAPI cung cấp API CRUD và matching.
-- **Database**: MongoDB lưu user, CV, JD, match results.
-- **Vector store**: ChromaDB lưu embeddings phục vụ truy hồi.
-- **AI/RAG**: Gemini parse và đánh giá, SentenceTransformer tạo embeddings.
-- **Frontend**: React + Vite + Tailwind + Radix UI.
+- **Database (V1 production)**: MongoDB lưu user, CV, JD, match results.
+- **Vector store (V1 production)**: ChromaDB lưu embeddings phục vụ truy hồi.
+- **AI/RAG (V1 production)**: Gemini parse và đánh giá, SentenceTransformer tạo embeddings.
+- **V2 prototype**: PostgreSQL + pgvector (port 5433) — 4 bảng scope-locked (`job_posts_v2`, `candidate_profiles_v2`, `job_embeddings_v2`, `candidate_embeddings_v2`), embedder hash-based deterministic, không LLM ở runtime. Xem `docs/REQUIREMENTS.md` + `docs/agent-rules/codemap.md` mục 5A.
+- **Frontend**: React + Vite + Tailwind + Radix UI. V2 pages tại `/v2/search`, `/v2/jobs/:id`, `/v2/cvs/:id`, `/v2/matching`; xem `frontend/README.md`.
 
 ## High-Level System Diagram
 ![Overview](asset/overview.png)
@@ -124,10 +125,21 @@ Frontend UI  --->  Backend API  --->  MongoDB (CRUD)
 - **MatchResult**: cv_id, job_id, score, metadata, timestamps.
 
 ## API chính
+
+### V1 production (Mongo + Chroma + Gemini)
 - `POST /api/matching/job/{job_id}/run`
 - `POST /api/matching/cv/{cv_id}/run`
 - `GET /api/matching/job/{job_id}/matches`
 - `GET /api/matching/cv/{cv_id}/matches`
+
+### V2 prototype (Postgres + pgvector)
+- `POST /api/v2/prototype/matching/job/{job_id}/run` — run-only sync matching
+- `POST /api/v2/prototype/matching/cv/{cv_id}/run`
+- `GET /api/v2/prototype/catalog/{jobs,cvs}` — paginated browse
+- `GET /api/v2/prototype/catalog/{jobs,cvs}/{id}` — single record
+- `POST /api/v2/prototype/catalog/{jobs,cvs}/search` — pgvector semantic search với filter `location/job_type/seniority`
+
+Swagger UI: `http://localhost:8000/docs`. Schema: `GET /openapi.json`. Curl examples: `frontend/apiExamples.md`.
 
 ## Công nghệ chính
 - Backend: FastAPI, Uvicorn, MongoDB (Beanie/Motor).

@@ -49,7 +49,7 @@ Legacy/current production matching path. Do not use this workflow for Matching V
 - `backend/models/matchResult.py`
 
 ## 5A) Matching V2 Prototype Workflow (Run-Only PostgreSQL + pgvector)
-Use this workflow for `/api/v2/prototype/matching/*` and Slice 6 work.
+Use this workflow for `/api/v2/prototype/{matching,catalog}/*` and Slice 6 work.
 
 Primary docs:
 - `docs/REQUIREMENTS.md`
@@ -66,6 +66,8 @@ Runtime boundary:
 Expected code areas vary by slice:
 - DB/schema/seed tooling: `backend/db_v2/*` and related tests.
 - V2 API/runtime: V2 prototype matching router/service/runner modules if present in `backend/`.
+- V2 catalog router (read-only helpers used by frontend): `backend/routers/v2_catalog_router.py` + `backend/schemas/v2_catalog_schema.py`.
+- V2 search runtime helpers: `backend/v2_search/*` (`embed_query`, `vector_to_pg_literal`). Uses same hash-based 384-d embedder as the seed data, so query vectors are cosine-comparable with stored embeddings.
 - OpenAPI contract checks: FastAPI generated `/openapi.json`.
 
 Out of scope for V2 run-only prototype unless the task says otherwise:
