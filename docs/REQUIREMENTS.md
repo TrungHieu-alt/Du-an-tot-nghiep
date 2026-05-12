@@ -25,7 +25,7 @@ Out of scope:
 - Persist/query/delete match result.
 - Benchmark kết luận quality bằng Precision/Recall/NDCG.
 - Auth/role guard riêng cho route prototype.
-- Compare old-vs-v2 hoặc deprecate route matching cũ.
+- So sánh với các pipeline ngoài V2.
 
 ## 3. Functional Requirements
 
@@ -166,7 +166,7 @@ Prototype run-only cần dữ liệu JD/CV và embeddings trong PostgreSQL. Khô
 
 - Cho phép drop/reset toàn bộ database prototype.
 - Team có thể seed/insert dữ liệu trực tiếp vào PostgreSQL.
-- Không yêu cầu tương thích dữ liệu legacy production.
+- Không yêu cầu tương thích dữ liệu ngoài 4 bảng PostgreSQL V2.
 - Seed data chỉ dùng demo/sanity, không dùng để kết luận quality.
 
 ## 8. Acceptance Criteria
@@ -192,7 +192,7 @@ Prototype run-only cần dữ liệu JD/CV và embeddings trong PostgreSQL. Khô
 - Tie-break deterministic: sort theo `final_score desc`, sau đó theo deterministic ID asc (`cv_id asc` cho JD -> CV, `job_id asc` cho CV -> JD).
 - pgvector/index prototype: không tạo `hnsw`/`ivfflat` index bắt buộc; dùng exhaustive scoring trên seed/test dataset. Chỉ benchmark/index tuning ở later phase.
 - Data lifecycle prototype: không persist run result, không TTL, không shadow-run table, không backfill policy.
-- API compatibility prototype: chỉ thêm namespace mới `/api/v2/prototype/matching`; không đụng route cũ, không compare old-vs-v2, không deprecate route cũ.
+- API compatibility prototype: repository hiện chỉ giữ namespace V2; không duy trì endpoint ngoài `/api/v2/prototype/*` cho matching/catalog.
 - Schema drift: không thêm persisted result fields/tables nếu `docs/REQUIREMENTS.md` chưa đổi scope.
 
 ## 10. Open Questions
@@ -206,10 +206,10 @@ Prototype run-only không còn open question blocking implementation. Later-phas
 
 Phạm vi spec gốc (mục 1–9) **không đổi**. Phần này ghi lại một bổ sung **read-only** đã được thêm sau khi spec gốc đóng băng, mục đích để frontend có thể duyệt và tìm kiếm dataset V2 trước khi gọi `run`. Bổ sung này **không vi phạm** các invariant của spec gốc (run-only, no persistence, no LLM, 4-table scope-lock).
 
-### Endpoints thêm vào (`/api/v2/prototype/catalog`)
-- `GET /jobs`, `GET /cvs` — paginated browse (`limit`, `offset`), order by id ASC.
-- `GET /jobs/{job_id}`, `GET /cvs/{cv_id}` — single record, 404 khi không tồn tại.
-- `POST /jobs/search`, `POST /cvs/search` — pgvector cosine semantic search; body `{q, top_k≤50, blend_skills∈[0,1], location?, job_type?, seniority?}`.
+### Endpoints thêm vào
+- `GET /api/v2/prototype/catalog/jobs`, `GET /api/v2/prototype/catalog/cvs` — paginated browse (`limit`, `offset`), order by id ASC.
+- `GET /api/v2/prototype/catalog/jobs/{job_id}`, `GET /api/v2/prototype/catalog/cvs/{cv_id}` — single record, 404 khi không tồn tại.
+- `POST /api/v2/prototype/catalog/jobs/search`, `POST /api/v2/prototype/catalog/cvs/search` — pgvector cosine semantic search; body `{q, top_k≤50, blend_skills∈[0,1], location?, job_type?, seniority?}`.
 
 ### Tại sao không vi phạm scope gốc
 - Không có endpoint nào ghi vào DB.

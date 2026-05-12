@@ -10,7 +10,7 @@ router = APIRouter(tags=["system"])
         "Lightweight liveness check used by the docker-compose healthcheck "
         "and by clients to verify connectivity. Returns `{\"status\":\"ok\"}` "
         "as long as the FastAPI process can serve requests. Does NOT verify "
-        "downstream dependencies (Mongo, Postgres)."
+        "downstream PostgreSQL connectivity."
     ),
 )
 async def health_check():

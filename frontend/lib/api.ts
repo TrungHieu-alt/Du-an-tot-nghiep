@@ -1,6 +1,5 @@
 
 import axios from 'axios';
-import { getStoredAccessToken } from './auth-session';
 import { ENV } from '../src/config/env';
 import { reportApiError } from './api-error';
 
@@ -19,14 +18,6 @@ const api = axios.create({
     'Content-Type': 'application/json',
     Accept: 'application/json',
   },
-});
-
-api.interceptors.request.use((config) => {
-  const token = getStoredAccessToken();
-  if (token && config.headers) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
 });
 
 api.interceptors.response.use(

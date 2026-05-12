@@ -33,11 +33,11 @@ Purpose: task router and required procedures by task type. Intake/output format 
   4. Document migration/compat fallback if needed.
 
 ## D) Matching or AI Pipeline Change
-- Use for parse logic, embedding logic, retrieval, rerank weights, LLM evaluation, or hybrid scoring changes.
+- Use for embedding logic, retrieval, hard filters, rerank weights, or scoring changes.
 - Procedure:
   1. Specify changed stage(s) and expected ranking impact.
   2. Keep scoring formulas explicit and versionable in notes.
-  3. Run smoke checks for ingest and matching endpoints.
+  3. Run smoke checks for seeded reads and matching endpoints.
   4. Provide representative scenario evidence (input -> top results trend).
 
 ## E) Frontend Wiring Support

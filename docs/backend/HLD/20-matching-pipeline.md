@@ -55,4 +55,4 @@ Mỗi run trả:
 - Persist/query/delete match results.
 - Benchmark quality bằng labeled set.
 - Auth/role guard riêng cho route prototype.
-- Compare old-vs-v2 hoặc deprecate route cũ.
+- Compare with pipelines outside the V2 prototype.

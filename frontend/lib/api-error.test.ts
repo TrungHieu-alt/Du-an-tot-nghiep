@@ -12,13 +12,13 @@ describe('api-error', () => {
     const normalized = normalizeApiError('Request failed', {
       source: 'fetch',
       statusCode: 422,
-      payload: { detail: 'Email đã tồn tại' },
-      endpoint: '/users/register',
+      payload: { detail: 'Invalid top_k' },
+      endpoint: '/v2/prototype/matching/job/2001/run',
       method: 'POST',
     });
 
-    expect(normalized.backendDetail).toBe('Email đã tồn tại');
-    expect(normalized.displayMessage).toBe('Email đã tồn tại');
+    expect(normalized.backendDetail).toBe('Invalid top_k');
+    expect(normalized.displayMessage).toBe('Invalid top_k');
     expect(normalized.statusCode).toBe(422);
   });
 
@@ -59,14 +59,14 @@ describe('api-error', () => {
       context: {
         source: 'fetch',
         statusCode: 422,
-        endpoint: '/users/register',
+        endpoint: '/v2/prototype/matching/job/2001/run',
         method: 'POST',
-        payload: { detail: 'Email đã tồn tại' },
+        payload: { detail: 'Invalid top_k' },
       },
     });
 
     expect(consoleSpy).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith({ message: 'Email đã tồn tại' });
+    expect(listener).toHaveBeenCalledWith({ message: 'Invalid top_k' });
     unsubscribe();
   });
 
@@ -79,7 +79,7 @@ describe('api-error', () => {
       context: {
         source: 'fetch',
         statusCode: 422,
-        payload: { detail: 'Email đã tồn tại' },
+        payload: { detail: 'Invalid top_k' },
       },
     });
 

@@ -1,18 +1,4 @@
 services:
-  mongo:
-    image: mongo:7
-    container_name: jobmatcher-mongo
-    ports:
-      - "27018:27017"
-    volumes:
-      - mongo_data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-
   postgres:
     image: pgvector/pgvector:pg16
     container_name: jobmatcher-postgres
@@ -43,22 +29,14 @@ services:
     env_file:
       - .env
     environment:
-      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017}
-      DB_NAME: ${DB_NAME:-job_matching}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      MASTODON_API_BASE_URL: ${MASTODON_API_BASE_URL:-}
-      MASTODON_ACCESS_TOKEN: ${MASTODON_ACCESS_TOKEN:-}
-      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
-      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
       POSTGRES_USER: ${POSTGRES_USER:-jobmatcher}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jobmatcher}
       POSTGRES_DB: ${POSTGRES_DB:-jobmatcher_v2}
     volumes:
       - ./backend:/app/backend
     depends_on:
-      mongo:
-        condition: service_healthy
       postgres:
         condition: service_healthy
     healthcheck:
@@ -97,5 +75,4 @@ services:
 
 volumes:
   frontend_node_modules:
-  mongo_data:
   postgres_data:

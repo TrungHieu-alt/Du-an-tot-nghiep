@@ -47,7 +47,7 @@ If you prefer to run the command inside the backend container, start the backend
 service first and use the compose-network PostgreSQL host:
 
 ```bash
-docker compose up -d postgres mongo backend
+docker compose up -d postgres backend
 docker compose exec backend python db_v2/reset.py
 ```
 
@@ -56,7 +56,7 @@ docker compose exec backend python db_v2/reset.py
 Use the `scenario` profile for the compact Matching V2 scenario dataset:
 
 ```bash
-docker compose up -d postgres mongo backend
+docker compose up -d postgres backend
 docker compose exec backend python db_v2/reset.py --profile scenario
 docker compose exec backend python db_v2/validate_scenario_dataset.py --db
 ```
@@ -137,7 +137,7 @@ python backend/db_v2/verify.py
 Start the API with Docker Compose:
 
 ```bash
-docker compose up -d postgres mongo backend
+docker compose up -d postgres backend
 ```
 
 The backend listens on `http://localhost:8000`. OpenAPI is available at:
@@ -148,9 +148,9 @@ curl "http://localhost:8000/openapi.json"
 
 ## Live DB integration smoke
 
-Use this as the Slice 6C live-stack evidence path. It starts `postgres`,
-`mongo`, and `backend`, resets and seeds PostgreSQL from scratch through the
-default broad SQL seed path, waits for OpenAPI, then calls both run-only
+Use this as the Slice 6C live-stack evidence path. It starts `postgres` and
+`backend`, resets and seeds PostgreSQL from scratch through the default broad
+SQL seed path, waits for OpenAPI, then calls both run-only
 endpoints against the real backend:
 
 ```bash
@@ -244,5 +244,4 @@ reasoning are expected to stay deterministic.
 - No benchmark or labeled quality metrics.
 - No ANN tuning requirement (`hnsw`/`ivfflat` are out of scope).
 - No LLM scoring or LLM reasoning.
-- No dedicated auth for this prototype unless already present in the project.
-- No legacy Chroma/RAG matching dependency in the V2 prototype path.
+- No dedicated auth for this prototype.

@@ -1,5 +1,5 @@
 {
-  "schema_version": "matching-v2-slice-6c-rank-expectations-v1",
+  "schema_version": "matching-v2-slice-6c-rank-expectations-v2",
   "name": "Matching V2 Slice 6C broad ranking expectations",
   "dataset_profile": "base",
   "seed_files": [

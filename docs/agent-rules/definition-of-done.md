@@ -16,7 +16,7 @@ A task is done only if every required item below is satisfied.
   - Example: verify `/docs` and `/openapi.json` respond successfully.
 - Run key endpoint smoke calls for impacted flows.
   - Minimum for API work: one success case + one validation/error case.
-  - Minimum for matching work: one ingest path + one match retrieval path.
+  - Minimum for matching work: one seeded/read path + one match run path.
 - Capture exact commands and outcomes in handoff notes.
 
 Response-only exception (see canonical rule in `AGENTS.md`):

@@ -6,7 +6,7 @@ This file is the mandatory entrypoint for all coding agents and contributors in 
 1. System and developer instructions from the active runtime.
 2. This `AGENTS.md`.
 3. Documents under `docs/agent-rules/`.
-4. Existing inline code comments and legacy docs.
+4. Existing inline code comments and historical docs.
 
 If rules conflict, follow the higher-priority source and record the conflict in the handoff note.
 
@@ -183,16 +183,15 @@ Use this exact section structure in every completion handoff.
 * **Backend**: Postgres + pgvector at port 5433, 4 tables only (`job_posts_v2`,
   `candidate_profiles_v2`, `job_embeddings_v2`, `candidate_embeddings_v2`).
   Routers: `routers/match_v2_router.py` (run-only matching) and
-  `routers/v2_catalog_router.py` (browse + detail + semantic search).
+  `routers/v2_catalog_router.py` (browse + detail + semantic search), plus
+  `routers/system_router.py` for health.
   Embedder: `backend/v2_search/embedder.py` (hash-based, deterministic, pure
   numpy — same algorithm seeded the stored embeddings).
-* **Frontend** (`frontend/`): home search bar redirects to `/v2/search`. Pages:
-  `V2Search`, `V2JobDetail`, `V2CvDetail`, `V2Matching` (deep-link via
-  `?anchor=&id=`). Legacy `/jobs` and `/candidates` v1 mock pages remain
-  reachable via Header buttons; both display a deprecation banner pointing at
-  `/v2/search`.
+* **Frontend** (`frontend/`): v2-only routes. `/` redirects to `/v2/search`.
+  Pages: `V2Search`, `V2JobDetail`, `V2CvDetail`, `V2Matching` (deep-link via
+  `?anchor=&id=`).
 * **IDs are integers**: V2 entities use BigInt primary keys (`job_id`,
-  `cv_id`); they do **not** map 1:1 with Mongo v1 ObjectId strings.
+  `cv_id`).
 * **Data is NOT auto-loaded** by `docker compose up`. Postgres starts empty.
   Seed once via `docker exec jobmatcher-backend python db_v2/seed_orm.py` or
   `psql -f backend/db_v2/seeds/<file>.sql`. Volume `postgres_data` persists

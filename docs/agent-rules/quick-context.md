@@ -23,7 +23,7 @@ Purpose: concise system reality snapshot for V2 target documentation.
 ## Current Constraints
 - Seniority uses exact-match prototype taxonomy from `docs/REQUIREMENTS.md`.
 - Skills normalization is lowercase + trim + unique; no synonym dictionary in run-only prototype.
-- Vector index tuning (`hnsw`/`ivfflat`), benchmark, persistence, auth changes, and old-vs-v2 comparison are outside current scope.
+- Vector index tuning (`hnsw`/`ivfflat`), benchmark, persistence, auth changes, and comparisons with non-V2 pipelines are outside current scope.
 
 ## Update Rule
 Update this file when V2 matching architecture or constraints change.

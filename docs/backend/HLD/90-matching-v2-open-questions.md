@@ -4,4 +4,4 @@ Scope hiện tại: prototype run-only để nhập `job_id` hoặc `cv_id` và 
 
 Không còn open question blocking implementation cho scope này. Các quyết định mặc định nằm trong `docs/REQUIREMENTS.md`.
 
-Không dùng file này để giữ câu hỏi later-phase về persistence, benchmark, auth, compare old-vs-v2, deprecate route cũ, hoặc pgvector index tuning cho đến khi scope được mở lại.
+Không dùng file này để giữ câu hỏi later-phase về persistence, benchmark, auth, so sánh với pipeline ngoài V2, hoặc pgvector index tuning cho đến khi scope được mở lại.

@@ -6,9 +6,8 @@ import { LOCATION_OPTIONS, formatLocationV2 } from './v2-format';
 /**
  * V2 location dropdown — typed, enum-only.
  *
- * Mirrors the visual UX of components/LocationSelect.tsx (the v1 component)
- * but emits LocationV2 enum slugs instead of free-form strings, so callers
- * can pass the value straight to V2 search/match endpoints.
+ * Emits LocationV2 enum slugs instead of free-form strings, so callers can
+ * pass the value straight to V2 search/match endpoints.
  *
  * Empty value `''` represents "no filter / all locations".
  */
