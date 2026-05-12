@@ -33,10 +33,11 @@ const renderCard = (props: React.ComponentProps<typeof V2SearchResultCard>) =>
   );
 
 describe('V2SearchResultCard', () => {
-  it('renders job card with rounded score and Vietnamese chip labels', () => {
+  it('renders job card with Vietnamese chip labels and no score percentage', () => {
     renderCard({ item: jobItem, type: 'job' });
     expect(screen.getByText(jobItem.title)).toBeInTheDocument();
-    expect(screen.getByText('83%')).toBeInTheDocument();
+    expect(screen.queryByText('83%')).not.toBeInTheDocument();
+    expect(screen.queryByText(/match/i)).not.toBeInTheDocument();
     expect(screen.getByText('Hà Nội')).toBeInTheDocument();
     expect(screen.getByText('Remote')).toBeInTheDocument();
     expect(screen.getByText('Senior')).toBeInTheDocument();
@@ -66,13 +67,6 @@ describe('V2SearchResultCard', () => {
     renderCard({ item: cvItem, type: 'cv', lowScore: true });
     const link = screen.getByRole('link');
     expect(link.className).toContain('opacity-70');
-  });
-
-  it('clamps score >1 and <0 to [0,100]', () => {
-    renderCard({ item: { ...jobItem, score: 1.5 }, type: 'job' });
-    expect(screen.getByText('100%')).toBeInTheDocument();
-
-    renderCard({ item: { ...cvItem, score: -0.2 }, type: 'cv' });
-    expect(screen.getByText('0%')).toBeInTheDocument();
+    expect(screen.queryByText('%')).not.toBeInTheDocument();
   });
 });

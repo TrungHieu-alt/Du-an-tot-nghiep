@@ -2,8 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { apiRoutes } from './api-routes';
 
 describe('apiRoutes', () => {
-  it('exposes only system and v2 route builders', () => {
-    expect(Object.keys(apiRoutes).sort()).toEqual(['system', 'v2']);
+  it('exposes only auth, system and v2 route builders', () => {
+    expect(Object.keys(apiRoutes).sort()).toEqual(['auth', 'system', 'v2']);
+  });
+
+  describe('auth', () => {
+    it('returns canonical auth endpoints', () => {
+      expect(apiRoutes.auth.register()).toBe('/auth/register');
+      expect(apiRoutes.auth.login()).toBe('/auth/login');
+      expect(apiRoutes.auth.me()).toBe('/auth/me');
+    });
   });
 
   describe('v2 catalog', () => {

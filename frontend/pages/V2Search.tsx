@@ -409,7 +409,7 @@ const ResultsList: React.FC<ResultsListProps> = ({
             >
               <span>
                 Xem thêm <strong className="text-gray-900">{lowScore.length}</strong> kết quả
-                ít liên quan (score &lt; 20%)
+                ít liên quan
               </span>
               {showLowScore ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>

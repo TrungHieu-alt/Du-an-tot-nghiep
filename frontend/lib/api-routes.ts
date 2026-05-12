@@ -21,6 +21,11 @@ const buildQueryString = (params?: PaginationParams): string => {
 };
 
 export const apiRoutes = {
+  auth: {
+    register: () => '/auth/register',
+    login: () => '/auth/login',
+    me: () => '/auth/me',
+  },
   system: {
     health: () => '/health',
     openapi: () => '/openapi.json',

@@ -1,13 +1,15 @@
 # Matching V2 Prototype — Database (Run-Only)
 
 Run-only PostgreSQL + pgvector workspace for the Matching V2 prototype.
-Schema is the source of truth defined in `docs/REQUIREMENTS.md` §5.
+Schema is the source of truth defined in `docs/REQUIREMENTS.md` §5, with an
+additive `users` table for the auth surface.
 
 ## Layout
 
 ```
 backend/db_v2/
-├── migrations/001_init.sql   # 4 prototype tables + CHECK constraints + pgvector
+├── migrations/001_init.sql   # 4 prototype matching tables + CHECK constraints + pgvector
+├── migrations/002_auth_users.sql # auth users table
 ├── seeds/001_seed.sql        # deterministic JD/CV rows + 384-dim embeddings
 ├── seeds/002_extra_test_data.sql
 ├── seeds/003_broad_ranking_test_data.sql
@@ -19,9 +21,10 @@ backend/db_v2/
 └── reset.py                  # reset + migrate + seed in one command
 ```
 
-There are exactly **four** tables: `candidate_profiles_v2`, `job_posts_v2`,
-`candidate_embeddings_v2`, `job_embeddings_v2`. There is **no** `match_results_v2`
-table — the prototype is run-only.
+Matching data still lives in exactly **four** tables: `candidate_profiles_v2`,
+`job_posts_v2`, `candidate_embeddings_v2`, `job_embeddings_v2`. Auth data lives
+separately in `users`. There is **no** `match_results_v2` table — the matching
+prototype is run-only.
 
 ## Start the database
 
@@ -39,9 +42,9 @@ Run the reset script from the repo root after `postgres` is healthy:
 python backend/db_v2/reset.py
 ```
 
-This drops the `public` schema, re-applies every SQL file in
-`migrations/` (lexical order), then every SQL file in `seeds/` (lexical order).
-The default `base` profile preserves the historical SQL seed path.
+This drops the `public` schema, re-applies every SQL file in `migrations/`
+(lexical order), then every SQL file in `seeds/` (lexical order). The default
+`base` profile preserves the historical SQL seed path and leaves `users` empty.
 
 If you prefer to run the command inside the backend container, start the backend
 service first and use the compose-network PostgreSQL host:
@@ -114,6 +117,7 @@ Expected after the default SQL seed path: use the current SQL files under
 | `candidate_profiles_v2` | 34 |
 | `job_embeddings_v2` | 10 |
 | `candidate_embeddings_v2` | 33 |
+| `users` | 0 |
 
 The default SQL seed path is the Slice 6C broad ranking verification dataset.
 It contains 10 representative JD anchors (`2001..2010`) and deterministic
@@ -244,4 +248,5 @@ reasoning are expected to stay deterministic.
 - No benchmark or labeled quality metrics.
 - No ANN tuning requirement (`hnsw`/`ivfflat` are out of scope).
 - No LLM scoring or LLM reasoning.
-- No dedicated auth for this prototype.
+- Auth exists as an additive app surface; no dedicated auth guard is applied to
+  Matching V2 endpoints yet.

@@ -13,11 +13,33 @@ canonical in `AGENTS.md`.
 - `backend/main.py`
   - FastAPI app creation.
   - CORS configuration.
-  - Router mounting under `/api`.
+  - Auth, system, catalog, and matching router mounting under `/api`.
 - Router layer:
+  - `backend/routers/auth.py`
   - `backend/routers/match_v2_router.py`
   - `backend/routers/v2_catalog_router.py`
   - `backend/routers/system_router.py`
+
+## 1A) Authentication Workflow
+
+Use this workflow for `/api/auth/*`.
+
+Runtime boundary:
+
+- PostgreSQL `users` table is the source of truth for auth accounts.
+- Passwords are stored only as hashes.
+- JWT access tokens identify the current user.
+- Role values are stored for later authorization but current Matching V2 routes
+  are not role-guarded.
+
+Expected code areas:
+
+- `backend/routers/auth.py`
+- `backend/db_v2/migrations/*auth*.sql`
+- `frontend/src/services/authApi.ts`
+- `frontend/contexts/AuthContext.tsx`
+- `frontend/pages/Login.tsx`
+- `frontend/pages/Register.tsx`
 
 ## 2) Matching V2 Prototype Workflow (Run-Only PostgreSQL + pgvector)
 

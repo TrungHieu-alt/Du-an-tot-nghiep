@@ -2,6 +2,12 @@
 
 ## API Surface
 
+Auth:
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+
+Matching:
 - `POST /api/v2/prototype/matching/job/{job_id}/run`
 - `POST /api/v2/prototype/matching/cv/{cv_id}/run`
 
@@ -36,6 +42,13 @@ Body for search: `{q (1..200), top_k (1..50, default 20), blend_skills (0..1, de
 7. Sort by `final_score desc`, then deterministic ID asc.
 8. Return top-k result with `rank`, score breakdown, reasoning, and runtime metrics.
 
+## Auth Flow
+
+Registration validates email/password/role, hashes the password, and writes one
+row to `users`. Login verifies the password hash and returns a JWT bearer token
+plus user details. `/api/auth/me` validates the bearer token and reloads the
+current user from PostgreSQL.
+
 ## Runtime Metrics in Response
 
 - `runtime_ms_total`
@@ -46,4 +59,4 @@ Body for search: `{q (1..200), top_k (1..50, default 20), blend_skills (0..1, de
 ## Contract Notes
 
 - Prototype is evaluation-only and does not depend on ingestion pipeline. Test data is inserted directly into PostgreSQL; extract/parse flows are excluded.
-- Run-only prototype does not persist results, does not add auth/role guard changes, and does not compare against other pipelines.
+- Run-only prototype does not persist results, does not add matching auth/role guard changes, and does not compare against other pipelines.

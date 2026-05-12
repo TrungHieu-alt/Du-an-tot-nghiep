@@ -225,3 +225,34 @@ Filter `location/job_type/seniority` áp dụng trong SQL CTE WHERE trước khi
 - KHÔNG persist search results.
 - KHÔNG có "save anchor to catalog" — anchor chỉ qua `POST /run` với ID có sẵn.
 - KHÔNG thay đổi formula `final_score` của matching (mục FR3).
+
+---
+
+## Addendum B — Authentication and Homepage Surface
+
+Phạm vi Matching V2 run-only ở mục 1–9 không đổi. Bề mặt auth/homepage là phần
+bổ sung của ứng dụng JobConnect hiện tại, không biến các endpoint matching/catalog
+thành endpoint cần role guard.
+
+### Auth storage
+
+- Thêm bảng `users` trong PostgreSQL qua migration riêng.
+- `users.id` là UUID primary key.
+- `users.email` unique, bắt buộc.
+- Chỉ lưu `password_hash`, không lưu mật khẩu plain text.
+- `role` hiện hỗ trợ `candidate | employer | admin`, mặc định `candidate`.
+
+### Auth API
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+
+JWT access token dùng cho frontend session hiện tại. Role-based authorization là
+later phase; Matching V2 prototype endpoints vẫn không có auth guard riêng.
+
+### Frontend
+
+- `/` là JobConnect homepage.
+- `/login` và `/register` là auth pages.
+- `/v2/search`, `/v2/jobs/:id`, `/v2/cvs/:id`, `/v2/matching` vẫn hoạt động như cũ.

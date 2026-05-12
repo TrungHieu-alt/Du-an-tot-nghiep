@@ -24,7 +24,6 @@ const V2SearchResultCard: React.FC<V2SearchResultCardProps> = ({
 }) => {
   const id = type === 'job' ? (item as JobSearchItem).job_id : (item as CVSearchItem).cv_id;
   const targetUrl = type === 'job' ? `/v2/jobs/${id}` : `/v2/cvs/${id}`;
-  const pct = Math.round(Math.max(0, Math.min(1, item.score)) * 100);
 
   const visibleSkills = item.skills.slice(0, MAX_VISIBLE_SKILLS);
   const hiddenCount = item.skills.length - visibleSkills.length;
@@ -50,19 +49,6 @@ const V2SearchResultCard: React.FC<V2SearchResultCardProps> = ({
             <h3 className="text-base font-semibold text-gray-900 group-hover:text-[#0A65CC] transition-colors line-clamp-2">
               {item.title}
             </h3>
-          </div>
-
-          {/* Score badge */}
-          <div
-            className={`flex-shrink-0 flex flex-col items-center justify-center px-3 py-2 rounded-lg ${
-              lowScore
-                ? 'bg-gray-50 text-gray-400'
-                : 'bg-blue-50 text-[#0A65CC]'
-            }`}
-            aria-label={`Score ${pct}%`}
-          >
-            <span className="text-base font-bold tabular-nums leading-none">{pct}%</span>
-            <span className="text-[9px] uppercase tracking-wide mt-0.5">match</span>
           </div>
         </div>
 

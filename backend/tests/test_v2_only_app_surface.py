@@ -9,7 +9,7 @@ class V2OnlyAppSurfaceTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
 
-    def test_openapi_contains_only_v2_catalog_matching_system_and_root(self):
+    def test_openapi_contains_v2_catalog_matching_auth_system_and_root(self):
         schema = self.client.get("/openapi.json").json()
         paths = set(schema["paths"])
 
@@ -17,6 +17,9 @@ class V2OnlyAppSurfaceTests(unittest.TestCase):
         self.assertIn("/api/v2/prototype/matching/cv/{cv_id}/run", paths)
         self.assertIn("/api/v2/prototype/catalog/jobs", paths)
         self.assertIn("/api/v2/prototype/catalog/cvs", paths)
+        self.assertIn("/api/auth/register", paths)
+        self.assertIn("/api/auth/login", paths)
+        self.assertIn("/api/auth/me", paths)
         self.assertIn("/api/health", paths)
         self.assertIn("/", paths)
 
@@ -24,6 +27,7 @@ class V2OnlyAppSurfaceTests(unittest.TestCase):
             path
             for path in paths
             if path not in {"/", "/api/health"}
+            and not path.startswith("/api/auth/")
             and not path.startswith("/api/v2/prototype/catalog/")
             and not path.startswith("/api/v2/prototype/matching/")
         )
@@ -35,7 +39,7 @@ class V2OnlyAppSurfaceTests(unittest.TestCase):
 
         self.assertEqual(
             tag_names,
-            {"catalog-v2-prototype", "matching-v2-prototype", "system", "root"},
+            {"auth", "catalog-v2-prototype", "matching-v2-prototype", "system", "root"},
         )
 
 

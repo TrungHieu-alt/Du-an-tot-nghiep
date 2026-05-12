@@ -5,6 +5,7 @@ FastAPI backend for the Matching V2 prototype.
 ## Active Modules
 
 - `main.py` mounts the v2 catalog, v2 matching, and health routers.
+- `routers/auth.py` exposes PostgreSQL-backed register/login/current-user endpoints.
 - `routers/match_v2_router.py` exposes run-only matching endpoints.
 - `routers/v2_catalog_router.py` exposes read-only browse/detail/search helpers.
 - `matching_v2/` contains hard filters, scoring, deterministic reasoning, and
@@ -34,5 +35,5 @@ docker compose exec backend python -m unittest discover -s tests
 bash scripts/smoke_match_v2_live.sh
 ```
 
-The backend has no document ingestion, account, application, or persisted match
-result endpoints in the current v2-only surface.
+The backend has no document ingestion, application, OAuth, advanced role guard,
+or persisted match result endpoints in the current v2-only surface.

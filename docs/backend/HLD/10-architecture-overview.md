@@ -12,6 +12,7 @@
 
 ```text
 backend/main.py
+  ├─ routers/auth.py
   ├─ routers/v2_catalog_router.py
   ├─ routers/match_v2_router.py
   └─ routers/system_router.py
@@ -32,7 +33,8 @@ routers/v2_catalog_router.py
 
 | Component | Responsibility |
 |---|---|
-| `backend/main.py` | App creation, CORS, v2 router mounting |
+| `backend/main.py` | App creation, CORS, auth and v2 router mounting |
+| `routers/auth.py` | PostgreSQL-backed register/login/current-user contract |
 | `routers/match_v2_router.py` | Matching request/response contract |
 | `routers/v2_catalog_router.py` | Read-only browse/detail/search contract |
 | `matching_v2/db.py` | PostgreSQL loaders for v2 records and embeddings |
@@ -49,8 +51,7 @@ routers/v2_catalog_router.py
 - Matching and catalog endpoints are read-only except for seed/reset tooling run
   outside request handling.
 - Matching results are returned directly and are not persisted.
-- The backend exposes no non-v2 business lifecycle endpoints in the current
-  repository state.
+- Auth is an additive app surface and does not guard Matching V2 endpoints yet.
 
 ## Related Docs
 

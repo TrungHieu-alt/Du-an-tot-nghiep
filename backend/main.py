@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import match_v2_router, system_router, v2_catalog_router
+from routers import auth, match_v2_router, system_router, v2_catalog_router
 
 
 API_DESCRIPTION = """\
@@ -14,9 +14,13 @@ The active surface is v2-only:
 * `GET /api/v2/prototype/catalog/{jobs,cvs}`
 * `GET /api/v2/prototype/catalog/{jobs,cvs}/{id}`
 * `POST /api/v2/prototype/catalog/{jobs,cvs}/search`
+* `POST /api/auth/register`
+* `POST /api/auth/login`
+* `GET /api/auth/me`
 
 The prototype reads PostgreSQL + pgvector tables directly, returns run results
 synchronously, and does not persist match results or call an LLM at runtime.
+Authentication is additive and does not guard the V2 prototype endpoints yet.
 """
 
 OPENAPI_TAGS = [
@@ -34,6 +38,13 @@ OPENAPI_TAGS = [
             "V2 Prototype · Synchronous run-only matching. No persistence, "
             "no LLM. Anchor a job_id or cv_id and receive top-K matches "
             "with score breakdown."
+        ),
+    },
+    {
+        "name": "auth",
+        "description": (
+            "JobConnect authentication. PostgreSQL-backed registration, "
+            "password login, and JWT current-user lookup."
         ),
     },
     {"name": "system", "description": "Health checks and runtime probes."},
@@ -64,6 +75,7 @@ app.add_middleware(
 
 app.include_router(match_v2_router.router, prefix="/api")
 app.include_router(v2_catalog_router.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
 app.include_router(system_router.router, prefix="/api")
 
 

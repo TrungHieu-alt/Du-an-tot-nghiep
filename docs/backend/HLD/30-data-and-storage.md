@@ -5,6 +5,7 @@
 V2 run-only prototype dùng PostgreSQL cho:
 - JD/CV prototype records
 - vector embeddings qua pgvector
+- auth users for the additive login/register surface
 
 ## Data Boundaries
 
@@ -14,10 +15,16 @@ V2 run-only prototype dùng PostgreSQL cho:
 
 ## Core Tables (V2)
 
+Matching-owned tables:
+
 - `candidate_profiles_v2`
 - `job_posts_v2`
 - `candidate_embeddings_v2`
 - `job_embeddings_v2`
+
+Auth-owned table:
+
+- `users`
 
 ## Match Result Contract
 
