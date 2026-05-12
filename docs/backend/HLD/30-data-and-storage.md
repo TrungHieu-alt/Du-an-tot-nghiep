@@ -11,6 +11,9 @@ V2 run-only prototype dùng PostgreSQL cho:
 
 - PostgreSQL: source of truth cho dữ liệu JD/CV prototype.
 - pgvector: vector storage/scoring layer nằm trong PostgreSQL, không tách DB riêng.
+- Embedding generation uses local
+  `sentence-transformers/all-MiniLM-L6-v2` only; PostgreSQL stores the resulting
+  384-dimensional vectors.
 - Matching results được trả trực tiếp từ run endpoint, không persist trong scope hiện tại.
 
 ## Core Tables (V2)
@@ -35,6 +38,8 @@ Nếu later phase cần lưu kết quả, schema `match_results_v2` phải đư�
 ## Vector and Index Contract
 
 - Column type: `vector(<dim>)`
+- Current dimension: `384`, matching local
+  `sentence-transformers/all-MiniLM-L6-v2`.
 - Prototype không yêu cầu `hnsw` hoặc `ivfflat` index.
 - Dùng exhaustive scoring trên seed/test dataset để dễ debug và kiểm chứng.
 - Index strategy chỉ chốt ở later phase khi có benchmark.

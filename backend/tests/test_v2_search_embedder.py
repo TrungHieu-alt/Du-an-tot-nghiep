@@ -1,85 +1,99 @@
 """Unit tests for backend/v2_search/.
 
-Covers:
-  * embed_query: shape, empty input, token-order independence,
-    parity with the underlying embed_text (no drift).
-  * vector_to_pg_literal: format contract used by SQL builders.
+Runtime embeddings must use only local MiniLM. The tests mock the model wrapper
+so they do not download model files or call any external service.
 """
 
 from __future__ import annotations
 
-import math
+import sys
+import types
 import unittest
+from unittest.mock import patch
 
-from db_v2.scenario.embedder import embed_text
 from v2_search import embed_query, vector_to_pg_literal
-
-
-def _cosine(a, b) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
-    na = math.sqrt(sum(x * x for x in a))
-    nb = math.sqrt(sum(y * y for y in b))
-    if na == 0 or nb == 0:
-        return 0.0
-    return dot / (na * nb)
+from v2_search.minilm import (
+    EMBEDDING_DIM,
+    MODEL_NAME,
+    MiniLMUnavailableError,
+    embed_text_minilm,
+    reset_model_cache_for_tests,
+)
 
 
 class EmbedQueryTests(unittest.TestCase):
-    def test_returns_list_of_384_floats(self):
-        vec = embed_query("python docker kubernetes")
-        self.assertIsInstance(vec, list)
-        self.assertEqual(len(vec), 384)
-        for v in vec:
-            self.assertIsInstance(v, float)
+    def test_returns_list_of_384_floats_from_local_minilm_wrapper(self):
+        vector = [0.0] * EMBEDDING_DIM
+        vector[0] = 1.0
+        with patch("v2_search.embedder.embed_text_minilm", return_value=vector):
+            result = embed_query("python docker kubernetes")
 
-    def test_empty_input_returns_zero_vector(self):
-        vec = embed_query("")
-        self.assertEqual(len(vec), 384)
-        self.assertTrue(all(v == 0.0 for v in vec))
+        self.assertIsInstance(result, list)
+        self.assertEqual(len(result), EMBEDDING_DIM)
+        for value in result:
+            self.assertIsInstance(value, float)
 
-    def test_whitespace_only_input_returns_zero_vector(self):
-        vec = embed_query("    ")
-        self.assertEqual(len(vec), 384)
-        self.assertTrue(all(v == 0.0 for v in vec))
+    def test_empty_input_returns_none_without_loading_model(self):
+        self.assertIsNone(embed_text_minilm(""))
+        self.assertIsNone(embed_text_minilm("    "))
 
-    def test_token_order_independent(self):
-        # Hash-based embedder L2-normalizes the SUM of per-token vectors,
-        # so token order does not affect output (set-of-tokens semantics).
-        a = embed_query("senior backend engineer")
-        b = embed_query("backend engineer senior")
-        sim = _cosine(a, b)
-        self.assertAlmostEqual(sim, 1.0, places=6)
+    def test_model_unavailable_error_is_not_hidden(self):
+        with patch(
+            "v2_search.embedder.embed_text_minilm",
+            side_effect=MiniLMUnavailableError("missing local model"),
+        ):
+            with self.assertRaises(MiniLMUnavailableError):
+                embed_query("backend")
 
-    def test_case_insensitive(self):
-        a = embed_query("DevOps")
-        b = embed_query("devops")
-        sim = _cosine(a, b)
-        self.assertAlmostEqual(sim, 1.0, places=6)
+    def test_dimension_mismatch_is_rejected(self):
+        with patch("v2_search.embedder.embed_text_minilm", return_value=[0.1, 0.2]):
+            with self.assertRaises(MiniLMUnavailableError):
+                embed_query("backend")
 
-    def test_distinct_queries_are_not_identical(self):
-        a = embed_query("python backend")
-        b = embed_query("react frontend")
-        sim = _cosine(a, b)
-        # Different vocabularies → not identical (sanity check; exact value
-        # depends on hash, but should be < 1.0 by a clear margin).
-        self.assertLess(sim, 0.99)
 
-    def test_parity_with_underlying_embed_text(self):
-        """Regression: the wrapper must not drift from the seed embedder.
+class MiniLMLoaderTests(unittest.TestCase):
+    def tearDown(self):
+        reset_model_cache_for_tests()
 
-        Same algorithm produced the stored embeddings in
-        job_embeddings_v2/candidate_embeddings_v2 via embed_text. If
-        embed_query ever diverges, retrieval would silently degrade.
-        """
-        text = "kubernetes cloud aws devops"
-        wrapped = embed_query(text)
-        direct = embed_text(text).tolist()
-        self.assertEqual(wrapped, direct)
+    def test_loads_local_files_only_and_caches_model(self):
+        reset_model_cache_for_tests()
+        constructed: list[tuple[str, bool]] = []
 
-    def test_unit_norm_for_non_empty_input(self):
-        vec = embed_query("python")
-        norm = math.sqrt(sum(v * v for v in vec))
-        self.assertAlmostEqual(norm, 1.0, places=5)
+        class FakeSentenceTransformer:
+            def __init__(self, model_name: str, local_files_only: bool = False):
+                constructed.append((model_name, local_files_only))
+
+            def encode(self, text: str, normalize_embeddings: bool = False):
+                self.last_text = text
+                self.normalize_embeddings = normalize_embeddings
+                vector = [0.0] * EMBEDDING_DIM
+                vector[0] = 1.0
+                return vector
+
+        fake_module = types.SimpleNamespace(SentenceTransformer=FakeSentenceTransformer)
+        with patch.dict(sys.modules, {"sentence_transformers": fake_module}):
+            first = embed_text_minilm("backend")
+            second = embed_text_minilm("frontend")
+
+        self.assertEqual(len(first), EMBEDDING_DIM)
+        self.assertEqual(len(second), EMBEDDING_DIM)
+        self.assertEqual(constructed, [(MODEL_NAME, True)])
+
+    def test_unavailable_model_raises_without_remote_fallback(self):
+        reset_model_cache_for_tests()
+
+        class FailingSentenceTransformer:
+            def __init__(self, model_name: str, local_files_only: bool = False):
+                self.model_name = model_name
+                self.local_files_only = local_files_only
+                raise RuntimeError("not cached")
+
+        fake_module = types.SimpleNamespace(SentenceTransformer=FailingSentenceTransformer)
+        with patch.dict(sys.modules, {"sentence_transformers": fake_module}):
+            with self.assertRaises(MiniLMUnavailableError) as ctx:
+                embed_text_minilm("backend")
+
+        self.assertIn("no remote API fallback", str(ctx.exception))
 
 
 class VectorToPgLiteralTests(unittest.TestCase):
@@ -90,21 +104,19 @@ class VectorToPgLiteralTests(unittest.TestCase):
         self.assertEqual(vector_to_pg_literal([]), "[]")
 
     def test_no_whitespace_in_output(self):
-        s = vector_to_pg_literal([0.1, 0.2, 0.3])
-        self.assertNotIn(" ", s)
+        rendered = vector_to_pg_literal([0.1, 0.2, 0.3])
+        self.assertNotIn(" ", rendered)
 
     def test_handles_int_input_by_coercing_to_float(self):
-        # Robustness: callers may pass ints accidentally.
         self.assertEqual(vector_to_pg_literal([1, 2]), "[1.0,2.0]")
 
     def test_long_vector_round_trip_shape(self):
-        vec = embed_query("backend")
-        literal = vector_to_pg_literal(vec)
+        vector = [0.0] * EMBEDDING_DIM
+        literal = vector_to_pg_literal(vector)
         self.assertTrue(literal.startswith("["))
         self.assertTrue(literal.endswith("]"))
-        # 384 numbers separated by 383 commas → 384 segments
         body = literal[1:-1]
-        self.assertEqual(body.count(",") + 1, 384)
+        self.assertEqual(body.count(",") + 1, EMBEDDING_DIM)
 
 
 if __name__ == "__main__":

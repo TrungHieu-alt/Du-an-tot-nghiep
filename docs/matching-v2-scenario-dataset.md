@@ -54,13 +54,16 @@ application, or match result data.
 ## Embedding Workflow
 
 Embeddings are generated locally by `backend/db_v2/scenario_embeddings.py`.
+Default seed tooling uses local MiniLM
+(`sentence-transformers/all-MiniLM-L6-v2`). Historical deterministic fixture
+vectors are available only for tests via
+`DB_V2_USE_DETERMINISTIC_FIXTURE_EMBEDDINGS=1`.
 
 Properties:
-- deterministic for the same JSON input;
 - no network calls;
 - 384 dimensions;
 - L2-normalized for every non-null vector;
-- non-constant vectors, with field-specific feature spaces;
+- non-constant vectors from local MiniLM semantic space;
 - `title` vectors use title text;
 - `skills` vectors use skill tokens;
 - `requirement`, `summary`, and `experience` vectors use their own narrative text

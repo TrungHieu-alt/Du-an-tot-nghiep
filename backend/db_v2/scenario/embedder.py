@@ -1,22 +1,25 @@
-"""Deterministic bag-of-words text embedder for Slice 6B scenario dataset.
+"""Scenario text embedder.
 
-Produces 384-dim normalized float32 vectors with no network calls.
-Each token is hashed via SHA-256 to seed a reproducible unit vector;
-the final embedding is the L2-normalized sum of per-token vectors.
-
-Token deduplication preserves first-occurrence order, matching how
-tie-pair CVs (3032/3033) are engineered to produce identical vectors
-for titles that share the same token set in different word order.
+Default behavior uses local MiniLM
+(`sentence-transformers/all-MiniLM-L6-v2`) through `v2_search.minilm`.
+Set `DB_V2_USE_DETERMINISTIC_FIXTURE_EMBEDDINGS=1` only for historical
+scenario fixture validation.
 """
 
 from __future__ import annotations
 
 import hashlib
+import os
 
 import numpy as np
 
+from v2_search.minilm import EMBEDDING_DIM, embed_text_minilm
 
-def _token_vector(token: str, dim: int = 384) -> np.ndarray:
+
+FIXTURE_EMBEDDINGS_ENV = "DB_V2_USE_DETERMINISTIC_FIXTURE_EMBEDDINGS"
+
+
+def _token_vector(token: str, dim: int = EMBEDDING_DIM) -> np.ndarray:
     seed_int = int.from_bytes(hashlib.sha256(token.encode()).digest()[:8], "big")
     rng = np.random.default_rng(seed_int)
     v = rng.standard_normal(dim).astype(np.float32)
@@ -24,12 +27,18 @@ def _token_vector(token: str, dim: int = 384) -> np.ndarray:
     return v / norm if norm > 1e-8 else v
 
 
-def embed_text(text: str, dim: int = 384) -> np.ndarray:
+def embed_text(text: str, dim: int = EMBEDDING_DIM) -> np.ndarray:
     """Embed text into a normalized 384-dim float32 vector.
 
-    Tokenizes by whitespace, lowercases, deduplicates preserving order,
-    drops single-char tokens. Returns zero vector for empty input.
+    Uses local MiniLM by default. The deterministic fixture mode preserves old
+    scenario test behavior when explicitly enabled by env var.
     """
+    if os.getenv(FIXTURE_EMBEDDINGS_ENV) != "1":
+        vector = embed_text_minilm(text)
+        if vector is None:
+            return np.zeros(dim, dtype=np.float32)
+        return np.asarray(vector, dtype=np.float32)
+
     tokens = list(dict.fromkeys(text.lower().split()))
     tokens = [t for t in tokens if len(t) > 1]
     if not tokens:

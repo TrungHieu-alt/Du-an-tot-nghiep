@@ -11,6 +11,10 @@ Matching:
 - `POST /api/v2/prototype/matching/job/{job_id}/run`
 - `POST /api/v2/prototype/matching/cv/{cv_id}/run`
 
+Hybrid matching:
+- `POST /api/v2/prototype/matching-hybrid/job/{job_id}/run`
+- `POST /api/v2/prototype/matching-hybrid/cv/{cv_id}/run`
+
 GET/DELETE persisted match endpoints are outside run-only prototype scope.
 
 ## Catalog Helper Surface
@@ -29,9 +33,11 @@ Semantic search (pgvector cosine, blended `title` + `skills`):
 - `POST /api/v2/prototype/catalog/jobs/search`
 - `POST /api/v2/prototype/catalog/cvs/search`
 
-Body for search: `{q (1..200), top_k (1..50, default 20), blend_skills (0..1, default 0.3), location?, job_type?, seniority?}`. Empty/whitespace `q` short-circuits to `{items:[],total:0}` without touching the database. Embedder reused from `backend/v2_search/embedder.py` — the same hash-based 384-d algorithm that seeded the stored embeddings, so query vectors are cosine-comparable.
+Body for search: `{q (1..200), top_k (1..50, default 20), blend_skills (0..1, default 0.3), location?, job_type?, seniority?}`. Empty/whitespace `q` short-circuits to `{items:[],total:0}` without touching the database. Query embedding uses local `sentence-transformers/all-MiniLM-L6-v2` through `backend/v2_search/embedder.py`. If the local model files are unavailable, the endpoint returns `503` rather than calling a remote fallback API.
 
 ## Run Flow
+
+Original matcher:
 
 1. Validate request (`top_k`, `min_score`).
 2. Load anchor by ID from PostgreSQL.
@@ -41,6 +47,19 @@ Body for search: `{q (1..200), top_k (1..50, default 20), blend_skills (0..1, de
 6. Build deterministic reasoning text.
 7. Sort by `final_score desc`, then deterministic ID asc.
 8. Return top-k result with `rank`, score breakdown, reasoning, and runtime metrics.
+
+Hybrid matcher:
+
+1. Validate request (`top_k`, `min_score`, `include_failed`, `strict_filters`).
+2. Load the same V2 anchor, pool, and embedding rows from PostgreSQL.
+3. Evaluate every pair without early exclusion.
+4. Calculate available groups on a 0..100 scale: title, skills, experience,
+   seniority, education, certification, location, and job type.
+5. Skip unavailable current-schema groups (`project`, `language`, `salary`) and
+   skip groups where the JD side has no comparable requirement.
+6. Normalize only the weights of valid groups before computing `final_score`.
+7. Mark `passed=false` when strict filters fail, optionally include failed pairs,
+   sort by `final_score desc`, then deterministic ID asc.
 
 ## Auth Flow
 
@@ -60,3 +79,11 @@ current user from PostgreSQL.
 
 - Prototype is evaluation-only and does not depend on ingestion pipeline. Test data is inserted directly into PostgreSQL; extract/parse flows are excluded.
 - Run-only prototype does not persist results, does not add matching auth/role guard changes, and does not compare against other pipelines.
+- No OpenAI, Gemini, Cohere, HuggingFace Inference API, or remote LLM/embedding
+  API is used. No OpenAI/Gemini API key is needed.
+- Local MiniLM model files must be available in the runtime environment; the
+  loader uses local files only and does not download during request handling.
+- The original `/matching/*` endpoint contract remains 0..1 and unchanged.
+  Hybrid `/matching-hybrid/*` is a parallel contract with 0..100 scores,
+  `breakdown`, `skipped_groups`, `failed_filters`, `warnings`, and
+  `explanations`.

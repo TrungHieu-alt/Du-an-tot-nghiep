@@ -21,6 +21,7 @@ Out of scope:
 - Thu thập/bóc tách/chuẩn hóa dữ liệu đầu vào
 - Mọi flow extract/upload/parse tài liệu.
 - LLM scoring/reasoning.
+- Remote AI hoặc embedding API calls.
 - Salary và full_text trong scoring MVP.
 - Persist/query/delete match result.
 - Benchmark kết luận quality bằng Precision/Recall/NDCG.
@@ -94,6 +95,8 @@ Reasoning là deterministic template, sinh từ:
 - penalty nếu thiếu required conditions.
 
 Không dùng LLM.
+Không dùng external AI/embedding API. Embedding runtime dùng local
+`sentence-transformers/all-MiniLM-L6-v2`.
 
 ### FR5. API Surface V2
 
@@ -137,6 +140,8 @@ Prototype run-only cần dữ liệu JD/CV và embeddings trong PostgreSQL. Khô
 ### 5.3 PostgreSQL - Embedding fields
 - Semantic vectors dùng `VECTOR(384)` (pgvector) cho:
   - `emb_title`, `emb_skills`, `emb_requirement`, `emb_summary`, `emb_experience`
+- Embedding model runtime: local `sentence-transformers/all-MiniLM-L6-v2`.
+- Không cần `OPENAI_API_KEY`, `GEMINI_API_KEY`, hoặc API key AI bên ngoài.
 
 ### 5.4 PostgreSQL - persisted results
 - Không có persisted result table trong prototype run-only.
@@ -214,7 +219,8 @@ Phạm vi spec gốc (mục 1–9) **không đổi**. Phần này ghi lại mộ
 ### Tại sao không vi phạm scope gốc
 - Không có endpoint nào ghi vào DB.
 - Không tạo thêm bảng (vẫn 4 bảng: `job_posts_v2`, `candidate_profiles_v2`, `job_embeddings_v2`, `candidate_embeddings_v2`).
-- Không gọi LLM runtime; embedder hash-based deterministic dùng cho query là chính module đã sinh ra embeddings lưu trữ (`backend/v2_search/embedder.py` → `db_v2/scenario/embedder.py`). Cosine giữa query vector và stored vector valid về mặt toán học.
+- Không gọi LLM runtime hoặc remote embedding API; query embedding dùng local
+  MiniLM qua `backend/v2_search/embedder.py`.
 - Search blend formula: `score = (1 - blend_skills) * cos(emb_title, q_vec) + blend_skills * cos(emb_skills, q_vec)`, clamp `[0, 1]`. Không phải `final_score` của FR3 và không persist.
 
 ### Filter contract
@@ -256,3 +262,59 @@ later phase; Matching V2 prototype endpoints vẫn không có auth guard riêng.
 - `/` là JobConnect homepage.
 - `/login` và `/register` là auth pages.
 - `/v2/search`, `/v2/jobs/:id`, `/v2/cvs/:id`, `/v2/matching` vẫn hoạt động như cũ.
+
+---
+
+## Addendum C — Parallel Hybrid Matching Endpoint
+
+Phạm vi matcher gốc ở mục 1-9 không đổi. Bổ sung này thêm một endpoint song
+song để thử nghiệm hybrid scoring dễ giải thích hơn, không thay đổi contract,
+thang điểm, hoặc behavior của `/api/v2/prototype/matching/*`.
+
+### Endpoints thêm vào
+
+- `POST /api/v2/prototype/matching-hybrid/job/{job_id}/run`
+- `POST /api/v2/prototype/matching-hybrid/cv/{cv_id}/run`
+
+Request body:
+- `top_k`: `1..10`, default `10`
+- `min_score`: `0..100`, default `0`
+- `include_failed`: boolean, default `false`
+- `strict_filters`: boolean, default `true`
+
+Response mỗi match dùng thang `0..100` và gồm:
+- `final_score`
+- `passed`
+- `breakdown`
+- `skipped_groups`
+- `failed_filters`
+- `warnings`
+- `explanations`
+
+### Matching behavior
+
+- Không ghi DB, không tạo bảng mới, không persist kết quả.
+- Dùng cùng 4 bảng V2 hiện tại và embedding rows hiện có.
+- Không gọi LLM hoặc external service.
+- Nếu embedding MiniLM không có sẵn cho một group hybrid, scorer dùng
+  deterministic text similarity fallback và ghi warning; không gọi remote API.
+- Không dùng trường cá nhân/liên hệ/metadata trong scoring.
+- Tính được với schema hiện tại: title, skills, experience, seniority,
+  education, certification, location, job type.
+- Tạm skip do schema hiện tại chưa có field: project, language, salary.
+
+### Empty-field và weight normalization
+
+- Nếu cả JD và CV đều trống ở một group: skip group, không cho 100, không cho 0.
+- Nếu JD có yêu cầu nhưng CV trống: soft group score `0`, strict group ghi
+  `failed_filters` khi `strict_filters=true`.
+- Nếu JD trống nhưng CV có dữ liệu: skip group, không phạt ứng viên.
+- `final_score` chỉ normalize trên các group không bị skip:
+
+```
+normalized_weight = group_weight / sum(valid_group_weights)
+final_score = sum(group_score * normalized_weight)
+```
+
+Nếu mọi group đều bị skip, `final_score=0`, `passed=false`, và response có
+warning về việc không đủ dữ liệu so sánh.

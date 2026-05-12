@@ -15,7 +15,7 @@ backend/db_v2/
 ├── seeds/003_broad_ranking_test_data.sql
 ├── scenarios/                # Slice 6B compact scenario JSON + schema
 │   └── matching_v2_slice_6c_rank_expectations.json
-├── scenario_embeddings.py    # deterministic local 384-dim embedding generator
+├── scenario_embeddings.py    # local MiniLM 384-dim embedding generator
 ├── seed_scenario.py          # non-additive scenario seed
 ├── validate_scenario_dataset.py
 └── reset.py                  # reset + migrate + seed in one command
@@ -66,7 +66,7 @@ docker compose exec backend python db_v2/validate_scenario_dataset.py --db
 
 The scenario profile is non-additive. It drops and recreates the schema, applies
 the V2 migration, validates `scenarios/matching_v2_slice_6b.json`, generates
-deterministic local embeddings, and inserts only:
+local MiniLM embeddings, and inserts only:
 
 | Table | Expected count |
 |---|---:|
@@ -79,7 +79,11 @@ CV `3018` intentionally has no row in `candidate_embeddings_v2` to exercise the
 missing embedding-row behavior. Matching still returns the hard-filter pass with
 semantic components defaulted to `0` and missing-embedding reasoning.
 
-To validate the scenario JSON and deterministic embedding workflow without a
+Historical scenario tests can opt into deterministic fixture vectors with
+`DB_V2_USE_DETERMINISTIC_FIXTURE_EMBEDDINGS=1`. Default seed tooling uses local
+MiniLM and does not call remote embedding APIs.
+
+To validate the scenario JSON and embedding workflow without a
 database connection:
 
 ```bash
@@ -168,9 +172,12 @@ Assertions covered:
 - Response includes `rank`, score components, `reasoning`, and runtime metrics.
 - Deterministic top match for JD `2006` is CV `1006`.
 - Deterministic top match for CV `1006` is JD `2006`.
-- OpenAPI V2 prototype namespace contains exactly:
+- OpenAPI original matching namespace contains exactly:
   `/api/v2/prototype/matching/job/{job_id}/run` and
   `/api/v2/prototype/matching/cv/{cv_id}/run`.
+- Hybrid matching is additive under:
+  `/api/v2/prototype/matching-hybrid/job/{job_id}/run` and
+  `/api/v2/prototype/matching-hybrid/cv/{cv_id}/run`.
 
 Test labels:
 
@@ -206,6 +213,10 @@ curl -X POST "http://localhost:8000/api/v2/prototype/matching/cv/1006/run" \
 `top_k` must be between `1` and `10`. `min_score` must be between `0.0` and
 `1.0`. Both endpoints accept an omitted body and use defaults:
 `{"top_k": 10, "min_score": 0.7}`.
+
+Hybrid run endpoints use the same path IDs and accept
+`{"top_k": 10, "min_score": 0, "include_failed": false, "strict_filters": true}`.
+Hybrid scores are `0..100`; the original endpoints remain `0..1`.
 
 ## Example response shape
 
@@ -248,5 +259,8 @@ reasoning are expected to stay deterministic.
 - No benchmark or labeled quality metrics.
 - No ANN tuning requirement (`hnsw`/`ivfflat` are out of scope).
 - No LLM scoring or LLM reasoning.
+- No external AI/embedding API is required. Runtime query embeddings use local
+  `sentence-transformers/all-MiniLM-L6-v2`, and no OpenAI/Gemini API key is
+  needed.
 - Auth exists as an additive app surface; no dedicated auth guard is applied to
   Matching V2 endpoints yet.

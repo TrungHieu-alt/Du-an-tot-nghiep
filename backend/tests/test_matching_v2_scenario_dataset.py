@@ -1,11 +1,16 @@
 import unittest
+from unittest.mock import patch
 
 from db_v2.validate_scenario_dataset import validate_dataset
 
 
 class MatchingV2ScenarioDatasetTests(unittest.TestCase):
     def test_slice_6b_scenario_dataset_validation_passes(self):
-        summary = validate_dataset()
+        with patch.dict(
+            "os.environ",
+            {"DB_V2_USE_DETERMINISTIC_FIXTURE_EMBEDDINGS": "1"},
+        ):
+            summary = validate_dataset()
 
         self.assertEqual(summary["jobs"], 6)
         self.assertEqual(summary["candidates"], 36)

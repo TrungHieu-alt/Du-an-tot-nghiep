@@ -13,16 +13,19 @@ Purpose: concise system reality snapshot for V2 target documentation.
 - Matching engine (MVP): hard filters + exhaustive embedding scoring over prototype data + deterministic rerank.
 
 ## Current Behavior Target (V2)
-- Prototype route namespace: `/api/v2/prototype/{matching,catalog}/*`.
+- Prototype route namespace: `/api/v2/prototype/{matching,matching-hybrid,catalog}/*`.
 - Run-only matching surface: `POST /api/v2/prototype/matching/job/{job_id}/run` and `POST /api/v2/prototype/matching/cv/{cv_id}/run`.
+- Additive hybrid matching surface: `POST /api/v2/prototype/matching-hybrid/job/{job_id}/run` and `POST /api/v2/prototype/matching-hybrid/cv/{cv_id}/run`; uses the same four V2 tables, returns `0..100` scores, and preserves the original matcher contract.
 - Read-only catalog helper surface (added for frontend browse/search; does not violate run-only scope): `GET /api/v2/prototype/catalog/{jobs,cvs}` and `/{jobs,cvs}/{id}` paginated browse + detail, plus `POST /api/v2/prototype/catalog/{jobs,cvs}/search` for pgvector cosine semantic search with optional `location/job_type/seniority` filters.
 - Matching MVP does not require LLM stage.
+- Embedding runtime uses only local `sentence-transformers/all-MiniLM-L6-v2`;
+  no external AI/embedding API key is required.
 - `full_text` and salary are excluded from MVP final scoring.
 - Results are returned directly with `rank`, scores, and reasoning; run-only prototype does not persist match results.
 
 ## Current Constraints
-- Seniority uses exact-match prototype taxonomy from `docs/REQUIREMENTS.md`.
-- Skills normalization is lowercase + trim + unique; no synonym dictionary in run-only prototype.
+- The original matcher keeps exact-match seniority and lowercase/trim/unique skill behavior from `docs/REQUIREMENTS.md`.
+- The hybrid matcher uses rank-based seniority scoring, skill alias normalization, empty-field skipping, deterministic text fallback when local MiniLM embeddings are unavailable, and normalized valid-group weights without changing the original matcher.
 - Vector index tuning (`hnsw`/`ivfflat`), benchmark, matching-result persistence,
   auth/role guards on V2 matching endpoints, and comparisons with non-V2
   pipelines are outside current matching scope.

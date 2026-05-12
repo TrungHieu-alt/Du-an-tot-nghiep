@@ -1,31 +1,32 @@
 """Runtime embedder facade for V2 search endpoints.
 
-Delegates to the deterministic hash-based embedder used to seed
-job_embeddings_v2 and candidate_embeddings_v2 — guaranteeing query
-vectors are cosine-comparable with stored embeddings.
+Uses only the local MiniLM model:
+`sentence-transformers/all-MiniLM-L6-v2`.
 
-The underlying implementation is pure numpy + SHA-256: no model
-download, no GPU, no network call, no cold-start cost.
+No external AI, hosted embedding, or remote LLM API is used.
 """
 
 from __future__ import annotations
 
-from db_v2.scenario.embedder import embed_text
-
-_DIM = 384
+from .minilm import EMBEDDING_DIM, MiniLMUnavailableError, embed_text_minilm
 
 
-def embed_query(text: str) -> list[float]:
-    """Embed a search query into a 384-dim list[float].
+def embed_query(text: str) -> list[float] | None:
+    """Embed a search query into a local MiniLM 384-dim list[float].
 
     Args:
-        text: Free-form user query. Whitespace-tokenized, lowercased,
-              deduplicated preserving first-occurrence order. Tokens of
-              length <= 1 are dropped. Empty input returns a zero vector.
+        text: Free-form user query. Empty/whitespace-only input returns None
+              and must not be embedded.
 
     Returns:
-        A 384-element list of float (L2-normalized, except zero vector
-        for empty input). Plain Python list so it serializes cleanly to
-        the pgvector text literal in pg.py.
+        A 384-element normalized list of floats, or None for empty input.
+
+    Raises:
+        MiniLMUnavailableError: if the local model files are unavailable.
     """
-    return embed_text(text, dim=_DIM).tolist()
+    vector = embed_text_minilm(text)
+    if vector is not None and len(vector) != EMBEDDING_DIM:
+        raise MiniLMUnavailableError(
+            f"MiniLM returned {len(vector)} dimensions; expected {EMBEDDING_DIM}."
+        )
+    return vector

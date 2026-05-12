@@ -15,6 +15,8 @@ class V2OnlyAppSurfaceTests(unittest.TestCase):
 
         self.assertIn("/api/v2/prototype/matching/job/{job_id}/run", paths)
         self.assertIn("/api/v2/prototype/matching/cv/{cv_id}/run", paths)
+        self.assertIn("/api/v2/prototype/matching-hybrid/job/{job_id}/run", paths)
+        self.assertIn("/api/v2/prototype/matching-hybrid/cv/{cv_id}/run", paths)
         self.assertIn("/api/v2/prototype/catalog/jobs", paths)
         self.assertIn("/api/v2/prototype/catalog/cvs", paths)
         self.assertIn("/api/auth/register", paths)
@@ -30,6 +32,7 @@ class V2OnlyAppSurfaceTests(unittest.TestCase):
             and not path.startswith("/api/auth/")
             and not path.startswith("/api/v2/prototype/catalog/")
             and not path.startswith("/api/v2/prototype/matching/")
+            and not path.startswith("/api/v2/prototype/matching-hybrid/")
         )
         self.assertEqual(unexpected, [])
 
@@ -39,7 +42,14 @@ class V2OnlyAppSurfaceTests(unittest.TestCase):
 
         self.assertEqual(
             tag_names,
-            {"auth", "catalog-v2-prototype", "matching-v2-prototype", "system", "root"},
+            {
+                "auth",
+                "catalog-v2-prototype",
+                "matching-v2-prototype",
+                "matching-v2-hybrid-prototype",
+                "system",
+                "root",
+            },
         )
 
 

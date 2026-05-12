@@ -1,22 +1,27 @@
-"""Deterministic local embeddings for the Matching V2 scenario dataset.
+"""Local embeddings for the Matching V2 scenario dataset.
 
-The generator is intentionally small and dependency-free. It builds a
-field-specific bag-of-features from the scenario JSON, assigns stable feature
-dimensions, and emits normalized 384-dimensional vectors.
+Default generation uses local MiniLM
+(`sentence-transformers/all-MiniLM-L6-v2`) through `v2_search.minilm`.
 
-No network calls. No constant vectors.
+Tests may opt into the historical deterministic fixture embedder by setting
+`DB_V2_USE_DETERMINISTIC_FIXTURE_EMBEDDINGS=1`; production/default seed tooling
+does not use that fixture mode.
 """
 
 from __future__ import annotations
 
 import hashlib
 import math
+import os
 import re
 from collections import defaultdict
 from typing import Any
 
+from v2_search.minilm import embed_text_minilm
+
 
 EMBEDDING_DIM = 384
+FIXTURE_EMBEDDINGS_ENV = "DB_V2_USE_DETERMINISTIC_FIXTURE_EMBEDDINGS"
 
 TITLE_SPACE = "title"
 SKILLS_SPACE = "skills"
@@ -308,11 +313,27 @@ def _build_dimension_maps(spaces: dict[str, set[str]]) -> dict[str, dict[str, in
     return result
 
 
-def _embed_text(text: str, space: str, dim_map: dict[str, int]) -> list[float]:
+def _embed_text(text: str, space: str, dim_map: dict[str, int]) -> list[float] | None:
+    if not _use_fixture_embeddings():
+        return embed_text_minilm(text)
+    return _embed_text_fixture(text, space, dim_map)
+
+
+def _embed_skills(skills: list[str], dim_map: dict[str, int]) -> list[float] | None:
+    if not _use_fixture_embeddings():
+        return embed_text_minilm(", ".join(skills))
+    return _embed_skills_fixture(skills, dim_map)
+
+
+def _use_fixture_embeddings() -> bool:
+    return os.getenv(FIXTURE_EMBEDDINGS_ENV) == "1"
+
+
+def _embed_text_fixture(text: str, space: str, dim_map: dict[str, int]) -> list[float]:
     return _normalize_vector(_weighted_vector(_features_for_text(text, space), dim_map))
 
 
-def _embed_skills(skills: list[str], dim_map: dict[str, int]) -> list[float]:
+def _embed_skills_fixture(skills: list[str], dim_map: dict[str, int]) -> list[float]:
     return _normalize_vector(_weighted_vector(_features_for_skills(skills), dim_map))
 
 

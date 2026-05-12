@@ -22,6 +22,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from routers.v2_catalog_router import router
+from v2_search.minilm import MiniLMUnavailableError
 
 
 # ---------------------------------------------------------------------------
@@ -71,6 +72,12 @@ class CatalogSearchTests(unittest.TestCase):
         app = FastAPI()
         app.include_router(router, prefix="/api")
         self.client = TestClient(app)
+        self.embed_patcher = patch(
+            "routers.v2_catalog_router.embed_query",
+            return_value=[0.01] * 384,
+        )
+        self.mock_embed_query = self.embed_patcher.start()
+        self.addCleanup(self.embed_patcher.stop)
 
     # ---------------- jobs/search ----------------
 
@@ -84,6 +91,7 @@ class CatalogSearchTests(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json(), {"items": [], "total": 0})
         mock_conn.assert_not_called()
+        self.mock_embed_query.assert_not_called()
 
     def test_valid_query_executes_search_sql_with_bound_params(self):
         rows = [
@@ -170,6 +178,20 @@ class CatalogSearchTests(unittest.TestCase):
             )
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()["items"][0]["skills"], [])
+
+    def test_local_minilm_unavailable_returns_503_without_remote_fallback(self):
+        with patch(
+            "routers.v2_catalog_router.embed_query",
+            side_effect=MiniLMUnavailableError("missing local model"),
+        ), patch("routers.v2_catalog_router.get_connection") as mock_conn:
+            res = self.client.post(
+                "/api/v2/prototype/catalog/jobs/search",
+                json={"q": "backend"},
+            )
+
+        self.assertEqual(res.status_code, 503)
+        self.assertIn("Local MiniLM", res.json()["detail"])
+        mock_conn.assert_not_called()
 
     # ---------------- validation (422) ----------------
 

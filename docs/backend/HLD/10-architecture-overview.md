@@ -15,6 +15,7 @@ backend/main.py
   ├─ routers/auth.py
   ├─ routers/v2_catalog_router.py
   ├─ routers/match_v2_router.py
+  ├─ routers/match_hybrid_router.py
   └─ routers/system_router.py
 
 routers/match_v2_router.py
@@ -23,6 +24,13 @@ routers/match_v2_router.py
        ├─ matching_v2/filters.py
        ├─ matching_v2/scoring.py
        └─ matching_v2/reasoning.py
+
+routers/match_hybrid_router.py
+  └─ matching_v2/hybrid_runner.py
+       ├─ matching_v2/db.py
+       ├─ matching_v2/hybrid_scoring.py
+       ├─ matching_v2/hybrid_utils.py
+       └─ matching_v2/skill_normalizer.py
 
 routers/v2_catalog_router.py
   ├─ matching_v2/db.py
@@ -36,21 +44,27 @@ routers/v2_catalog_router.py
 | `backend/main.py` | App creation, CORS, auth and v2 router mounting |
 | `routers/auth.py` | PostgreSQL-backed register/login/current-user contract |
 | `routers/match_v2_router.py` | Matching request/response contract |
+| `routers/match_hybrid_router.py` | Additive hybrid matching contract with 0..100 explainable scores |
 | `routers/v2_catalog_router.py` | Read-only browse/detail/search contract |
 | `matching_v2/db.py` | PostgreSQL loaders for v2 records and embeddings |
 | `matching_v2/filters.py` | Hard-filter rules |
 | `matching_v2/scoring.py` | Component and final score formulas |
 | `matching_v2/reasoning.py` | Rule-based reasoning strings |
-| `v2_search/` | Deterministic query embedding and pgvector literal helpers |
+| `matching_v2/hybrid_*` | Parallel hybrid matching utilities, scoring, and response assembly |
+| `v2_search/` | Local MiniLM query embedding and pgvector literal helpers |
 | `db_v2/` | Migrations, seed/reset scripts, scenario validation |
 
 ## Boundaries
 
 - PostgreSQL is the runtime source of truth for v2 prototype JD/CV records and
   embeddings.
+- Runtime embedding generation uses only local
+  `sentence-transformers/all-MiniLM-L6-v2`; no external AI API key is required.
 - Matching and catalog endpoints are read-only except for seed/reset tooling run
   outside request handling.
 - Matching results are returned directly and are not persisted.
+- Hybrid matching is additive under `/api/v2/prototype/matching-hybrid/*` and
+  does not modify the original `/matching/*` score scale or response fields.
 - Auth is an additive app surface and does not guard Matching V2 endpoints yet.
 
 ## Related Docs

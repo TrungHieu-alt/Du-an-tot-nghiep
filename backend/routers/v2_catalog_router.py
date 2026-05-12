@@ -2,7 +2,7 @@
 
 These endpoints exist so the frontend can pick an anchor before invoking the
 matching_v2 run endpoints. They are intentionally minimal:
-  * SELECT-only — no writes, no LLM, no embeddings.
+  * SELECT-only — no writes, no LLM, local MiniLM query embedding only.
   * psycopg directly — does NOT touch SQLAlchemy ORM at runtime, preserving
     the scope-lock established by backend/matching_v2/.
   * Connection helper is reused from matching_v2.db.get_connection.
@@ -37,6 +37,7 @@ from schemas.v2_catalog_schema import (
     JobV2ListResponse,
 )
 from v2_search import embed_query, vector_to_pg_literal
+from v2_search.minilm import MiniLMUnavailableError
 
 
 router = APIRouter(prefix="/v2/prototype/catalog", tags=["catalog-v2-prototype"])
@@ -252,7 +253,7 @@ def get_cv_v2(cv_id: int) -> CVV2Detail:
 # ---------------------------------------------------------------------------
 #
 # Query plan (jobs; cvs is symmetric):
-#   1. Embed `q` once via v2_search.embed_query (deterministic hash-based).
+#   1. Embed `q` once via v2_search.embed_query (local MiniLM only).
 #   2. JOIN job_posts_v2 with job_embeddings_v2 on job_id; require
 #      emb_title IS NOT NULL so cosine is well-defined.
 #   3. Compute sim_title = 1 - (emb_title <=> q_vec).
@@ -362,7 +363,7 @@ def _clamp_score(s: float) -> float:
     response_model=JobSearchResponse,
     summary="Semantic search jobs (pgvector blend)",
     description=(
-        "Embed the query via the hash-based 384-d embedder, then rank "
+        "Embed the query via the local MiniLM 384-d embedder, then rank "
         "`job_posts_v2` by `(1 - blend_skills) * cos(emb_title, q) + "
         "blend_skills * cos(emb_skills, q)`. Optional hard filters "
         "(`location`, `job_type`, `seniority`) are applied in SQL before "
@@ -378,7 +379,7 @@ def search_jobs_v2(
         # Trimmed-empty query: skip DB roundtrip entirely.
         return JobSearchResponse(items=[], total=0)
 
-    q_vec = vector_to_pg_literal(embed_query(q))
+    q_vec = vector_to_pg_literal(_embed_query_or_503(q))
     blend = request.blend_skills
     top_k = request.top_k
 
@@ -434,7 +435,7 @@ def search_cvs_v2(
     if not q:
         return CVSearchResponse(items=[], total=0)
 
-    q_vec = vector_to_pg_literal(embed_query(q))
+    q_vec = vector_to_pg_literal(_embed_query_or_503(q))
     blend = request.blend_skills
     top_k = request.top_k
 
@@ -470,3 +471,19 @@ def search_cvs_v2(
         for row in rows
     ]
     return CVSearchResponse(items=items, total=len(items))
+
+
+def _embed_query_or_503(q: str) -> list[float]:
+    try:
+        vector = embed_query(q)
+    except MiniLMUnavailableError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Local MiniLM embedding model is unavailable. "
+                "No external embedding API fallback is configured."
+            ),
+        ) from exc
+    if vector is None:
+        raise HTTPException(status_code=422, detail="query must not be empty")
+    return vector

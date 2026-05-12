@@ -356,10 +356,10 @@ class TestDbV2Orm(unittest.TestCase):
         self.assertEqual(result, 0, "match_results_v2 must not exist in prototype schema")
 
     # -----------------------------------------------------------------------
-    # Scope guard — only the 4 expected tables are present
+    # Scope guard — only the 4 prototype tables plus additive app tables exist
     # -----------------------------------------------------------------------
 
-    def test_only_four_prototype_tables_exist(self) -> None:
+    def test_only_four_prototype_tables_exist_with_additive_users_table(self) -> None:
         rows = self.session.execute(
             text(
                 "SELECT table_name FROM information_schema.tables "
@@ -367,13 +367,16 @@ class TestDbV2Orm(unittest.TestCase):
             )
         ).fetchall()
         tables = {r[0] for r in rows}
-        expected = {
+        prototype_tables = {
             "job_posts_v2",
             "candidate_profiles_v2",
             "job_embeddings_v2",
             "candidate_embeddings_v2",
         }
-        self.assertEqual(tables, expected, f"unexpected tables present: {tables - expected}")
+        allowed_tables = prototype_tables | {"users"}
+
+        self.assertTrue(prototype_tables.issubset(tables))
+        self.assertEqual(tables, allowed_tables, f"unexpected tables present: {tables - allowed_tables}")
 
     # -----------------------------------------------------------------------
     # ORM model import isolation — SQLAlchemy must not appear in runtime path

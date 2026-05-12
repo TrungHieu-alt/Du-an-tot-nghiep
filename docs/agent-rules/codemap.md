@@ -43,7 +43,8 @@ Expected code areas:
 
 ## 2) Matching V2 Prototype Workflow (Run-Only PostgreSQL + pgvector)
 
-Use this workflow for `/api/v2/prototype/matching/*`.
+Use this workflow for `/api/v2/prototype/matching/*` and the additive
+`/api/v2/prototype/matching-hybrid/*` surface.
 
 Primary docs:
 
@@ -58,8 +59,13 @@ Runtime boundary:
 - Prototype data lives in PostgreSQL V2 tables: `job_posts_v2`,
   `candidate_profiles_v2`, `job_embeddings_v2`, `candidate_embeddings_v2`.
 - Vector storage/scoring uses pgvector in PostgreSQL.
+- Runtime embedding uses local `sentence-transformers/all-MiniLM-L6-v2` only;
+  no external AI/embedding API clients or API keys are part of the backend.
 - Matching returns run results directly from the V2 prototype endpoints and
   does not persist match results.
+- The original `/matching/*` contract remains on the `0..1` score scale. The
+  parallel `/matching-hybrid/*` contract returns `0..100` scores with skipped
+  groups, failed filters, warnings, and explanations.
 
 Expected code areas:
 
@@ -67,12 +73,14 @@ Expected code areas:
 - V2 matching runtime: `backend/matching_v2/*`.
 - V2 matching router/schema: `backend/routers/match_v2_router.py`,
   `backend/schemas/match_v2_schema.py`.
+- Hybrid matching router/schema: `backend/routers/match_hybrid_router.py`,
+  `backend/schemas/match_hybrid_schema.py`.
 - OpenAPI contract checks: FastAPI generated `/openapi.json`.
 
 Out of scope for V2 run-only prototype unless the task says otherwise:
 
 - Document ingestion, parsing, or upload flows.
-- Runtime LLM scoring/reasoning.
+- Runtime LLM scoring/reasoning or remote embedding/LLM API calls.
 - `match_results_v2` or persisted result query/delete APIs.
 - Auth/role guard changes.
 
@@ -83,7 +91,7 @@ Use this workflow for `/api/v2/prototype/catalog/*` and frontend browse/search.
 Runtime boundary:
 
 - Read-only helpers over the same four V2 PostgreSQL tables.
-- Search uses deterministic query embeddings from `backend/v2_search/*`.
+- Search uses local MiniLM query embeddings from `backend/v2_search/*`.
 - Search score is catalog relevance only and is not the matching final score.
 
 Expected code areas:

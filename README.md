@@ -6,11 +6,14 @@ run-only matching, plus an additive PostgreSQL/JWT authentication surface.
 
 ## Active Product Scope
 
-- Browse and search seeded v2 job and CV records.
+- Browse and search seeded v2 job and CV records with local MiniLM query
+  embeddings.
 - Open job/CV detail pages from the v2 catalog.
 - Run synchronous JD -> CV or CV -> JD matching from an existing integer ID.
 - Return top matches with score breakdown, deterministic reasoning, and runtime
   metrics.
+- Run the additive hybrid matcher for explainable 0..100 scoring without
+  changing the original V2 matcher contract.
 - Register, login, and load the current user through `/api/auth/*`.
 - Show the JobConnect landing homepage at `/`.
 
@@ -18,14 +21,27 @@ Out of scope for the current repository state: document upload, parsing,
 application tracking, OAuth, advanced role authorization, LLM scoring,
 vector-store sidecars, and persisted match results.
 
+Embedding and AI boundary:
+
+- Runtime embeddings use only local `sentence-transformers/all-MiniLM-L6-v2`.
+- No OpenAI, Gemini, Cohere, HuggingFace Inference API, or remote LLM/embedding
+  API is required.
+- No OpenAI/Gemini API key is needed for matching, search, embedding, or
+  reasoning.
+- MiniLM model files must be available in the local `sentence-transformers`
+  cache/container; runtime loading uses local files only.
+- Reasoning/explanations are deterministic and rule-based.
+
 ## Runtime Architecture
 
 - **Backend**: FastAPI (`backend/main.py`).
 - **Database**: PostgreSQL with pgvector, exposed on host port `5433`.
 - **Tables**: `job_posts_v2`, `candidate_profiles_v2`,
   `job_embeddings_v2`, `candidate_embeddings_v2`, plus `users` for auth.
-- **Matching**: hard filters + exhaustive pgvector-compatible scoring +
-  deterministic rerank.
+- **Matching**: original V2 hard-filter matcher plus an additive hybrid matcher
+  that reuses the same four V2 tables.
+- **Embeddings**: local MiniLM (`sentence-transformers/all-MiniLM-L6-v2`),
+  cached lazily in-process and stored as 384-dim pgvector-compatible lists.
 - **Frontend**: React + Vite. User-facing routes are `/`, `/login`,
   `/register`, `/v2/search`, `/v2/jobs/:id`, `/v2/cvs/:id`, and `/v2/matching`.
 
@@ -37,6 +53,8 @@ Matching:
 
 - `POST /api/v2/prototype/matching/job/{job_id}/run`
 - `POST /api/v2/prototype/matching/cv/{cv_id}/run`
+- `POST /api/v2/prototype/matching-hybrid/job/{job_id}/run`
+- `POST /api/v2/prototype/matching-hybrid/cv/{cv_id}/run`
 
 Catalog:
 
