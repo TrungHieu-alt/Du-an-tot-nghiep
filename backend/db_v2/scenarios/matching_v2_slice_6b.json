@@ -1,5 +1,5 @@
 {
-  "schema_version": "matching-v2-slice-6b-v1",
+  "schema_version": "matching-v2-slice-6b-v2",
   "name": "Matching V2 Slice 6B compact scenario dataset",
   "broad_dataset_deferred": true,
   "partial_embedding_case": {

@@ -269,8 +269,8 @@ class V2CatalogRouterTests(unittest.TestCase):
         self.assertEqual(res.json(), {"items": [], "total": 0})
 
     def test_list_cvs_handles_null_skills_array(self):
-        # Defensive: psycopg returns None for SQL NULL on array columns in
-        # legacy rows. Router should normalize to [].
+        # Defensive: psycopg returns None for SQL NULL on array columns.
+        # Router should normalize to [].
         rows = [(2001, "Edge Case", "ha_noi", "fulltime", "junior", None)]
         conn, _ = _make_conn(responses=[(1,), rows])
 

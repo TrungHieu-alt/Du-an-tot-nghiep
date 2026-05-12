@@ -11,7 +11,7 @@ Source files:
 - `backend/db_v2/seed_scenario.py`
 - `backend/db_v2/validate_scenario_dataset.py`
 
-The old requested report path `docs/matching-v2-test-report.md` is not present.
+The previously requested report path `docs/matching-v2-test-report.md` is not present.
 The current baseline source is `docs/matching-v2-scenario-test-cases.md`, which
 contains the executed baseline report and says it replaces the prior standalone
 report. This Slice 6B dataset avoids recreating those exact baseline IDs/data.
@@ -36,7 +36,7 @@ exercises missing embedding-row handling: semantic score components default to
 Use Docker Compose for runtime execution:
 
 ```bash
-docker compose up -d postgres mongo backend
+docker compose up -d postgres backend
 docker compose exec backend python db_v2/reset.py --profile scenario
 docker compose exec backend python db_v2/validate_scenario_dataset.py --db
 ```

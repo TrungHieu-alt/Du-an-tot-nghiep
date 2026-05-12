@@ -3,10 +3,9 @@ set -euo pipefail
 
 API_BASE_URL="${API_BASE_URL:-http://localhost:8000}"
 EXPECTATIONS_PATH="${EXPECTATIONS_PATH:-backend/db_v2/scenarios/matching_v2_slice_6c_rank_expectations.json}"
-export GEMINI_API_KEY="${GEMINI_API_KEY:-dummy}"
 
-echo "[live-smoke] starting postgres, mongo, backend"
-docker compose up -d postgres mongo backend
+echo "[live-smoke] starting postgres and backend"
+docker compose up -d postgres backend
 
 echo "[live-smoke] resetting and seeding PostgreSQL from backend container"
 docker compose exec backend python db_v2/reset.py

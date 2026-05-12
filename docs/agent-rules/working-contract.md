@@ -27,7 +27,7 @@ For non-trivial decisions, record:
 ## 4) Code and Data Safety
 - Do not weaken auth/security behavior silently.
 - Do not perform destructive data operations without explicit approval.
-- Keep Chroma/Mongo consistency visible in matching-related changes.
+- Keep PostgreSQL/pgvector consistency visible in matching-related changes.
 
 ## 5) Verification Responsibility
 - Definition of Done gates in `definition-of-done.md` are mandatory.

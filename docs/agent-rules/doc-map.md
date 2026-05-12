@@ -1,6 +1,6 @@
 # AI Doc Map Manifest
 
-manifest_version: 1
+manifest_version: 2
 intent: agent-only navigation and routing for project documentation
 human_mode: false
 
@@ -20,27 +20,23 @@ doc_nodes:
     triggers: [new_feature, behavior_change, domain_logic_change, test_writing, pr_review, ambiguity_resolution]
   - id: hld_overview
     path: docs/backend/HLD/00-overview-and-problem.md
-    purpose: backend matching goals and architecture scope
+    purpose: v2 backend matching goals and architecture scope
     triggers: [architecture_context, onboarding_matching]
-
   - id: hld_architecture
     path: docs/backend/HLD/10-architecture-overview.md
-    purpose: backend layer boundaries and component integration
+    purpose: v2 backend layer boundaries and component integration
     triggers: [refactor_planning, component_ownership]
-
   - id: hld_pipeline
     path: docs/backend/HLD/20-matching-pipeline.md
     purpose: matching stages, scoring weights, fallback behavior
-    triggers: [ranking_change, retrieval_logic, llm_evaluation]
-
+    triggers: [ranking_change, retrieval_logic]
   - id: hld_storage
     path: docs/backend/HLD/30-data-and-storage.md
-    purpose: Mongo and Chroma ownership, sync boundaries
+    purpose: PostgreSQL and pgvector ownership, run-only persistence boundaries
     triggers: [data_model_change, persistence_change, consistency_review]
-
   - id: hld_runtime_api
     path: docs/backend/HLD/40-api-and-runtime-flows.md
-    purpose: matching endpoints and execution/query runtime flows
+    purpose: v2 matching/catalog endpoints and execution/query runtime flows
     triggers: [api_contract_change, runtime_flow_change]
 
 loading_walkthrough:
@@ -58,19 +54,16 @@ load_profiles:
     load:
       - docs/backend/HLD/40-api-and-runtime-flows.md
       - docs/backend/HLD/10-architecture-overview.md
-
   minimal_matching_change:
     when: Matching_logic_change
     load:
       - docs/backend/HLD/20-matching-pipeline.md
       - docs/backend/HLD/30-data-and-storage.md
-
   minimal_data_change:
     when: Data_model_change
     load:
       - docs/backend/HLD/30-data-and-storage.md
       - docs/backend/HLD/40-api-and-runtime-flows.md
-
   full_architecture_review:
     when: Architecture_review
     load:

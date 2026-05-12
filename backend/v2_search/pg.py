@@ -14,7 +14,7 @@ from typing import Iterable
 def vector_to_pg_literal(vec: Iterable[float]) -> str:
     """Render a numeric iterable as a pgvector text literal.
 
-    Output format: '[v1,v2,...]' — no spaces, exactly what pgvector
+    Output format: '[x1,x2,...]' — no spaces, exactly what pgvector
     expects when the column type is `vector(N)`. Caller is responsible
     for binding via parameter (e.g. `'%s::vector'`) so SQL injection is
     not a concern, but we still emit a strict format to be safe.

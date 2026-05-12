@@ -7,11 +7,11 @@ matching_v2 run endpoints. They are intentionally minimal:
     the scope-lock established by backend/matching_v2/.
   * Connection helper is reused from matching_v2.db.get_connection.
 
-Endpoints (prefix /v2/prototype/catalog):
-    GET  /jobs?limit=&offset=
-    GET  /jobs/{job_id}
-    GET  /cvs?limit=&offset=
-    GET  /cvs/{cv_id}
+Endpoints:
+    GET  /api/v2/prototype/catalog/jobs?limit=&offset=
+    GET  /api/v2/prototype/catalog/jobs/{job_id}
+    GET  /api/v2/prototype/catalog/cvs?limit=&offset=
+    GET  /api/v2/prototype/catalog/cvs/{cv_id}
 """
 
 from __future__ import annotations
@@ -73,7 +73,8 @@ def _as_list(pg_array: Optional[list]) -> list[str]:
     description=(
         "Paginated catalog of `job_posts_v2`. Ordered by `job_id` ASC. "
         "Use this to populate browse UIs; for keyword queries prefer "
-        "`POST /jobs/search` which runs pgvector cosine ranking."
+        "`POST /api/v2/prototype/catalog/jobs/search` which runs "
+        "pgvector cosine ranking."
     ),
 )
 def list_jobs_v2(
@@ -164,7 +165,7 @@ def get_job_v2(job_id: int) -> JobV2Detail:
     summary="List CVs (paginated browse)",
     description=(
         "Paginated catalog of `candidate_profiles_v2`. Ordered by `cv_id` "
-        "ASC. Symmetric to `GET /jobs`."
+        "ASC. Symmetric to `GET /api/v2/prototype/catalog/jobs`."
     ),
 )
 def list_cvs_v2(
@@ -420,7 +421,8 @@ def search_jobs_v2(
     response_model=CVSearchResponse,
     summary="Semantic search CVs (pgvector blend)",
     description=(
-        "Mirror of `POST /jobs/search` against `candidate_profiles_v2` + "
+        "Mirror of `POST /api/v2/prototype/catalog/jobs/search` against "
+        "`candidate_profiles_v2` + "
         "`candidate_embeddings_v2`. Same blend formula, same filter set, "
         "same short-circuit on empty query."
     ),

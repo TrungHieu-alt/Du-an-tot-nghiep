@@ -16,7 +16,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "matching-v2-slice-6b-v1"
+      "const": "matching-v2-slice-6b-v2"
     },
     "name": {
       "type": "string",
