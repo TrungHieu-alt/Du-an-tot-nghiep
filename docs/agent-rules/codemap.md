@@ -16,6 +16,9 @@ canonical in `AGENTS.md`.
   - Auth, system, catalog, and matching router mounting under `/api`.
 - Router layer:
   - `backend/routers/auth.py`
+  - `backend/routers/job_router.py`
+  - `backend/routers/cv_router.py`
+  - `backend/routers/normal_search_router.py`
   - `backend/routers/match_v2_router.py`
   - `backend/routers/v2_catalog_router.py`
   - `backend/routers/system_router.py`
@@ -84,9 +87,43 @@ Out of scope for V2 run-only prototype unless the task says otherwise:
 - `match_results_v2` or persisted result query/delete APIs.
 - Auth/role guard changes.
 
-## 3) V2 Catalog and Search Workflow
+## 3) Normal Job/CV and Search Workflow
 
-Use this workflow for `/api/v2/prototype/catalog/*` and frontend browse/search.
+Use this workflow for `/api/job/*`, `/api/cv/*`, `/api/jobs`, `/api/cvs`,
+`/api/candidates`, and normal frontend Job/CV management/search pages.
+
+Runtime boundary:
+
+- Normal Jobs live in PostgreSQL table `jobs`.
+- Normal CVs live in PostgreSQL table `cvs`.
+- Ownership is stored on child rows through `created_by -> users.id`; do not
+  embed large Job/CV arrays in `users`.
+- Normal public Job search only returns `status='published'`,
+  `visibility='public'`, and `archived=false`.
+- Normal search is text/rule search over normal tables. It must not call
+  Matching V2, pgvector semantic search, MiniLM, or return match percentages.
+- PDF CV upload stores metadata in `cvs.file`; PDF parsing is outside current
+  implementation unless explicitly added later.
+
+Expected code areas:
+
+- `backend/db_v2/migrations/003_normal_jobs_cvs.sql`
+- `backend/routers/job_router.py`
+- `backend/routers/cv_router.py`
+- `backend/routers/normal_search_router.py`
+- `backend/schemas/normal_job_schema.py`
+- `backend/schemas/normal_cv_schema.py`
+- `backend/tests/test_normal_search_router.py`
+- `frontend/src/api/normal.ts`
+- `frontend/pages/MyJobs.tsx`
+- `frontend/pages/MyCvs.tsx`
+- `frontend/pages/NormalJobDetail.tsx`
+- `frontend/pages/NormalCvDetail.tsx`
+- `frontend/pages/V2Search.tsx` for the current shared normal search UI route.
+
+## 4) V2 Catalog Workflow
+
+Use this workflow for `/api/v2/prototype/catalog/*`.
 
 Runtime boundary:
 
@@ -101,30 +138,38 @@ Expected code areas:
 - `backend/v2_search/*`
 - `frontend/src/api/v2.ts`
 - `frontend/lib/api-routes.ts`
-- `frontend/pages/V2Search.tsx`
 - `frontend/pages/V2JobDetail.tsx`
 - `frontend/pages/V2CvDetail.tsx`
 - `frontend/components/v2/*`
 
-## 4) Frontend V2 Routing Workflow
+## 5) Frontend Routing Workflow
 
 - `frontend/App.tsx`
-  - `/` redirects to `/v2/search`.
+  - `/` renders the JobConnect homepage.
   - Active user-facing routes:
+    - `/jobs/search`
+    - `/cvs/search`
+    - `/job/my`
+    - `/cv/my`
+    - `/job/:id`
+    - `/cv/:id`
     - `/v2/search`
     - `/v2/jobs/:id`
     - `/v2/cvs/:id`
     - `/v2/matching`
 - `frontend/components/Header.tsx` and `frontend/components/Footer.tsx`
-  - Navigation must point only to V2 user-facing routes.
+  - Navigation exposes normal search and keeps Matching V2 accessible.
 
-## 5) Data Ownership Boundaries
+## 6) Data Ownership Boundaries
 
 - PostgreSQL is source of truth for prototype JD/CV records and embeddings.
 - pgvector in PostgreSQL is the prototype vector storage/scoring layer.
 - Run results are returned directly and are not persisted.
+- Normal Job/CV owner management uses `created_by` on `jobs`/`cvs`.
 
-## 6) Integration Boundary For Frontend
+## 7) Integration Boundary For Frontend
 
-- Frontend integrates through `/api/v2/prototype/*` contracts.
+- Frontend matching/catalog integrates through `/api/v2/prototype/*` contracts.
+- Frontend normal search/management integrates through `/api/job/*`,
+  `/api/cv/*`, and compatibility aliases.
 - Contract evolution is OpenAPI-first and documented when changed.

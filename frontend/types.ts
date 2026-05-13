@@ -137,3 +137,255 @@ export interface CVSearchResponse {
   items: CVSearchItem[];
   total: number;
 }
+
+export interface NormalJobSearchItem {
+  id: string;
+  job_id: string;
+  title: string;
+  company_name?: string | null;
+  company_industry?: string | null;
+  department?: string | null;
+  location: string;
+  location_detail?: Record<string, unknown>;
+  job_type: string;
+  employment_type?: string[];
+  working_model?: string | null;
+  seniority?: string | null;
+  education?: string | null;
+  education_level?: string | null;
+  skills: string[];
+  requirement: string;
+  requirements?: string[];
+  responsibilities?: string[];
+  categories?: string[];
+  tags?: string[];
+  salary?: Record<string, unknown>;
+  remote?: boolean;
+}
+
+export interface NormalCVSearchItem {
+  id: string;
+  cv_id: string;
+  title: string;
+  fullname?: string;
+  location: string;
+  location_detail?: Record<string, unknown>;
+  job_type: string;
+  employment_type?: string[];
+  working_model?: string | null;
+  seniority?: string | null;
+  education?: string | null;
+  skills: string[];
+  summary: string;
+  experience: string;
+  certifications: string[];
+  target_role?: string | null;
+  availability?: string | null;
+  file?: Record<string, unknown>;
+}
+
+export interface NormalSearchResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface NormalJobSearchParams {
+  q?: string;
+  keyword?: string;
+  title?: string;
+  company_name?: string;
+  company_industry?: string;
+  department?: string;
+  location?: string;
+  category?: string;
+  industry?: string;
+  categories?: string;
+  tags?: string;
+  employmentType?: string;
+  experienceLevel?: string;
+  salaryMin?: number;
+  salaryMax?: number;
+  educationLevel?: string;
+  workingModel?: string;
+  skills?: string;
+  page?: number;
+  limit?: number;
+  sort?: string;
+}
+
+export interface NormalCVSearchParams {
+  q?: string;
+  location?: string;
+  desiredCategory?: string;
+  desiredIndustry?: string;
+  experienceLevel?: string;
+  yearsOfExperience?: string;
+  educationLevel?: string;
+  expectedSalaryMin?: number;
+  expectedSalaryMax?: number;
+  workingModel?: string;
+  availability?: string;
+  skills?: string;
+  page?: number;
+  limit?: number;
+  sort?: string;
+}
+
+export interface NormalJob {
+  id: string;
+  created_by: string;
+  company_id?: string | null;
+  title: string;
+  slug?: string | null;
+  status: 'draft' | 'published' | 'closed';
+  visibility: 'public' | 'private' | 'unlisted';
+  company_name?: string | null;
+  company_logo_url?: string | null;
+  company_website?: string | null;
+  company_location?: string | null;
+  company_size?: string | null;
+  company_industry?: string | null;
+  department?: string | null;
+  location: Record<string, unknown>;
+  employment_type: string[];
+  seniority?: string | null;
+  team_size?: number | null;
+  description?: string | null;
+  responsibilities: string[];
+  requirements: string[];
+  nice_to_have?: string[];
+  skills: Array<Record<string, unknown>>;
+  experience_years?: number | null;
+  education_level?: string | null;
+  salary: Record<string, unknown>;
+  benefits?: string[];
+  bonus?: string | null;
+  equity?: string | null;
+  apply_url?: string | null;
+  apply_email?: string | null;
+  recruiter?: Record<string, unknown>;
+  how_to_apply?: string | null;
+  application_deadline?: string | null;
+  tags: string[];
+  categories: string[];
+  remote: boolean;
+  archived: boolean;
+  applications_count?: number;
+  required_docs?: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NormalCv {
+  id: string;
+  created_by: string;
+  avatar_url?: string | null;
+  fullname: string;
+  preferred_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  location: Record<string, unknown>;
+  headline?: string | null;
+  summary?: string | null;
+  target_role?: string | null;
+  employment_type: string[];
+  salary_expectation?: string | null;
+  availability?: string | null;
+  skills: Array<Record<string, unknown>>;
+  experiences: Array<Record<string, unknown>>;
+  education: Array<Record<string, unknown>>;
+  projects?: Array<Record<string, unknown>>;
+  certifications: Array<Record<string, unknown>>;
+  languages?: Array<Record<string, unknown>>;
+  portfolio?: Array<Record<string, unknown>>;
+  references?: Array<Record<string, unknown>>;
+  status: string;
+  visibility: 'public' | 'private' | 'unlisted';
+  tags: string[];
+  file: Record<string, unknown>;
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NormalJobCreatePayload {
+  company_id?: string;
+  title: string;
+  slug?: string;
+  status?: 'draft' | 'published' | 'closed';
+  visibility?: 'public' | 'private' | 'unlisted';
+  company_name?: string;
+  company_logo_url?: string;
+  company_website?: string;
+  company_location?: string;
+  company_size?: string;
+  company_industry?: string;
+  department?: string;
+  location?: Record<string, unknown>;
+  employment_type?: string[];
+  seniority?: string;
+  team_size?: number;
+  description?: string;
+  responsibilities?: string[];
+  requirements?: string[];
+  nice_to_have?: string[];
+  skills?: Array<Record<string, unknown>>;
+  experience_years?: number;
+  education_level?: string;
+  salary?: Record<string, unknown>;
+  benefits?: string[];
+  bonus?: string;
+  equity?: string;
+  apply_url?: string;
+  apply_email?: string;
+  recruiter?: Record<string, unknown>;
+  how_to_apply?: string;
+  application_deadline?: string;
+  tags?: string[];
+  categories?: string[];
+  remote?: boolean;
+  archived?: boolean;
+  required_docs?: string[];
+}
+
+export type NormalJobUpdatePayload = Partial<NormalJobCreatePayload>;
+
+export interface NormalCvCreatePayload {
+  avatar_url?: string;
+  fullname: string;
+  preferred_name?: string;
+  email?: string;
+  phone?: string;
+  location?: Record<string, unknown>;
+  headline?: string;
+  summary?: string;
+  target_role?: string;
+  employment_type?: string[];
+  salary_expectation?: string;
+  availability?: string;
+  skills?: Array<Record<string, unknown>>;
+  experiences?: Array<Record<string, unknown>>;
+  education?: Array<Record<string, unknown>>;
+  projects?: Array<Record<string, unknown>>;
+  certifications?: Array<Record<string, unknown>>;
+  languages?: Array<Record<string, unknown>>;
+  portfolio?: Array<Record<string, unknown>>;
+  references?: Array<Record<string, unknown>>;
+  status?: string;
+  visibility?: 'public' | 'private' | 'unlisted';
+  tags?: string[];
+  archived?: boolean;
+}
+
+export type NormalCvUpdatePayload = Partial<NormalCvCreatePayload>;
+
+export interface CvExtractResponse {
+  extractedText: string;
+  cv: Partial<NormalCvCreatePayload> & {
+    file?: Record<string, unknown> | null;
+  };
+  warnings: string[];
+}

@@ -1,9 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   getMe,
+  googleLogin as googleLoginRequest,
   login as loginRequest,
   register as registerRequest,
   type AuthUser,
+  type GoogleLoginPayload,
   type LoginPayload,
   type RegisterPayload,
 } from '../src/services/authApi';
@@ -17,6 +19,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (payload: LoginPayload) => Promise<AuthUser>;
+  googleLogin: (payload: GoogleLoginPayload) => Promise<AuthUser>;
   register: (payload: RegisterPayload) => Promise<AuthUser>;
   logout: () => void;
   refreshMe: () => Promise<AuthUser | null>;
@@ -118,6 +121,15 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     return response.user;
   }, []);
 
+  const googleLogin = useCallback(async (payload: GoogleLoginPayload): Promise<AuthUser> => {
+    const response = await googleLoginRequest(payload);
+    window.localStorage.setItem(ACCESS_TOKEN_KEY, response.access_token);
+    window.localStorage.setItem(USER_KEY, JSON.stringify(response.user));
+    setAccessToken(response.access_token);
+    setUser(response.user);
+    return response.user;
+  }, []);
+
   const register = useCallback(async (payload: RegisterPayload): Promise<AuthUser> => {
     return registerRequest(payload);
   }, []);
@@ -129,11 +141,12 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
       isAuthenticated: Boolean(accessToken && user),
       isLoading,
       login,
+      googleLogin,
       register,
       logout,
       refreshMe,
     }),
-    [accessToken, user, isLoading, login, register, logout, refreshMe]
+    [accessToken, user, isLoading, login, googleLogin, register, logout, refreshMe]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

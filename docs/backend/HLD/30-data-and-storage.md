@@ -6,6 +6,7 @@ V2 run-only prototype dùng PostgreSQL cho:
 - JD/CV prototype records
 - vector embeddings qua pgvector
 - auth users for the additive login/register surface
+- normal Job/CV rows for public search and owner-managed CRUD
 
 ## Data Boundaries
 
@@ -15,6 +16,9 @@ V2 run-only prototype dùng PostgreSQL cho:
   `sentence-transformers/all-MiniLM-L6-v2` only; PostgreSQL stores the resulting
   384-dimensional vectors.
 - Matching results được trả trực tiếp từ run endpoint, không persist trong scope hiện tại.
+- Normal Job/CV data is stored only in PostgreSQL tables `jobs` and `cvs`.
+  Ownership is held on child rows through `created_by -> users.id`.
+  PDF CV uploads store file metadata in `cvs.file` JSONB.
 
 ## Core Tables (V2)
 
@@ -28,6 +32,11 @@ Matching-owned tables:
 Auth-owned table:
 
 - `users`
+
+Normal Job/CV tables:
+
+- `jobs`
+- `cvs`
 
 ## Match Result Contract
 

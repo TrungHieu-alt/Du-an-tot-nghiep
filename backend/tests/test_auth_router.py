@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from jose import jwt
 
@@ -76,7 +76,7 @@ class AuthRouterTests(unittest.TestCase):
         conn, cur = _make_conn(
             responses=[
                 None,
-                (user_id, "user@example.com", "Nguyen Van A", "candidate"),
+                (user_id, "user@example.com", "Nguyen Van A", "user"),
             ]
         )
 
@@ -87,7 +87,7 @@ class AuthRouterTests(unittest.TestCase):
                     "email": "USER@example.com",
                     "password": "12345678",
                     "full_name": " Nguyen Van A ",
-                    "role": "candidate",
+                    "role": "admin",
                 },
             )
 
@@ -98,7 +98,7 @@ class AuthRouterTests(unittest.TestCase):
                 "id": user_id,
                 "email": "user@example.com",
                 "full_name": "Nguyen Van A",
-                "role": "candidate",
+                "role": "user",
             },
         )
         insert_params = cur.executed[1][1]
@@ -106,7 +106,7 @@ class AuthRouterTests(unittest.TestCase):
         self.assertNotEqual(insert_params[1], "12345678")
         self.assertTrue(insert_params[1].startswith("$2"))
         self.assertEqual(insert_params[2], "Nguyen Van A")
-        self.assertEqual(insert_params[3], "candidate")
+        self.assertEqual(insert_params[3], "user")
         self.assertTrue(conn.committed)
         self.assertTrue(conn.closed)
 
@@ -132,13 +132,106 @@ class AuthRouterTests(unittest.TestCase):
         self.assertEqual(res.json(), {"detail": "Email already exists"})
         self.assertFalse(conn.committed)
 
-    def test_register_validates_email_password_and_role(self):
+    def test_register_validates_email_and_password(self):
         res = self.client.post(
             "/api/auth/register",
             json={"email": "bad-email", "password": "short", "role": "owner"},
         )
 
         self.assertEqual(res.status_code, 422)
+
+    def test_google_login_creates_user_and_returns_app_token(self):
+        user_id = "22222222-2222-2222-2222-222222222222"
+        conn, cur = _make_conn(
+            responses=[
+                None,
+                (user_id, "google@example.com", "Google User", "user"),
+            ]
+        )
+
+        with patch("routers.auth.get_connection", return_value=conn), patch(
+            "routers.auth._verify_google_id_token",
+            return_value={
+                "sub": "google-sub-1",
+                "email": "Google@example.com",
+                "email_verified": True,
+                "name": "Google User",
+                "picture": "https://example.com/avatar.png",
+            },
+        ):
+            res = self.client.post(
+                "/api/auth/google",
+                json={"credential": "valid-google-id-token"},
+            )
+
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(body["token_type"], "bearer")
+        self.assertTrue(body["access_token"])
+        self.assertEqual(
+            body["user"],
+            {
+                "id": user_id,
+                "email": "google@example.com",
+                "full_name": "Google User",
+                "role": "user",
+            },
+        )
+        insert_sql, insert_params = cur.executed[1]
+        self.assertIn("INSERT INTO users", insert_sql)
+        self.assertEqual(insert_params[0], "google@example.com")
+        self.assertTrue(str(insert_params[1]).startswith("google:google-sub-1:"))
+        self.assertEqual(insert_params[2], "Google User")
+        self.assertEqual(insert_params[3], "user")
+        self.assertEqual(insert_params[4], "google-sub-1")
+        self.assertEqual(insert_params[5], "https://example.com/avatar.png")
+        self.assertTrue(conn.committed)
+
+    def test_google_login_links_existing_user_without_duplicate_insert(self):
+        user_id = "22222222-2222-2222-2222-222222222222"
+        conn, cur = _make_conn(
+            responses=[
+                (user_id, "user@example.com", "Existing User", "candidate"),
+                (user_id, "user@example.com", "Existing User", "candidate"),
+            ]
+        )
+
+        with patch("routers.auth.get_connection", return_value=conn), patch(
+            "routers.auth._verify_google_id_token",
+            return_value={
+                "sub": "google-sub-2",
+                "email": "user@example.com",
+                "email_verified": True,
+                "name": "Google User",
+            },
+        ):
+            res = self.client.post(
+                "/api/auth/google",
+                json={"credential": "valid-google-id-token"},
+            )
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["user"]["email"], "user@example.com")
+        self.assertEqual(res.json()["user"]["role"], "candidate")
+        combined_sql = "\n".join(sql for sql, _ in cur.executed)
+        self.assertIn("UPDATE users", combined_sql)
+        self.assertNotIn("INSERT INTO users", combined_sql)
+        self.assertTrue(conn.committed)
+
+    def test_google_login_rejects_invalid_token(self):
+        conn, _ = _make_conn(responses=[])
+
+        with patch("routers.auth.get_connection", return_value=conn), patch(
+            "routers.auth._verify_google_id_token",
+            side_effect=HTTPException(status_code=401, detail="Invalid Google credential"),
+        ):
+            res = self.client.post(
+                "/api/auth/google",
+                json={"credential": "bad-token"},
+            )
+
+        self.assertEqual(res.status_code, 401)
+        self.assertEqual(res.json(), {"detail": "Invalid Google credential"})
 
     def test_login_returns_bearer_token_and_user(self):
         user_id = "11111111-1111-1111-1111-111111111111"
@@ -239,6 +332,7 @@ class AuthRouterTests(unittest.TestCase):
 
         self.assertIn("/api/auth/register", paths)
         self.assertIn("/api/auth/login", paths)
+        self.assertIn("/api/auth/google", paths)
         self.assertIn("/api/auth/me", paths)
         self.assertEqual(paths["/api/auth/register"]["post"]["responses"]["201"]["description"], "Successful Response")
 

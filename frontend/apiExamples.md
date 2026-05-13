@@ -17,6 +17,17 @@ curl "http://localhost:8000/api/v2/prototype/catalog/jobs/4001"
 curl "http://localhost:8000/api/v2/prototype/catalog/cvs/3001"
 ```
 
+## Normal Search
+
+```bash
+curl "http://localhost:8000/api/jobs?q=marketing&industry=marketing&page=1&limit=10"
+curl "http://localhost:8000/api/cvs?q=sales&skills=communication&page=1&limit=10"
+curl "http://localhost:8000/api/candidates?desiredIndustry=human_resources"
+```
+
+Normal search returns `{items,total,page,limit,totalPages}` and does not return
+matching percentages.
+
 ## Catalog Search
 
 ```bash

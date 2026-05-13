@@ -6,22 +6,33 @@ import {
   CheckSquare,
   Eye,
   EyeOff,
-  Facebook,
   Lock,
   Mail,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { normalizeApiError } from '../lib/api-error';
+import { ENV } from '../src/config/env';
+import { requestGoogleCredential } from '../src/services/googleIdentity';
+
+const POST_LOGIN_PATH = '/jobs/search';
+
+const displayAuthError = (error: unknown): string => {
+  if (error instanceof Error && !('response' in error) && error.message) {
+    return error.message;
+  }
+  return normalizeApiError(error).displayMessage;
+};
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, googleLogin } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [googleSubmitting, setGoogleSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const justRegistered = useMemo(
@@ -35,11 +46,25 @@ const Login: React.FC = () => {
     setError(null);
     try {
       await login({ email, password });
-      navigate('/v2/search', { replace: true });
+      navigate(POST_LOGIN_PATH, { replace: true });
     } catch (err) {
       setError(normalizeApiError(err).displayMessage);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setGoogleSubmitting(true);
+    setError(null);
+    try {
+      const credential = await requestGoogleCredential(ENV.GOOGLE_CLIENT_ID);
+      await googleLogin({ credential });
+      navigate(POST_LOGIN_PATH, { replace: true });
+    } catch (err) {
+      setError(displayAuthError(err));
+    } finally {
+      setGoogleSubmitting(false);
     }
   };
 
@@ -145,14 +170,16 @@ const Login: React.FC = () => {
 
       <div className="my-7 flex items-center gap-3 text-xs text-gray-400">
         <div className="h-px flex-1 bg-gray-200" />
-        Hoặc đăng nhập với
+        Hoặc
         <div className="h-px flex-1 bg-gray-200" />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <SocialButton label="Google" mark="G" />
-        <SocialButton label="Facebook" icon={<Facebook className="h-4 w-4 text-[#1877F2]" />} />
-      </div>
+      <SocialButton
+        label={googleSubmitting ? 'Đang mở Google...' : 'Đăng nhập bằng Google'}
+        mark="G"
+        disabled={googleSubmitting || submitting}
+        onClick={handleGoogleLogin}
+      />
     </AuthPageFrame>
   );
 };
@@ -209,14 +236,24 @@ const AuthPageFrame: React.FC<AuthPageFrameProps> = ({ title, subtitle, cards, c
   </div>
 );
 
-const SocialButton: React.FC<{ label: string; mark?: string; icon?: React.ReactNode }> = ({
+const SocialButton: React.FC<{
+  label: string;
+  mark?: string;
+  icon?: React.ReactNode;
+  disabled?: boolean;
+  onClick?: () => void;
+}> = ({
   label,
   mark,
   icon,
+  disabled,
+  onClick,
 }) => (
   <button
     type="button"
-    className="inline-flex h-10 items-center justify-center gap-3 rounded-lg border border-gray-200 bg-white text-sm font-bold text-gray-600 transition-colors hover:border-[#0F6FD6] hover:text-[#0F6FD6]"
+    disabled={disabled}
+    onClick={onClick}
+    className="inline-flex h-11 w-full items-center justify-center gap-3 rounded-lg border border-gray-200 bg-white text-sm font-bold text-gray-600 transition-colors hover:border-[#0F6FD6] hover:text-[#0F6FD6] disabled:cursor-not-allowed disabled:opacity-70"
   >
     {mark ? <span className="font-bold text-[#EA4335]">{mark}</span> : icon}
     {label}

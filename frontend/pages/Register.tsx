@@ -11,17 +11,27 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { normalizeApiError } from '../lib/api-error';
-import type { UserRole } from '../src/services/authApi';
+import { ENV } from '../src/config/env';
+import { requestGoogleCredential } from '../src/services/googleIdentity';
+
+const POST_GOOGLE_REGISTER_PATH = '/jobs/search';
+
+const displayAuthError = (error: unknown): string => {
+  if (error instanceof Error && !('response' in error) && error.message) {
+    return error.message;
+  }
+  return normalizeApiError(error).displayMessage;
+};
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
-  const { register } = useAuth();
+  const { register, googleLogin } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<Extract<UserRole, 'candidate' | 'employer'>>('candidate');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [googleSubmitting, setGoogleSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -32,7 +42,6 @@ const Register: React.FC = () => {
       await register({
         email,
         password,
-        role,
         full_name: fullName.trim() || undefined,
       });
       navigate('/login', { replace: true, state: { registered: true } });
@@ -40,6 +49,20 @@ const Register: React.FC = () => {
       setError(normalizeApiError(err).displayMessage);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setGoogleSubmitting(true);
+    setError(null);
+    try {
+      const credential = await requestGoogleCredential(ENV.GOOGLE_CLIENT_ID);
+      await googleLogin({ credential });
+      navigate(POST_GOOGLE_REGISTER_PATH, { replace: true });
+    } catch (err) {
+      setError(displayAuthError(err));
+    } finally {
+      setGoogleSubmitting(false);
     }
   };
 
@@ -152,26 +175,30 @@ const Register: React.FC = () => {
                 </span>
               </label>
 
-              <label className="block">
-                <span className="mb-2 block text-sm font-bold text-gray-700">Vai trò</span>
-                <select
-                  value={role}
-                  onChange={(event) => setRole(event.target.value as Extract<UserRole, 'candidate' | 'employer'>)}
-                  className="h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 text-sm font-medium text-gray-700 outline-none transition-colors focus:border-[#0F6FD6] focus:bg-white focus:ring-2 focus:ring-[#0F6FD6]/10"
-                >
-                  <option value="candidate">Candidate</option>
-                  <option value="employer">Employer</option>
-                </select>
-              </label>
-
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || googleSubmitting}
                 className="h-12 w-full rounded-lg bg-[#0F6FD6] text-sm font-bold text-white shadow-xl shadow-blue-500/20 transition-colors hover:bg-[#0B5FB9] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {submitting ? 'Đang tạo tài khoản...' : 'Đăng ký tài khoản'}
               </button>
             </form>
+
+            <div className="my-6 flex items-center gap-3 text-xs text-gray-400">
+              <div className="h-px flex-1 bg-gray-200" />
+              Hoặc
+              <div className="h-px flex-1 bg-gray-200" />
+            </div>
+
+            <button
+              type="button"
+              disabled={submitting || googleSubmitting}
+              onClick={handleGoogleLogin}
+              className="inline-flex h-11 w-full items-center justify-center gap-3 rounded-lg border border-gray-200 bg-white text-sm font-bold text-gray-600 transition-colors hover:border-[#0F6FD6] hover:text-[#0F6FD6] disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <span className="font-bold text-[#EA4335]">G</span>
+              {googleSubmitting ? 'Đang mở Google...' : 'Tiếp tục với Google'}
+            </button>
 
             <p className="mt-6 text-center text-sm text-gray-500">
               Đã có tài khoản?{' '}

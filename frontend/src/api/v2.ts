@@ -18,6 +18,11 @@ import type {
   JobSearchResponse,
   JobV2Detail,
   JobV2ListResponse,
+  NormalCVSearchItem,
+  NormalCVSearchParams,
+  NormalJobSearchItem,
+  NormalJobSearchParams,
+  NormalSearchResponse,
   RunMatchingV2Request,
   RunMatchingV2Response,
 } from '../../types';
@@ -25,6 +30,26 @@ import type {
 export interface ListV2Params {
   limit?: number;
   offset?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Normal search (non-vector, no matching score)
+// ---------------------------------------------------------------------------
+
+export async function searchJobs(
+  params: NormalJobSearchParams
+): Promise<NormalSearchResponse<NormalJobSearchItem>> {
+  const url = apiRoutes.normalSearch.jobs(params);
+  const response = await api.get<NormalSearchResponse<NormalJobSearchItem>>(url);
+  return response.data;
+}
+
+export async function searchCvs(
+  params: NormalCVSearchParams
+): Promise<NormalSearchResponse<NormalCVSearchItem>> {
+  const url = apiRoutes.normalSearch.cvs(params);
+  const response = await api.get<NormalSearchResponse<NormalCVSearchItem>>(url);
+  return response.data;
 }
 
 // ---------------------------------------------------------------------------
@@ -102,6 +127,8 @@ export async function runV2MatchForCv(
 }
 
 export const v2Api = {
+  searchJobs,
+  searchCvs,
   listV2Jobs,
   getV2Job,
   listV2Cvs,

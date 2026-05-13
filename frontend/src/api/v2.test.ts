@@ -16,6 +16,8 @@ import {
   listV2Jobs,
   runV2MatchForCv,
   runV2MatchForJob,
+  searchCvs,
+  searchJobs,
   searchV2Cvs,
   searchV2Jobs,
 } from './v2';
@@ -26,6 +28,8 @@ import type {
   JobSearchResponse,
   JobV2Detail,
   JobV2ListResponse,
+  NormalJobSearchItem,
+  NormalSearchResponse,
   RunMatchingV2Response,
 } from '../../types';
 
@@ -38,6 +42,63 @@ describe('v2Api', () => {
   beforeEach(() => {
     mockedApi.get.mockReset();
     mockedApi.post.mockReset();
+  });
+
+  describe('normal search', () => {
+    it('GETs the normal job search endpoint with query params', async () => {
+      const payload: NormalSearchResponse<NormalJobSearchItem> = {
+        items: [
+          {
+            id: '4001',
+            job_id: '4001',
+            title: 'Marketing Executive',
+            location: 'tp_hcm',
+            job_type: 'fulltime',
+            seniority: 'junior',
+            education: 'dai_hoc',
+            skills: ['content'],
+            requirement: 'Run campaigns',
+            employment_type: ['fulltime'],
+            working_model: 'onsite',
+          },
+        ],
+        total: 1,
+        page: 1,
+        limit: 10,
+        totalPages: 1,
+      };
+      mockedApi.get.mockResolvedValueOnce({ data: payload });
+
+      const result = await searchJobs({
+        q: 'marketing',
+        industry: 'marketing',
+        location: 'tp_hcm',
+        page: 1,
+        limit: 10,
+      });
+
+      expect(mockedApi.get).toHaveBeenCalledWith(
+        '/job/search?q=marketing&industry=marketing&location=tp_hcm&page=1&limit=10'
+      );
+      expect(result).toEqual(payload);
+    });
+
+    it('GETs the normal CV search endpoint with general filters', async () => {
+      mockedApi.get.mockResolvedValueOnce({
+        data: { items: [], total: 0, page: 1, limit: 10, totalPages: 0 },
+      });
+
+      await searchCvs({
+        q: 'sales',
+        desiredIndustry: 'sales',
+        skills: 'communication',
+        yearsOfExperience: '2_5',
+      });
+
+      expect(mockedApi.get).toHaveBeenCalledWith(
+        '/cv/search?q=sales&desiredIndustry=sales&skills=communication&yearsOfExperience=2_5'
+      );
+    });
   });
 
   describe('listV2Jobs', () => {

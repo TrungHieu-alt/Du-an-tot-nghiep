@@ -1,9 +1,9 @@
 """Authentication API for the v3 JobConnect surface.
 
 This router is intentionally independent from the V2 matching/catalog runtime:
-it owns only account registration, login, and current-user lookup. Existing
-Matching V2 endpoints remain unguarded until role-based access is explicitly
-added later.
+it owns only account registration, password login, Google login, and
+current-user lookup. Existing Matching V2 endpoints remain unguarded until
+role-based access is explicitly added later.
 """
 
 from __future__ import annotations
@@ -11,19 +11,20 @@ from __future__ import annotations
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from matching_v2.db import get_connection
 
 
-UserRole = Literal["candidate", "employer", "admin"]
+UserRole = Literal["user", "candidate", "employer", "admin"]
+DEFAULT_ROLE: UserRole = "user"
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -31,15 +32,20 @@ password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class RegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     email: EmailStr
     password: str = Field(min_length=8)
     full_name: str | None = Field(default=None, max_length=255)
-    role: UserRole = "candidate"
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
+
+
+class GoogleLoginRequest(BaseModel):
+    credential: str = Field(min_length=1)
 
 
 class AuthUser(BaseModel):
@@ -77,7 +83,10 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return password_context.verify(password, password_hash)
+    try:
+        return password_context.verify(password, password_hash)
+    except (TypeError, ValueError):
+        return False
 
 
 def create_access_token(user: AuthUser) -> str:
@@ -91,7 +100,7 @@ def create_access_token(user: AuthUser) -> str:
     return jwt.encode(payload, _jwt_secret_key(), algorithm=_jwt_algorithm())
 
 
-def _normalize_email(email: EmailStr) -> str:
+def _normalize_email(email: EmailStr | str) -> str:
     return str(email).strip().lower()
 
 
@@ -99,6 +108,13 @@ def _normalize_full_name(full_name: str | None) -> str | None:
     if full_name is None:
         return None
     stripped = full_name.strip()
+    return stripped or None
+
+
+def _normalize_optional_string(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
     return stripped or None
 
 
@@ -151,6 +167,122 @@ def _get_user_by_id(conn: psycopg.Connection, user_id: str) -> AuthUser | None:
         )
         row = cur.fetchone()
     return _row_to_user(row) if row else None
+
+
+def _google_client_id() -> str:
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    if not client_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google login is not configured",
+        )
+    return client_id
+
+
+def _verify_google_id_token(credential: str) -> dict[str, Any]:
+    client_id = _google_client_id()
+    try:
+        from google.auth.transport import requests as google_requests
+        from google.oauth2 import id_token
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google auth dependency is not installed",
+        ) from exc
+
+    try:
+        claims = id_token.verify_oauth2_token(
+            credential,
+            google_requests.Request(),
+            client_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google credential",
+        ) from exc
+
+    email = _normalize_optional_string(claims.get("email"))
+    subject = _normalize_optional_string(claims.get("sub"))
+    if not email or not subject or claims.get("email_verified") is False:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google credential",
+        )
+    return claims
+
+
+def _upsert_google_user(conn: psycopg.Connection, claims: dict[str, Any]) -> AuthUser:
+    email = _normalize_email(str(claims["email"]))
+    google_id = str(claims["sub"]).strip()
+    full_name = _normalize_optional_string(claims.get("name"))
+    avatar_url = _normalize_optional_string(claims.get("picture"))
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id::text, email, full_name, role
+                FROM users
+                WHERE google_id = %s OR lower(email) = lower(%s)
+                ORDER BY CASE WHEN lower(email) = lower(%s) THEN 0 ELSE 1 END
+                LIMIT 1
+                """,
+                (google_id, email, email),
+            )
+            existing = cur.fetchone()
+
+            if existing is not None:
+                cur.execute(
+                    """
+                    UPDATE users
+                    SET google_id = COALESCE(google_id, %s),
+                        avatar_url = COALESCE(%s, avatar_url),
+                        auth_provider = 'google',
+                        full_name = COALESCE(full_name, %s)
+                    WHERE id = %s::uuid
+                    RETURNING id::text, email, full_name, role
+                    """,
+                    (google_id, avatar_url, full_name, existing[0]),
+                )
+                row = cur.fetchone()
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO users (
+                        email,
+                        password_hash,
+                        full_name,
+                        role,
+                        google_id,
+                        avatar_url,
+                        auth_provider
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, 'google')
+                    RETURNING id::text, email, full_name, role
+                    """,
+                    (
+                        email,
+                        f"google:{google_id}:{uuid.uuid4().hex}",
+                        full_name,
+                        DEFAULT_ROLE,
+                        google_id,
+                        avatar_url,
+                    ),
+                )
+                row = cur.fetchone()
+        conn.commit()
+    except psycopg.errors.UniqueViolation:
+        conn.rollback()
+        existing_user = _get_user_by_email(conn, email)
+        if existing_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Google account could not be linked",
+            ) from None
+        return existing_user
+
+    return _row_to_user(row)
 
 
 def get_db_connection():
@@ -210,7 +342,7 @@ def register(payload: RegisterRequest, conn: DbConnection) -> AuthUser:
                 VALUES (%s, %s, %s, %s)
                 RETURNING id::text, email, full_name, role
                 """,
-                (email, hash_password(payload.password), full_name, payload.role),
+                (email, hash_password(payload.password), full_name, DEFAULT_ROLE),
             )
             row = cur.fetchone()
         conn.commit()
@@ -243,6 +375,13 @@ def login(payload: LoginRequest, conn: DbConnection) -> LoginResponse:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    return LoginResponse(access_token=create_access_token(user), user=user)
+
+
+@router.post("/google", response_model=LoginResponse, summary="Login with Google")
+def google_login(payload: GoogleLoginRequest, conn: DbConnection) -> LoginResponse:
+    claims = _verify_google_id_token(payload.credential)
+    user = _upsert_google_user(conn, claims)
     return LoginResponse(access_token=create_access_token(user), user=user)
 
 

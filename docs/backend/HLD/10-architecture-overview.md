@@ -13,6 +13,9 @@
 ```text
 backend/main.py
   ├─ routers/auth.py
+  ├─ routers/job_router.py
+  ├─ routers/cv_router.py
+  ├─ routers/normal_search_router.py
   ├─ routers/v2_catalog_router.py
   ├─ routers/match_v2_router.py
   ├─ routers/match_hybrid_router.py
@@ -43,6 +46,9 @@ routers/v2_catalog_router.py
 |---|---|
 | `backend/main.py` | App creation, CORS, auth and v2 router mounting |
 | `routers/auth.py` | PostgreSQL-backed register/login/current-user contract |
+| `routers/job_router.py` | PostgreSQL-backed normal Job CRUD and public multi-industry search over `jobs` |
+| `routers/cv_router.py` | PostgreSQL-backed normal CV CRUD, public CV search, and PDF metadata upload over `cvs` |
+| `routers/normal_search_router.py` | Regular Find Job / Find CV text/rule search without matching or embedding calls |
 | `routers/match_v2_router.py` | Matching request/response contract |
 | `routers/match_hybrid_router.py` | Additive hybrid matching contract with 0..100 explainable scores |
 | `routers/v2_catalog_router.py` | Read-only browse/detail/search contract |

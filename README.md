@@ -14,12 +14,12 @@ run-only matching, plus an additive PostgreSQL/JWT authentication surface.
   metrics.
 - Run the additive hybrid matcher for explainable 0..100 scoring without
   changing the original V2 matcher contract.
-- Register, login, and load the current user through `/api/auth/*`.
+- Register, login, Google login, and load the current user through `/api/auth/*`.
 - Show the JobConnect landing homepage at `/`.
 
-Out of scope for the current repository state: document upload, parsing,
-application tracking, OAuth, advanced role authorization, LLM scoring,
-vector-store sidecars, and persisted match results.
+Out of scope for the current repository state: application tracking, advanced
+role authorization, LLM scoring, vector-store sidecars, and persisted match
+results.
 
 Embedding and AI boundary:
 
@@ -69,6 +69,7 @@ System:
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
+- `POST /api/auth/google`
 - `GET /api/auth/me`
 - `GET /api/health`
 - `GET /openapi.json`
@@ -105,6 +106,10 @@ docker compose exec backend python db_v2/reset.py
 
 Auth data is not seeded. The same migration pass creates an empty `users` table;
 register through the frontend or `POST /api/auth/register`.
+Registration no longer accepts a client-selected role; new users default to
+`role='user'`. Google login requires `GOOGLE_CLIENT_ID` on the backend and
+`VITE_GOOGLE_CLIENT_ID` on the frontend. Email/password login continues to work
+when those Google variables are empty.
 
 For the compact scenario profile:
 
@@ -144,11 +149,15 @@ Auth smoke after starting the stack:
 ```bash
 curl -X POST "http://localhost:8000/api/auth/register" \
   -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","password":"12345678","full_name":"Nguyen Van A","role":"candidate"}'
+  -d '{"email":"user@example.com","password":"12345678","full_name":"Nguyen Van A"}'
 
 curl -X POST "http://localhost:8000/api/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"12345678"}'
+
+curl -X POST "http://localhost:8000/api/auth/google" \
+  -H "Content-Type: application/json" \
+  -d '{"credential":"<google-id-token>"}'
 ```
 
 ## Documentation

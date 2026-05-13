@@ -7,6 +7,8 @@ interface PaginationParams {
   offset?: number;
 }
 
+type QueryPrimitive = string | number | boolean | undefined | null;
+
 const buildQueryString = (params?: PaginationParams): string => {
   if (!params) return '';
   const search = new URLSearchParams();
@@ -20,15 +22,52 @@ const buildQueryString = (params?: PaginationParams): string => {
   return qs ? `?${qs}` : '';
 };
 
+const buildAnyQueryString = <T extends object>(params?: T): string => {
+  if (!params) return '';
+  const search = new URLSearchParams();
+  Object.entries(params as Record<string, QueryPrimitive>).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return;
+    search.set(key, String(value));
+  });
+  const qs = search.toString();
+  return qs ? `?${qs}` : '';
+};
+
 export const apiRoutes = {
   auth: {
     register: () => '/auth/register',
     login: () => '/auth/login',
+    google: () => '/auth/google',
     me: () => '/auth/me',
   },
   system: {
     health: () => '/health',
     openapi: () => '/openapi.json',
+  },
+  normalSearch: {
+    jobs: <T extends object>(params?: T) =>
+      `/job/search${buildAnyQueryString(params)}`,
+    cvs: <T extends object>(params?: T) =>
+      `/cv/search${buildAnyQueryString(params)}`,
+    candidates: <T extends object>(params?: T) =>
+      `/candidates${buildAnyQueryString(params)}`,
+  },
+  job: {
+    create: () => '/employer/requests',
+    my: () => '/employer/requests/my',
+    byId: (jobId: RouteId) => `/employer/requests/${toPathId(jobId)}`,
+    search: <T extends object>(params?: T) =>
+      `/job/search${buildAnyQueryString(params)}`,
+    filters: () => '/job/search/filters',
+  },
+  cv: {
+    create: () => '/cvs',
+    upload: () => '/cv/upload',
+    extractPdf: () => '/cvs/extract-pdf',
+    my: () => '/cvs/my',
+    byId: (cvId: RouteId) => `/cvs/${toPathId(cvId)}`,
+    search: <T extends object>(params?: T) =>
+      `/cv/search${buildAnyQueryString(params)}`,
   },
   v2: {
     catalog: {

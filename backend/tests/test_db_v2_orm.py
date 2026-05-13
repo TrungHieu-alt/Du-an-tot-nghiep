@@ -359,7 +359,7 @@ class TestDbV2Orm(unittest.TestCase):
     # Scope guard — only the 4 prototype tables plus additive app tables exist
     # -----------------------------------------------------------------------
 
-    def test_only_four_prototype_tables_exist_with_additive_users_table(self) -> None:
+    def test_only_four_prototype_tables_exist_with_additive_app_tables(self) -> None:
         rows = self.session.execute(
             text(
                 "SELECT table_name FROM information_schema.tables "
@@ -373,7 +373,7 @@ class TestDbV2Orm(unittest.TestCase):
             "job_embeddings_v2",
             "candidate_embeddings_v2",
         }
-        allowed_tables = prototype_tables | {"users"}
+        allowed_tables = prototype_tables | {"users", "jobs", "cvs"}
 
         self.assertTrue(prototype_tables.issubset(tables))
         self.assertEqual(tables, allowed_tables, f"unexpected tables present: {tables - allowed_tables}")

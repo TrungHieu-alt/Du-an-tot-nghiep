@@ -10,9 +10,13 @@ additive `users` table for the auth surface.
 backend/db_v2/
 ├── migrations/001_init.sql   # 4 prototype matching tables + CHECK constraints + pgvector
 ├── migrations/002_auth_users.sql # auth users table
+├── migrations/003_normal_jobs_cvs.sql # normal Job/CV tables for public search
+├── migrations/004_normal_public_defaults.sql # public defaults for existing normal rows
+├── migrations/005_google_auth.sql # Google auth columns/default role compatibility
 ├── seeds/001_seed.sql        # deterministic JD/CV rows + 384-dim embeddings
 ├── seeds/002_extra_test_data.sql
 ├── seeds/003_broad_ranking_test_data.sql
+├── seeds/004_normal_jobs_cvs_seed.sql # normal multi-industry Job/CV seed
 ├── scenarios/                # Slice 6B compact scenario JSON + schema
 │   └── matching_v2_slice_6c_rank_expectations.json
 ├── scenario_embeddings.py    # local MiniLM 384-dim embedding generator
@@ -21,10 +25,13 @@ backend/db_v2/
 └── reset.py                  # reset + migrate + seed in one command
 ```
 
-Matching data still lives in exactly **four** tables: `candidate_profiles_v2`,
-`job_posts_v2`, `candidate_embeddings_v2`, `job_embeddings_v2`. Auth data lives
-separately in `users`. There is **no** `match_results_v2` table — the matching
-prototype is run-only.
+Matching V2 data still lives in exactly **four** tables:
+`candidate_profiles_v2`, `job_posts_v2`, `candidate_embeddings_v2`,
+`job_embeddings_v2`. Auth data lives separately in `users`; registration
+defaults to `role='user'`, and Google login stores `google_id`, `avatar_url`,
+and `auth_provider` on the same PostgreSQL row. Normal public search data lives
+in `jobs` and `cvs`, seeded by `004_normal_jobs_cvs_seed.sql`. There is **no**
+`match_results_v2` table — the matching prototype is run-only.
 
 ## Start the database
 
@@ -44,7 +51,8 @@ python backend/db_v2/reset.py
 
 This drops the `public` schema, re-applies every SQL file in `migrations/`
 (lexical order), then every SQL file in `seeds/` (lexical order). The default
-`base` profile preserves the historical SQL seed path and leaves `users` empty.
+`base` profile preserves the historical SQL V2 seed path and also inserts normal
+multi-industry demo users/jobs/CVs for `/api/job/search` and `/api/cv/search`.
 
 If you prefer to run the command inside the backend container, start the backend
 service first and use the compose-network PostgreSQL host:
@@ -121,13 +129,32 @@ Expected after the default SQL seed path: use the current SQL files under
 | `candidate_profiles_v2` | 34 |
 | `job_embeddings_v2` | 10 |
 | `candidate_embeddings_v2` | 33 |
-| `users` | 0 |
+| `users` | 2 demo normal users |
+| `jobs` | 16 normal public jobs |
+| `cvs` | 8 normal public CVs |
 
 The default SQL seed path is the Slice 6C broad ranking verification dataset.
 It contains 10 representative JD anchors (`2001..2010`) and deterministic
 strong/good/noisy candidate rows for ranking checks. CV `1010` intentionally has
 no embedding row so min_score exclusion can be tested separately from hard
 filters.
+
+The normal seed path is separate from V2 scenario data. It inserts public rows
+into normal `jobs` and `cvs` only, using:
+
+- recruiter: `demo.recruiter@example.com`
+- candidate: `demo.candidate@example.com`
+
+Normal Search reads these rows through:
+
+```bash
+curl "http://localhost:8000/api/job/search"
+curl "http://localhost:8000/api/job/search?company_industry=Marketing"
+curl "http://localhost:8000/api/job/search?keyword=accountant"
+curl "http://localhost:8000/api/job/search?skills=React"
+curl "http://localhost:8000/api/job/search?location.city=Hanoi"
+curl "http://localhost:8000/api/job/search?employment_type=fulltime"
+```
 
 Expected after the Slice 6B scenario profile: 6 JD, 36 CV, 6 job embedding
 rows, and 35 candidate embedding rows.

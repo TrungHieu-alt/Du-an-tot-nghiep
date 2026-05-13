@@ -1,7 +1,7 @@
 import api from '../../lib/api';
 import { apiRoutes } from '../../lib/api-routes';
 
-export type UserRole = 'candidate' | 'employer' | 'admin';
+export type UserRole = 'user' | 'candidate' | 'employer' | 'admin';
 
 export interface AuthUser {
   id: string;
@@ -14,12 +14,15 @@ export interface RegisterPayload {
   email: string;
   password: string;
   full_name?: string;
-  role?: Extract<UserRole, 'candidate' | 'employer'>;
 }
 
 export interface LoginPayload {
   email: string;
   password: string;
+}
+
+export interface GoogleLoginPayload {
+  credential: string;
 }
 
 export interface LoginResponse {
@@ -38,6 +41,11 @@ export async function login(payload: LoginPayload): Promise<LoginResponse> {
   return response.data;
 }
 
+export async function googleLogin(payload: GoogleLoginPayload): Promise<LoginResponse> {
+  const response = await api.post<LoginResponse>(apiRoutes.auth.google(), payload);
+  return response.data;
+}
+
 export async function getMe(token: string): Promise<AuthUser> {
   const response = await api.get<AuthUser>(apiRoutes.auth.me(), {
     headers: {
@@ -50,5 +58,6 @@ export async function getMe(token: string): Promise<AuthUser> {
 export const authApi = {
   register,
   login,
+  googleLogin,
   getMe,
 };

@@ -103,7 +103,7 @@ const Home: React.FC = () => {
     const params = new URLSearchParams();
     if (keyword.trim()) params.set('q', keyword.trim());
     if (city) params.set('location', city);
-    navigate(`/v2/search${params.toString() ? `?${params.toString()}` : ''}`);
+    navigate(`/jobs/search${params.toString() ? `?${params.toString()}` : ''}`);
   };
 
   return (
@@ -122,14 +122,14 @@ const Home: React.FC = () => {
 
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link
-              to="/v2/search"
+              to="/jobs/search"
               className="inline-flex items-center gap-2 rounded-full bg-[#4F67F3] px-6 py-3 text-sm font-bold text-white shadow-xl shadow-blue-900/20 transition-transform hover:-translate-y-0.5"
             >
               <Search className="h-5 w-5" />
               Tìm việc ngay
             </Link>
             <Link
-              to="/v2/search?type=cv"
+              to="/cvs/search?type=cv"
               className="inline-flex items-center gap-2 rounded-full bg-white/95 px-6 py-3 text-sm font-bold text-gray-700 shadow-xl shadow-blue-900/10 transition-transform hover:-translate-y-0.5"
             >
               <Users className="h-5 w-5" />
@@ -192,7 +192,7 @@ const Home: React.FC = () => {
             return (
               <Link
                 key={category.title}
-                to={`/v2/search?q=${encodeURIComponent(category.title.split(' ')[0])}`}
+                to={`/jobs/search?q=${encodeURIComponent(category.title.split(' ')[0])}`}
                 className="group rounded-lg bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg"
               >
                 <div className={`mb-5 inline-flex h-11 w-11 items-center justify-center rounded-lg ${category.tone}`}>
@@ -206,7 +206,7 @@ const Home: React.FC = () => {
         </div>
         <div className="mt-10 text-center">
           <Link
-            to="/v2/search"
+            to="/jobs/search"
             className="inline-flex items-center gap-2 rounded-full border border-[#0F6FD6] px-6 py-3 text-sm font-bold text-[#0F6FD6] transition-colors hover:bg-[#0F6FD6] hover:text-white"
           >
             Xem tất cả ngành nghề
@@ -222,7 +222,7 @@ const Home: React.FC = () => {
               <h2 className="text-3xl font-bold text-gray-900">Việc làm nổi bật</h2>
               <p className="mt-3 text-sm text-gray-500">Cơ hội việc làm tốt nhất dành cho bạn</p>
             </div>
-            <Link to="/v2/search" className="hidden items-center gap-2 text-sm font-bold text-[#0F6FD6] sm:inline-flex">
+            <Link to="/jobs/search" className="hidden items-center gap-2 text-sm font-bold text-[#0F6FD6] sm:inline-flex">
               Xem tất cả
               <ArrowRight className="h-4 w-4" />
             </Link>
@@ -264,7 +264,7 @@ const Home: React.FC = () => {
           {employers.map((employer) => (
             <Link
               key={employer.name}
-              to="/v2/search"
+              to="/jobs/search"
               className="rounded-lg bg-white p-5 text-center shadow-sm transition-transform hover:-translate-y-1"
             >
               <img src={employer.image} alt={employer.name} className="mx-auto h-14 w-14 rounded-lg object-cover" />
@@ -277,7 +277,7 @@ const Home: React.FC = () => {
         </div>
         <div className="mt-10 text-center">
           <Link
-            to="/v2/search"
+            to="/jobs/search"
             className="inline-flex items-center justify-center rounded-full bg-[#0F6FD6] px-7 py-3 text-sm font-bold text-white shadow-xl shadow-blue-500/20 transition-transform hover:-translate-y-0.5"
           >
             Xem tất cả công ty
@@ -318,7 +318,7 @@ const Home: React.FC = () => {
             Tham gia cùng hơn 500,000 ứng viên và 10,000 doanh nghiệp đã tin tưởng JobConnect
           </p>
           <div className="mt-9 flex flex-col justify-center gap-4 sm:flex-row">
-            <Link to="/v2/search" className="rounded-md bg-white px-7 py-3 text-sm font-bold text-[#0F6FD6]">
+            <Link to="/jobs/search" className="rounded-md bg-white px-7 py-3 text-sm font-bold text-[#0F6FD6]">
               Bắt đầu tìm việc
             </Link>
             <Link to="/register" className="rounded-md border-2 border-white px-7 py-3 text-sm font-bold text-white">

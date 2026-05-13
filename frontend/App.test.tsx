@@ -1,6 +1,23 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('./src/api/normal', () => ({
+  searchJobs: vi.fn().mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    limit: 10,
+    totalPages: 0,
+  }),
+  searchCvs: vi.fn().mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    limit: 10,
+    totalPages: 0,
+  }),
+}));
 
 import { AppRoutes } from './App';
 import { AuthProvider } from './contexts/AuthContext';
@@ -34,7 +51,7 @@ describe('AppRoutes', () => {
     expect(screen.getByRole('link', { name: /^trang chủ$/i })).toHaveAttribute('href', '/');
     expect(screen.getByRole('link', { name: /^tìm việc$/i })).toHaveAttribute(
       'href',
-      '/v2/search'
+      '/jobs/search'
     );
     expect(screen.getAllByRole('link', { name: /^matching v2$/i })[0]).toHaveAttribute(
       'href',
@@ -42,7 +59,7 @@ describe('AppRoutes', () => {
     );
     expect(screen.getAllByRole('link', { name: /^tìm việc ngay$/i })[0]).toHaveAttribute(
       'href',
-      '/v2/search'
+      '/jobs/search'
     );
   });
 
@@ -63,13 +80,20 @@ describe('AppRoutes', () => {
     async (route) => {
       renderRoutes(route);
 
-      expect(await screen.findByRole('heading', { name: /nhập từ khóa để bắt đầu/i })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('heading', {
+          name: /việc làm công khai/i,
+        })
+      ).toBeInTheDocument();
       expect(screen.queryByText(route)).not.toBeInTheDocument();
     }
   );
 
   it.each([
-    ['/v2/search', /nhập từ khóa để bắt đầu/i],
+    ['/jobs/search', /việc làm công khai/i],
+    ['/cvs/search?type=cv', /cv công khai/i],
+    ['/profile', /cần đăng nhập/i],
+    ['/v2/search', /việc làm công khai/i],
     ['/v2/matching', /v2 matching/i],
   ])('renders existing V2 route %s', async (route, heading) => {
     renderRoutes(route);

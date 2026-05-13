@@ -7,6 +7,11 @@ Auth:
 - `POST /api/auth/login`
 - `GET /api/auth/me`
 
+Normal search:
+- `GET /api/jobs`
+- `GET /api/cvs`
+- `GET /api/candidates`
+
 Matching:
 - `POST /api/v2/prototype/matching/job/{job_id}/run`
 - `POST /api/v2/prototype/matching/cv/{cv_id}/run`
@@ -34,6 +39,23 @@ Semantic search (pgvector cosine, blended `title` + `skills`):
 - `POST /api/v2/prototype/catalog/cvs/search`
 
 Body for search: `{q (1..200), top_k (1..50, default 20), blend_skills (0..1, default 0.3), location?, job_type?, seniority?}`. Empty/whitespace `q` short-circuits to `{items:[],total:0}` without touching the database. Query embedding uses local `sentence-transformers/all-MiniLM-L6-v2` through `backend/v2_search/embedder.py`. If the local model files are unavailable, the endpoint returns `503` rather than calling a remote fallback API.
+
+## Normal Search Flow
+
+The normal Find Job / Find CV pages use `GET /api/job/search` and
+`GET /api/cv/search`; compatibility aliases `GET /api/jobs`, `GET /api/cvs`,
+and `GET /api/candidates` route to the same normal-table search functions.
+These endpoints are separate from Matching V2 and catalog semantic search:
+
+1. Read the normal PostgreSQL tables `jobs` and `cvs`.
+2. Apply deterministic text/rule filters for keyword, location, industry,
+   employment type, experience level, education, working model, skills,
+   sort, and pagination where current normal schema fields exist.
+3. Accept forward-compatible salary/expected salary/availability params, but
+   those are no-ops until the database has dedicated columns.
+4. Return `{items,total,page,limit,totalPages}` and no relevance percentage.
+5. Do not read V2 scenario JSON, V2 prototype tables, or any MongoDB/Mongoose
+   source.
 
 ## Run Flow
 

@@ -4,9 +4,15 @@ FastAPI backend for the Matching V2 prototype.
 
 ## Active Modules
 
-- `main.py` mounts the v2 catalog, original v2 matching, hybrid matching, and
-  health routers.
-- `routers/auth.py` exposes PostgreSQL-backed register/login/current-user endpoints.
+- `main.py` mounts normal Job/CV CRUD/search, the v2 catalog, original v2
+  matching, hybrid matching, auth, and health routers.
+- `routers/auth.py` exposes PostgreSQL-backed register/login/Google-login/current-user endpoints.
+- `routers/job_router.py` exposes normal Job CRUD and public multi-industry
+  search over the `jobs` table.
+- `routers/cv_router.py` exposes normal CV CRUD and PDF CV upload over the
+  `cvs` table.
+- `routers/normal_search_router.py` keeps `/api/jobs`, `/api/cvs`, and
+  `/api/candidates` compatibility aliases pointed at normal tables.
 - `routers/match_v2_router.py` exposes run-only matching endpoints.
 - `routers/match_hybrid_router.py` exposes additive hybrid matching endpoints.
 - `routers/v2_catalog_router.py` exposes read-only browse/detail/search helpers.
@@ -39,9 +45,18 @@ docker compose exec backend python -m unittest discover -s tests
 bash scripts/smoke_match_v2_live.sh
 ```
 
-The backend has no document ingestion, application, OAuth, advanced role guard,
-or persisted match result endpoints in the current v2-only surface. Hybrid
-matching is run-only and does not write match results.
+The backend has no application workflow, advanced role guard, or persisted
+match result endpoints in the current prototype surface. Hybrid
+matching is run-only and does not write match results. Normal search endpoints
+read the normal `jobs`/`cvs` tables and do not call matching, pgvector search,
+or embedding code. PDF CV upload stores file metadata only; PDF parsing is not
+implemented yet.
+
+Registration does not accept client-selected roles; new users default to
+`role='user'`. Google login is available at `POST /api/auth/google` and verifies
+Google ID tokens server-side with `GOOGLE_CLIENT_ID`. If that variable is empty,
+Google login returns a clear configuration error while password login continues
+to work.
 
 No external AI API is used. The backend does not require OpenAI/Gemini API
 keys, does not call remote LLM or embedding services, and keeps explanations

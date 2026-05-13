@@ -8,7 +8,7 @@ vi.mock('../../lib/api', () => ({
 }));
 
 import api from '../../lib/api';
-import { getMe, login, register, type AuthUser, type LoginResponse } from './authApi';
+import { getMe, googleLogin, login, register, type AuthUser, type LoginResponse } from './authApi';
 
 const mockedApi = api as unknown as {
   get: ReturnType<typeof vi.fn>;
@@ -26,7 +26,7 @@ describe('authApi', () => {
       id: '11111111-1111-1111-1111-111111111111',
       email: 'user@example.com',
       full_name: 'Nguyen Van A',
-      role: 'candidate',
+      role: 'user',
     };
     mockedApi.post.mockResolvedValueOnce({ data: user });
 
@@ -34,14 +34,12 @@ describe('authApi', () => {
       email: 'user@example.com',
       password: '12345678',
       full_name: 'Nguyen Van A',
-      role: 'candidate',
     });
 
     expect(mockedApi.post).toHaveBeenCalledWith('/auth/register', {
       email: 'user@example.com',
       password: '12345678',
       full_name: 'Nguyen Van A',
-      role: 'candidate',
     });
     expect(result).toEqual(user);
   });
@@ -54,7 +52,7 @@ describe('authApi', () => {
         id: '11111111-1111-1111-1111-111111111111',
         email: 'user@example.com',
         full_name: null,
-        role: 'candidate',
+        role: 'user',
       },
     };
     mockedApi.post.mockResolvedValueOnce({ data: response });
@@ -68,13 +66,34 @@ describe('authApi', () => {
     expect(result).toEqual(response);
   });
 
+  it('logs in with Google through the auth endpoint', async () => {
+    const response: LoginResponse = {
+      access_token: 'google-token',
+      token_type: 'bearer',
+      user: {
+        id: '11111111-1111-1111-1111-111111111111',
+        email: 'google@example.com',
+        full_name: 'Google User',
+        role: 'user',
+      },
+    };
+    mockedApi.post.mockResolvedValueOnce({ data: response });
+
+    const result = await googleLogin({ credential: 'google-id-token' });
+
+    expect(mockedApi.post).toHaveBeenCalledWith('/auth/google', {
+      credential: 'google-id-token',
+    });
+    expect(result).toEqual(response);
+  });
+
   it('loads the current user with a bearer token', async () => {
     mockedApi.get.mockResolvedValueOnce({
       data: {
         id: '11111111-1111-1111-1111-111111111111',
         email: 'user@example.com',
         full_name: null,
-        role: 'candidate',
+        role: 'user',
       },
     });
 

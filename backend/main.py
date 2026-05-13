@@ -1,13 +1,23 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import auth, match_hybrid_router, match_v2_router, system_router, v2_catalog_router
+from routers import (
+    auth,
+    cv_router,
+    job_router,
+    match_hybrid_router,
+    match_v2_router,
+    normal_search_router,
+    system_router,
+    v2_catalog_router,
+)
 
 
 API_DESCRIPTION = """\
 Backend API for the JobConnect Matching V2 prototype.
 
-The active surface is v2-only:
+The active prototype surface is V2 matching/catalog, with additive auth and
+normal search endpoints for the JobConnect UI:
 
 * `POST /api/v2/prototype/matching/job/{job_id}/run`
 * `POST /api/v2/prototype/matching/cv/{cv_id}/run`
@@ -16,8 +26,21 @@ The active surface is v2-only:
 * `GET /api/v2/prototype/catalog/{jobs,cvs}`
 * `GET /api/v2/prototype/catalog/{jobs,cvs}/{id}`
 * `POST /api/v2/prototype/catalog/{jobs,cvs}/search`
+* `GET /api/jobs`
+* `GET /api/cvs`
+* `GET /api/candidates`
+* `POST /api/job`
+* `GET /api/job/my`
+* `GET /api/job/search`
+* `GET /api/employer/requests/my`
+* `POST /api/employer/requests`
+* `POST /api/cv`
+* `GET /api/cv/my`
+* `GET /api/cvs/my`
+* `POST /api/cv/upload`
 * `POST /api/auth/register`
 * `POST /api/auth/login`
+* `POST /api/auth/google`
 * `GET /api/auth/me`
 
 The prototype reads PostgreSQL + pgvector tables directly, returns run results
@@ -53,10 +76,46 @@ OPENAPI_TAGS = [
         ),
     },
     {
+        "name": "normal-search",
+        "description": (
+            "JobConnect normal search · Paginated non-vector job/CV search "
+            "for the Find Job and Find CV pages. Does not return matching "
+            "percentages or call embedding paths."
+        ),
+    },
+    {
+        "name": "normal-job",
+        "description": (
+            "JobConnect normal Job CRUD and public multi-industry job search. "
+            "Jobs are owned by users through `created_by`."
+        ),
+    },
+    {
+        "name": "normal-cv",
+        "description": (
+            "JobConnect normal CV CRUD and PDF CV upload. CVs are owned by "
+            "users through `created_by`."
+        ),
+    },
+    {
+        "name": "normal-cv-management",
+        "description": (
+            "CamelCase normal CV management aliases for candidate-owned CV "
+            "collections. Backed by PostgreSQL `cvs`."
+        ),
+    },
+    {
+        "name": "normal-employer-request-management",
+        "description": (
+            "CamelCase employer recruitment request management aliases. "
+            "Backed by PostgreSQL `jobs` and isolated from V2."
+        ),
+    },
+    {
         "name": "auth",
         "description": (
             "JobConnect authentication. PostgreSQL-backed registration, "
-            "password login, and JWT current-user lookup."
+            "password login, Google login, and JWT current-user lookup."
         ),
     },
     {"name": "system", "description": "Health checks and runtime probes."},
@@ -88,6 +147,11 @@ app.add_middleware(
 app.include_router(match_v2_router.router, prefix="/api")
 app.include_router(match_hybrid_router.router, prefix="/api")
 app.include_router(v2_catalog_router.router, prefix="/api")
+app.include_router(job_router.router, prefix="/api")
+app.include_router(job_router.employer_requests_router, prefix="/api")
+app.include_router(cv_router.router, prefix="/api")
+app.include_router(cv_router.cvs_router, prefix="/api")
+app.include_router(normal_search_router.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(system_router.router, prefix="/api")
 

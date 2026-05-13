@@ -7,6 +7,11 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ErrorToastProvider } from './contexts/ErrorToastContext';
 import Home from './pages/Home';
 import Login from './pages/Login';
+import MyCvs from './pages/MyCvs';
+import MyJobs from './pages/MyJobs';
+import NormalCvDetail from './pages/NormalCvDetail';
+import NormalJobDetail from './pages/NormalJobDetail';
+import Profile from './pages/Profile';
 import Register from './pages/Register';
 import V2CvDetail from './pages/V2CvDetail';
 import V2JobDetail from './pages/V2JobDetail';
@@ -25,11 +30,28 @@ export const AppRoutes: React.FC = () => {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/jobs/search" element={<V2Search />} />
+          <Route path="/cvs/search" element={<V2Search />} />
+          <Route path="/job/my" element={<MyJobs />} />
+          <Route path="/job/new" element={<MyJobs />} />
+          <Route path="/employer/requests" element={<MyJobs />} />
+          <Route path="/employer/requests/new" element={<MyJobs />} />
+          <Route path="/cv/my" element={<MyCvs />} />
+          <Route path="/cv/new" element={<MyCvs />} />
+          <Route path="/cv/upload" element={<MyCvs />} />
+          <Route path="/cvs" element={<MyCvs />} />
+          <Route path="/cvs/new" element={<MyCvs />} />
+          <Route path="/cvs/upload" element={<MyCvs />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/employer/requests/:id" element={<NormalJobDetail />} />
+          <Route path="/job/:id" element={<NormalJobDetail />} />
+          <Route path="/cvs/:id" element={<NormalCvDetail />} />
+          <Route path="/cv/:id" element={<NormalCvDetail />} />
           <Route path="/v2/search" element={<V2Search />} />
           <Route path="/v2/jobs/:id" element={<V2JobDetail />} />
           <Route path="/v2/cvs/:id" element={<V2CvDetail />} />
           <Route path="/v2/matching" element={<V2Matching />} />
-          <Route path="*" element={<Navigate to="/v2/search" replace />} />
+          <Route path="*" element={<Navigate to="/jobs/search" replace />} />
         </Routes>
       </main>
       {!isAuthPage && <Footer />}

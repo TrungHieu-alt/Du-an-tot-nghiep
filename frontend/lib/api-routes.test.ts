@@ -2,15 +2,61 @@ import { describe, expect, it } from 'vitest';
 import { apiRoutes } from './api-routes';
 
 describe('apiRoutes', () => {
-  it('exposes only auth, system and v2 route builders', () => {
-    expect(Object.keys(apiRoutes).sort()).toEqual(['auth', 'system', 'v2']);
+  it('exposes only expected route builder groups', () => {
+    expect(Object.keys(apiRoutes).sort()).toEqual(['auth', 'cv', 'job', 'normalSearch', 'system', 'v2']);
   });
 
   describe('auth', () => {
     it('returns canonical auth endpoints', () => {
       expect(apiRoutes.auth.register()).toBe('/auth/register');
       expect(apiRoutes.auth.login()).toBe('/auth/login');
+      expect(apiRoutes.auth.google()).toBe('/auth/google');
       expect(apiRoutes.auth.me()).toBe('/auth/me');
+    });
+  });
+
+  describe('normal search', () => {
+    it('builds normal job search query strings', () => {
+      expect(
+        apiRoutes.normalSearch.jobs({
+          q: 'marketing',
+          location: 'tp_hcm',
+          industry: 'marketing',
+          page: 1,
+          limit: 10,
+        })
+      ).toBe('/job/search?q=marketing&location=tp_hcm&industry=marketing&page=1&limit=10');
+    });
+
+    it('omits empty normal search params', () => {
+      expect(
+        apiRoutes.normalSearch.cvs({
+          q: '',
+          skills: undefined,
+          page: 2,
+        })
+      ).toBe('/cv/search?page=2');
+    });
+
+    it('builds candidate alias URL', () => {
+      expect(apiRoutes.normalSearch.candidates({ q: 'sales' })).toBe('/candidates?q=sales');
+    });
+  });
+
+  describe('normal job/cv CRUD', () => {
+    it('builds normal job endpoints', () => {
+      expect(apiRoutes.job.create()).toBe('/employer/requests');
+      expect(apiRoutes.job.my()).toBe('/employer/requests/my');
+      expect(apiRoutes.job.byId('abc')).toBe('/employer/requests/abc');
+      expect(apiRoutes.job.filters()).toBe('/job/search/filters');
+    });
+
+    it('builds normal cv endpoints', () => {
+      expect(apiRoutes.cv.create()).toBe('/cvs');
+      expect(apiRoutes.cv.upload()).toBe('/cv/upload');
+      expect(apiRoutes.cv.extractPdf()).toBe('/cvs/extract-pdf');
+      expect(apiRoutes.cv.my()).toBe('/cvs/my');
+      expect(apiRoutes.cv.byId('abc')).toBe('/cvs/abc');
     });
   });
 

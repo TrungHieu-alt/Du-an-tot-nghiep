@@ -318,3 +318,67 @@ final_score = sum(group_score * normalized_weight)
 
 Nếu mọi group đều bị skip, `final_score=0`, `passed=false`, và response có
 warning về việc không đủ dữ liệu so sánh.
+
+---
+
+## Addendum D — Normal JobConnect Search Surface
+
+Phạm vi Matching V2 ở mục 1-9 không đổi. Bổ sung này thêm bề mặt tìm kiếm
+thông thường cho trang Find Job / Find CV của JobConnect, tách khỏi endpoint
+matching và tách khỏi catalog semantic/vector search.
+
+### Endpoints thêm vào
+
+- `POST /api/job`
+- `GET /api/job/my`
+- `GET /api/job/{id}`
+- `PATCH /api/job/{id}`
+- `DELETE /api/job/{id}`
+- `GET /api/job/search`
+- `GET /api/job/search/filters`
+- `POST /api/cv`
+- `GET /api/cv/my`
+- `GET /api/cv/{id}`
+- `PATCH /api/cv/{id}`
+- `DELETE /api/cv/{id}`
+- `POST /api/cv/upload`
+- `GET /api/jobs`
+- `GET /api/cvs`
+- `GET /api/candidates` — alias của `/api/cvs`
+
+Response thống nhất:
+
+```json
+{
+  "items": [],
+  "total": 0,
+  "page": 1,
+  "limit": 10,
+  "totalPages": 0
+}
+```
+
+### Runtime behavior
+
+- Endpoint này chỉ đọc PostgreSQL, không gọi Matching V2, không gọi pgvector
+  search, không gọi MiniLM, và không trả phần trăm matching.
+- Dữ liệu normal search hiện lấy từ bảng normal `jobs` và `cvs`, không đọc
+  `job_posts_v2` hoặc `candidate_profiles_v2`.
+- `jobs.created_by` và `cvs.created_by` trỏ tới `users.id`; client không được
+  gửi hoặc override `created_by`.
+- Public Job search chỉ trả job `status='published'`,
+  `visibility='public'`, `archived=false`.
+- Keyword search là deterministic text search trên field normal đa ngành:
+  title, company name, industry, department, description, requirements,
+  responsibilities, skills, tags, categories, location.
+- Filter ngành nghề dùng giá trị linh hoạt từ dữ liệu normal Job, không khóa UI
+  vào IT.
+- `POST /api/cv/upload` chỉ nhận PDF và lưu metadata vào `cvs.file`; chưa parse
+  nội dung PDF trong phạm vi hiện tại.
+
+### Compatibility
+
+- Không thay đổi `/api/v2/prototype/matching/*`.
+- Không thay đổi `/api/v2/prototype/matching-hybrid/*`.
+- Không thay đổi `/api/v2/prototype/catalog/*`; semantic search vẫn tồn tại
+  cho các flow cần vector relevance.
