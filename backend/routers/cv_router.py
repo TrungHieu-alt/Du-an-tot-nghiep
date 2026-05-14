@@ -22,6 +22,18 @@ from fastapi.encoders import jsonable_encoder
 from jose import JWTError, jwt
 from psycopg.types.json import Jsonb
 
+from core.normalizers import (
+    as_text_list,
+    normalize_cv_payload,
+    normalize_education_level,
+    normalize_employment_types,
+    normalize_industry,
+    normalize_language_level,
+    normalize_occupation_group,
+    normalize_seniority,
+    normalize_skill_name,
+    normalize_status,
+)
 from routers.auth import (
     AuthUser,
     get_current_user,
@@ -59,11 +71,17 @@ CV_COLUMNS = [
     "location",
     "headline",
     "summary",
+    "industry",
+    "occupation_group",
+    "career_level",
+    "years_of_experience",
     "target_role",
     "employment_type",
     "salary_expectation",
     "availability",
     "skills",
+    "tools_and_technologies",
+    "domain_knowledge",
     "experiences",
     "education",
     "projects",
@@ -77,6 +95,7 @@ CV_COLUMNS = [
     "version",
     "file",
     "archived",
+    "embedding",
     "created_at",
     "updated_at",
 ]
@@ -91,11 +110,17 @@ INSERTABLE_CV_COLUMNS = [
     "location",
     "headline",
     "summary",
+    "industry",
+    "occupation_group",
+    "career_level",
+    "years_of_experience",
     "target_role",
     "employment_type",
     "salary_expectation",
     "availability",
     "skills",
+    "tools_and_technologies",
+    "domain_knowledge",
     "experiences",
     "education",
     "projects",
@@ -109,6 +134,7 @@ INSERTABLE_CV_COLUMNS = [
     "version",
     "file",
     "archived",
+    "embedding",
 ]
 
 JSON_COLUMNS = {
@@ -122,6 +148,7 @@ JSON_COLUMNS = {
     "portfolio",
     "references",
     "file",
+    "embedding",
 }
 
 JSON_ARRAY_COLUMNS = {
@@ -190,6 +217,8 @@ def _dump_payload(payload: CvCreateRequest | CvUpdateRequest, *, partial: bool) 
             data[field] = []
     if "location" in data and data["location"] is None:
         data["location"] = {}
+    if "embedding" in data and data["embedding"] is None:
+        data["embedding"] = {}
     return data
 
 
@@ -207,6 +236,8 @@ def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
     data["created_by"] = str(data["created_by"])
     data["employment_type"] = _as_list(data.get("employment_type"))
     data["tags"] = _as_list(data.get("tags"))
+    data["tools_and_technologies"] = _as_list(data.get("tools_and_technologies"))
+    data["domain_knowledge"] = _as_list(data.get("domain_knowledge"))
     data["location"] = data.get("location") or {}
     data["skills"] = data.get("skills") or []
     data["experiences"] = data.get("experiences") or []
@@ -217,7 +248,12 @@ def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
     data["portfolio"] = data.get("portfolio") or []
     data["references"] = data.get("references") or []
     data["file"] = data.get("file") or {}
-    data["visibility"] = data.get("visibility") or "public"
+    data["embedding"] = data.get("embedding") or {}
+    data["industry"] = data.get("industry") or "unknown"
+    data["occupation_group"] = data.get("occupation_group") or "unknown"
+    data["career_level"] = data.get("career_level") or "unknown"
+    data["years_of_experience"] = float(data.get("years_of_experience") or 0)
+    data["visibility"] = data.get("visibility") or "private"
     data["archived"] = bool(data.get("archived", False))
     return data
 
@@ -226,21 +262,30 @@ CAMEL_TO_SNAKE = {
     "avatarUrl": "avatar_url",
     "preferredName": "preferred_name",
     "createdBy": "created_by",
+    "occupationGroup": "occupation_group",
+    "careerLevel": "career_level",
+    "yearsOfExperience": "years_of_experience",
     "targetRole": "target_role",
     "employmentType": "employment_type",
     "salaryExpectation": "salary_expectation",
     "createdAt": "created_at",
     "updatedAt": "updated_at",
     "companyWebsite": "company_website",
+    "normalizedName": "normalized_name",
     "isCurrent": "is_current",
     "teamSize": "team_size",
+    "skillsUsed": "skills_used",
+    "toolsUsed": "tools_used",
     "techStack": "tech_stack",
+    "toolsAndTechnologies": "tools_and_technologies",
+    "domainKnowledge": "domain_knowledge",
     "issueDate": "issue_date",
     "expiryDate": "expiry_date",
     "credentialUrl": "credential_url",
     "mediaType": "media_type",
     "uploadedAt": "uploaded_at",
     "remoteType": "remote_type",
+    "from": "from_",
 }
 
 SNAKE_TO_CAMEL = {value: key for key, value in CAMEL_TO_SNAKE.items()}
@@ -380,7 +425,7 @@ def _first_match(pattern: str, text: str) -> str:
 
 def _extract_portfolio(text: str) -> list[dict[str, str]]:
     urls = re.findall(r"https?://[^\s)>\]]+", text)
-    return [{"media_type": "url", "url": url.rstrip(".,;"), "description": ""} for url in dict.fromkeys(urls)]
+    return [{"media_type": "other", "url": url.rstrip(".,;"), "description": ""} for url in dict.fromkeys(urls)]
 
 
 def _extract_skills(section_lines: list[str]) -> list[dict[str, Any]]:
@@ -417,6 +462,8 @@ def _extract_experiences(section_lines: list[str]) -> list[dict[str, Any]]:
                 "team_size": None,
                 "responsibilities": [] if company else [line],
                 "achievements": [],
+                "skills_used": [],
+                "tools_used": [],
                 "tags": [],
             }
         )
@@ -452,11 +499,17 @@ def _rule_based_cv_extract(text: str) -> tuple[dict[str, Any], list[str]]:
         "location": {"city": "", "state": "", "country": ""},
         "headline": headline,
         "summary": summary,
+        "industry": "",
+        "occupation_group": "",
+        "career_level": "",
+        "years_of_experience": None,
         "target_role": target_role,
-        "employment_type": [],
+        "employment_type": [full_text],
         "salary_expectation": "",
         "availability": "",
         "skills": skills,
+        "tools_and_technologies": [],
+        "domain_knowledge": [],
         "experiences": _extract_experiences(sections.get("experiences", [])),
         "education": _extract_simple_items(sections.get("education", []), "school"),
         "projects": _extract_simple_items(sections.get("projects", []), "name"),
@@ -565,6 +618,9 @@ def _skill_names(skills: Any) -> list[str]:
                 name = item.get("name")
                 if name:
                     names.append(str(name))
+                normalized_name = item.get("normalized_name")
+                if normalized_name and normalized_name != name:
+                    names.append(str(normalized_name))
             elif item:
                 names.append(str(item))
     return names
@@ -632,10 +688,24 @@ def _project_text(projects: Any) -> str:
                         item.get("description"),
                         item.get("role"),
                         " ".join(item.get("techStack") or item.get("tech_stack") or []),
+                        " ".join(item.get("tools") or []),
+                        " ".join(item.get("skillsUsed") or item.get("skills_used") or []),
+                        " ".join(item.get("outcomes") or []),
                         " ".join(item.get("metrics") or []),
                     ]
                     if value
                 )
+            elif item:
+                parts.append(str(item))
+    return " ".join(parts)
+
+
+def _language_text(languages: Any) -> str:
+    parts: list[str] = []
+    if isinstance(languages, list):
+        for item in languages:
+            if isinstance(item, dict):
+                parts.extend(str(value) for value in [item.get("name"), item.get("level")] if value)
             elif item:
                 parts.append(str(item))
     return " ".join(parts)
@@ -679,12 +749,18 @@ def _search_text(cv: dict[str, Any]) -> str:
             cv.get("preferred_name"),
             cv.get("headline"),
             cv.get("summary"),
+            cv.get("industry"),
+            cv.get("occupation_group"),
+            cv.get("career_level"),
             cv.get("target_role"),
+            cv.get("tools_and_technologies"),
+            cv.get("domain_knowledge"),
             _skill_names(cv.get("skills")),
             _experience_text(cv.get("experiences")),
             _education_text(cv.get("education")),
             _project_text(cv.get("projects")),
             _cert_names(cv.get("certifications")),
+            _language_text(cv.get("languages")),
             cv.get("tags"),
             _location_city(cv),
         ]
@@ -712,6 +788,66 @@ def _contains_any(values: list[str], terms: list[str]) -> bool:
     )
 
 
+def _contains_normalized(values: list[str], terms: list[str]) -> bool:
+    if not terms:
+        return True
+    normalized_values = {_normalize_text(value) for value in values}
+    return any(term in normalized_values or any(term in value or value in term for value in normalized_values) for term in terms)
+
+
+def _matches_number_range(value: Any, minimum: float | None, maximum: float | None) -> bool:
+    if minimum is None and maximum is None:
+        return True
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return False
+    if minimum is not None and number < minimum:
+        return False
+    if maximum is not None and number > maximum:
+        return False
+    return True
+
+
+def _education_values(education: Any, key: str) -> list[str]:
+    values: list[str] = []
+    if isinstance(education, list):
+        for item in education:
+            if isinstance(item, dict) and item.get(key):
+                values.append(str(item[key]))
+    return values
+
+
+def _education_filter_values(value: str | None) -> list[str]:
+    return [normalize_education_level(item) for item in as_text_list(value)]
+
+
+def _skill_filter_values(value: str | None) -> list[str]:
+    normalized: list[str] = []
+    for item in as_text_list(value):
+        skill_key = normalize_skill_name(item).get("normalized_name") or _normalize_text(item)
+        if skill_key and skill_key not in normalized:
+            normalized.append(skill_key)
+    return normalized
+
+
+def _language_matches(languages: Any, name: str | None, level: str | None) -> bool:
+    if not name and not level:
+        return True
+    wanted_name = _normalize_text(name)
+    wanted_level = normalize_language_level(level) if level else None
+    if not isinstance(languages, list):
+        return False
+    for item in languages:
+        if not isinstance(item, dict):
+            continue
+        name_ok = not wanted_name or wanted_name in _normalize_text(item.get("name"))
+        level_ok = not wanted_level or item.get("level") == wanted_level
+        if name_ok and level_ok:
+            return True
+    return False
+
+
 def _matches_cv_filters(
     cv: dict[str, Any],
     *,
@@ -722,12 +858,22 @@ def _matches_cv_filters(
     location: str | None,
     location_country: str | None,
     desired_industry: str | None,
+    occupation_group: str | None,
+    status_filter: str | None,
     experience_level: str | None,
+    years_of_experience_min: float | None,
+    years_of_experience_max: float | None,
     education_level: str | None,
+    education_major: str | None,
     working_model: str | None,
     employment_type: str | None,
     availability: str | None,
     skills: str | None,
+    tools_and_technologies: str | None,
+    domain_knowledge: str | None,
+    certification_name: str | None,
+    language_name: str | None,
+    language_level: str | None,
     tags: str | None,
 ) -> bool:
     text = _search_text(cv)
@@ -744,19 +890,36 @@ def _matches_cv_filters(
         return False
     if location_country and not _matches_query(_normalize_text(location_obj.get("country")), location_country):
         return False
-    if desired_industry and not _matches_query(text, desired_industry):
+    if desired_industry and cv.get("industry") != normalize_industry(desired_industry):
         return False
-    if experience_level and not _matches_query(text, experience_level):
+    if occupation_group and cv.get("occupation_group") != normalize_occupation_group(occupation_group):
         return False
-    if education_level and not _matches_query(_join_search_values([cv.get("education")]), education_level):
+    if status_filter and cv.get("status") != normalize_status(status_filter, "cv"):
+        return False
+    if experience_level and cv.get("career_level") not in [normalize_seniority(item) for item in as_text_list(experience_level)]:
+        return False
+    if not _matches_number_range(cv.get("years_of_experience"), years_of_experience_min, years_of_experience_max):
+        return False
+    education_filters = _education_filter_values(education_level)
+    if education_filters and not set(education_filters).intersection(_education_values(cv.get("education"), "level")):
+        return False
+    if education_major and not _contains_normalized(_education_values(cv.get("education"), "major"), _split_values(education_major)):
         return False
     if working_model and not _matches_query(_normalize_text(location_obj.get("remote_type")), working_model):
         return False
-    if not _contains_any(cv.get("employment_type") or [], _split_values(employment_type)):
+    if not _contains_normalized(cv.get("employment_type") or [], normalize_employment_types(employment_type) if employment_type else []):
         return False
     if availability and not _matches_query(_normalize_text(cv.get("availability")), availability):
         return False
-    if not _contains_any(_skill_names(cv.get("skills")), _split_values(skills)):
+    if not _contains_normalized(_skill_names(cv.get("skills")), _skill_filter_values(skills)):
+        return False
+    if not _contains_normalized(cv.get("tools_and_technologies") or [], _split_values(tools_and_technologies)):
+        return False
+    if not _contains_normalized(cv.get("domain_knowledge") or [], _split_values(domain_knowledge)):
+        return False
+    if not _contains_normalized(_cert_names(cv.get("certifications")), _split_values(certification_name)):
+        return False
+    if not _language_matches(cv.get("languages"), language_name, language_level):
         return False
     if not _contains_any(cv.get("tags") or [], _split_values(tags)):
         return False
@@ -770,12 +933,16 @@ def _to_search_item(cv: dict[str, Any]) -> CVSearchListItem:
         cv_id=cv["id"],
         title=title,
         fullname=cv.get("fullname") or "",
+        industry=cv.get("industry") or "unknown",
+        occupation_group=cv.get("occupation_group") or "unknown",
+        career_level=cv.get("career_level") or "unknown",
+        years_of_experience=float(cv.get("years_of_experience") or 0),
         location=_location_city(cv),
         location_detail=cv.get("location") or {},
         job_type=_job_type(cv),
         employment_type=cv.get("employment_type") or [],
         working_model=_working_model(cv),
-        seniority=None,
+        seniority=cv.get("career_level"),
         education=_join_search_values([cv.get("education")]),
         skills=_skill_names(cv.get("skills")),
         summary=cv.get("summary") or "",
@@ -783,6 +950,8 @@ def _to_search_item(cv: dict[str, Any]) -> CVSearchListItem:
         certifications=_cert_names(cv.get("certifications")),
         target_role=cv.get("target_role"),
         availability=cv.get("availability"),
+        tools_and_technologies=cv.get("tools_and_technologies") or [],
+        domain_knowledge=cv.get("domain_knowledge") or [],
         file=cv.get("file") or {},
     )
 
@@ -816,16 +985,26 @@ def search_cvs_response(
     location_country: str | None = None,
     desired_industry: str | None = None,
     desiredIndustry: str | None = None,
+    occupation_group: str | None = None,
+    status_filter: str | None = None,
     experience_level: str | None = None,
     experienceLevel: str | None = None,
+    years_of_experience_min: float | None = None,
+    years_of_experience_max: float | None = None,
     education_level: str | None = None,
     educationLevel: str | None = None,
+    education_major: str | None = None,
     working_model: str | None = None,
     workingModel: str | None = None,
     employment_type: str | None = None,
     employmentType: str | None = None,
     availability: str | None = None,
     skills: str | None = None,
+    tools_and_technologies: str | None = None,
+    domain_knowledge: str | None = None,
+    certification_name: str | None = None,
+    language_name: str | None = None,
+    language_level: str | None = None,
     tags: str | None = None,
     page: int = 1,
     limit: int = 10,
@@ -852,29 +1031,58 @@ def search_cvs_response(
             location=selected_location,
             location_country=location_country,
             desired_industry=selected_industry,
+            occupation_group=occupation_group,
+            status_filter=status_filter,
             experience_level=selected_experience,
+            years_of_experience_min=years_of_experience_min,
+            years_of_experience_max=years_of_experience_max,
             education_level=selected_education,
+            education_major=education_major,
             working_model=selected_working_model,
             employment_type=selected_employment_type,
             availability=availability,
             skills=skills,
+            tools_and_technologies=tools_and_technologies,
+            domain_knowledge=domain_knowledge,
+            certification_name=certification_name,
+            language_name=language_name,
+            language_level=language_level,
             tags=tags,
         )
     ]
-    key = _normalize_text(sort or "newest")
-    if key == "oldest":
+    key = _normalize_text(sort or "createdAt_desc")
+    if key in {"createdat_asc", "oldest"}:
         ordered = sorted(cvs, key=lambda item: item["created_at"])
+    elif key == "updatedat_asc":
+        ordered = sorted(cvs, key=lambda item: item["updated_at"])
+    elif key == "updatedat_desc":
+        ordered = sorted(cvs, key=lambda item: item["updated_at"], reverse=True)
+    elif key == "yearsofexperience_desc":
+        ordered = sorted(cvs, key=lambda item: float(item.get("years_of_experience") or 0), reverse=True)
+    elif key == "yearsofexperience_asc":
+        ordered = sorted(cvs, key=lambda item: float(item.get("years_of_experience") or 0))
+    elif key == "fullname_asc":
+        ordered = sorted(cvs, key=lambda item: _normalize_text(item.get("fullname")))
+    elif key == "fullname_desc":
+        ordered = sorted(cvs, key=lambda item: _normalize_text(item.get("fullname")), reverse=True)
     else:
         ordered = sorted(cvs, key=lambda item: item["created_at"], reverse=True)
     total = len(ordered)
     start = (page - 1) * limit
     paged = ordered[start : start + limit]
+    total_pages = math.ceil(total / limit) if total else 0
     return CVSearchListResponse(
         items=[_to_search_item(cv) for cv in paged],
         total=total,
         page=page,
         limit=limit,
-        totalPages=math.ceil(total / limit) if total else 0,
+        totalPages=total_pages,
+        pagination={
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "totalPages": total_pages,
+        },
     )
 
 
@@ -903,9 +1111,7 @@ def _insert_cv(conn: psycopg.Connection, data: dict[str, Any]) -> CvResponse:
 @router.post("", response_model=CvResponse, status_code=status.HTTP_201_CREATED)
 def create_cv(payload: CvCreateRequest, conn: DbConnection, user: CurrentUser) -> CvResponse:
     data = _dump_payload(payload, partial=False)
-    data["status"] = data.get("status") or "published"
-    data["visibility"] = data.get("visibility") or "public"
-    data["archived"] = bool(data.get("archived", False))
+    data = normalize_cv_payload(data, for_create=True, include_missing=True)
     data["created_by"] = user.id
     data["file"] = {}
     return _insert_cv(conn, data)
@@ -948,8 +1154,14 @@ def upload_cv_pdf(
         "created_by": user.id,
         "fullname": (fullname or "").strip(),
         "location": LocationPayload().model_dump(mode="json"),
+        "industry": "",
+        "occupation_group": "",
+        "career_level": "",
+        "years_of_experience": None,
         "employment_type": [],
         "skills": [],
+        "tools_and_technologies": [],
+        "domain_knowledge": [],
         "experiences": [],
         "education": [],
         "projects": [],
@@ -957,13 +1169,14 @@ def upload_cv_pdf(
         "languages": [],
         "portfolio": [],
         "references": [],
-        "status": "published",
-        "visibility": "public",
+        "status": "draft",
+        "visibility": "private",
         "tags": [],
         "version": 1,
         "file": metadata,
         "archived": False,
     }
+    data = normalize_cv_payload(data, for_create=True, include_missing=True)
     cv = _insert_cv(conn, data)
     cv.file["uploaded_at"] = cv.created_at.isoformat()
     try:
@@ -1010,17 +1223,39 @@ def search_cvs(
     headline: str | None = None,
     target_role: str | None = None,
     targetRole: str | None = None,
+    city: str | None = None,
     location_city: str | None = Query(default=None, alias="location.city"),
     location: str | None = None,
+    country: str | None = None,
+    locationCountry: str | None = None,
     location_country: str | None = Query(default=None, alias="location.country"),
     desiredIndustry: str | None = None,
+    industry: str | None = None,
+    occupationGroup: str | None = None,
+    occupation_group: str | None = None,
+    status_value: str | None = Query(default=None, alias="status"),
     experienceLevel: str | None = None,
+    careerLevel: str | None = None,
+    years_of_experience_min: float | None = Query(default=None, alias="yearsOfExperienceMin", ge=0),
+    years_of_experience_max: float | None = Query(default=None, alias="yearsOfExperienceMax", ge=0),
     educationLevel: str | None = None,
+    education_level_alias: str | None = Query(default=None, alias="education.level"),
+    educationMajor: str | None = None,
+    education_major: str | None = Query(default=None, alias="education.major"),
     workingModel: str | None = None,
     employmentType: str | None = None,
     employment_type: str | None = None,
     availability: str | None = None,
     skills: str | None = None,
+    toolsAndTechnologies: str | None = None,
+    domainKnowledge: str | None = None,
+    certifications: str | None = None,
+    certification_name_alias: str | None = Query(default=None, alias="certifications.name"),
+    certificationName: str | None = None,
+    language_name_alias: str | None = Query(default=None, alias="languages.name"),
+    languageName: str | None = None,
+    language_level_alias: str | None = Query(default=None, alias="languages.level"),
+    languageLevel: str | None = None,
     tags: str | None = None,
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1, le=50),
@@ -1034,17 +1269,27 @@ def search_cvs(
         headline=headline,
         target_role=target_role,
         targetRole=targetRole,
-        location_city=location_city,
+        location_city=location_city or city,
         location=location,
-        location_country=location_country,
-        desiredIndustry=desiredIndustry,
-        experienceLevel=experienceLevel,
-        educationLevel=educationLevel,
+        location_country=location_country or locationCountry or country,
+        desiredIndustry=desiredIndustry or industry,
+        occupation_group=occupationGroup or occupation_group,
+        status_filter=status_value,
+        experienceLevel=careerLevel or experienceLevel,
+        years_of_experience_min=years_of_experience_min,
+        years_of_experience_max=years_of_experience_max,
+        educationLevel=educationLevel or education_level_alias,
+        education_major=education_major or educationMajor,
         workingModel=workingModel,
         employmentType=employmentType,
         employment_type=employment_type,
         availability=availability,
         skills=skills,
+        tools_and_technologies=toolsAndTechnologies,
+        domain_knowledge=domainKnowledge,
+        certification_name=certificationName or certification_name_alias or certifications,
+        language_name=languageName or language_name_alias,
+        language_level=languageLevel or language_level_alias,
         tags=tags,
         page=page,
         limit=limit,
@@ -1074,6 +1319,7 @@ def update_cv(cv_id: str, payload: CvUpdateRequest, conn: DbConnection, user: Cu
     data = _dump_payload(payload, partial=True)
     if not data:
         return CvResponse(**cv)
+    data = normalize_cv_payload(data, for_create=False, include_missing=False)
     allowed = [column for column in data if column in INSERTABLE_CV_COLUMNS and column != "created_by"]
     assignments = ", ".join(f"{_sql_column(column)} = %s" for column in allowed)
     values = [_encode_column_value(column, data[column]) for column in allowed]
@@ -1154,6 +1400,16 @@ async def extract_cv_pdf_preview(
             },
         )
     cv_data, parser_warnings = _rule_based_cv_extract(extracted_text)
+    cv_data["created_by"] = user.id
+    cv_data["file"] = {
+        "filename": file.filename or "",
+        "originalname": file.filename or "",
+        "path": "",
+        "mimetype": file.content_type or "application/pdf",
+        "size": len(content),
+        "uploaded_at": None,
+    }
+    cv_data = normalize_cv_payload(cv_data, include_missing=True, source_text=extracted_text)
     preview = CvExtractPreview.model_validate(cv_data)
     return CvExtractResponse(
         extractedText=extracted_text,

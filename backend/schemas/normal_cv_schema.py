@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from schemas.normal_job_schema import LocationPayload
 
-CvVisibility = Literal["public", "private", "unlisted"]
+CvVisibility = str
 
 
 class CvSkillPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=120)
+    normalized_name: str | None = None
     level: str | None = None
     category: str | None = None
     years: float | None = Field(default=None, ge=0)
@@ -36,6 +37,8 @@ class ExperiencePayload(BaseModel):
     team_size: int | None = Field(default=None, ge=0)
     responsibilities: list[str] = Field(default_factory=list)
     achievements: list[str] = Field(default_factory=list)
+    skills_used: list[str] = Field(default_factory=list)
+    tools_used: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
 
 
@@ -43,6 +46,7 @@ class EducationPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     degree: str | None = None
+    level: str | None = None
     major: str | None = None
     school: str | None = None
     from_: datetime | None = Field(default=None, alias="from")
@@ -58,6 +62,9 @@ class ProjectPayload(BaseModel):
     role: str | None = None
     from_: datetime | None = Field(default=None, alias="from")
     to: datetime | None = None
+    tools: list[str] = Field(default_factory=list)
+    skills_used: list[str] = Field(default_factory=list)
+    outcomes: list[str] = Field(default_factory=list)
     tech_stack: list[str] = Field(default_factory=list)
     url: str | None = None
     metrics: list[str] = Field(default_factory=list)
@@ -108,11 +115,17 @@ class CvCreateRequest(BaseModel):
     location: LocationPayload = Field(default_factory=LocationPayload)
     headline: str | None = None
     summary: str | None = None
+    industry: str | None = None
+    occupation_group: str | None = None
+    career_level: str | None = None
+    years_of_experience: float | None = Field(default=None, ge=0)
     target_role: str | None = None
     employment_type: list[str] = Field(default_factory=list)
     salary_expectation: str | None = None
     availability: str | None = None
     skills: list[CvSkillPayload] = Field(default_factory=list)
+    tools_and_technologies: list[str] = Field(default_factory=list)
+    domain_knowledge: list[str] = Field(default_factory=list)
     experiences: list[ExperiencePayload] = Field(default_factory=list)
     education: list[EducationPayload] = Field(default_factory=list)
     projects: list[ProjectPayload] = Field(default_factory=list)
@@ -120,11 +133,12 @@ class CvCreateRequest(BaseModel):
     languages: list[LanguagePayload] = Field(default_factory=list)
     portfolio: list[PortfolioPayload] = Field(default_factory=list)
     references: list[ReferencePayload] = Field(default_factory=list)
-    status: str = "published"
-    visibility: CvVisibility = "public"
+    status: str = "draft"
+    visibility: CvVisibility = "private"
     tags: list[str] = Field(default_factory=list)
     version: int = Field(default=1, ge=1)
     archived: bool = False
+    embedding: dict[str, Any] = Field(default_factory=dict)
 
 
 class CvUpdateRequest(BaseModel):
@@ -138,11 +152,17 @@ class CvUpdateRequest(BaseModel):
     location: LocationPayload | None = None
     headline: str | None = None
     summary: str | None = None
+    industry: str | None = None
+    occupation_group: str | None = None
+    career_level: str | None = None
+    years_of_experience: float | None = Field(default=None, ge=0)
     target_role: str | None = None
     employment_type: list[str] | None = None
     salary_expectation: str | None = None
     availability: str | None = None
     skills: list[CvSkillPayload] | None = None
+    tools_and_technologies: list[str] | None = None
+    domain_knowledge: list[str] | None = None
     experiences: list[ExperiencePayload] | None = None
     education: list[EducationPayload] | None = None
     projects: list[ProjectPayload] | None = None
@@ -155,6 +175,7 @@ class CvUpdateRequest(BaseModel):
     tags: list[str] | None = None
     version: int | None = Field(default=None, ge=1)
     archived: bool | None = None
+    embedding: dict[str, Any] | None = None
 
 
 class CvResponse(BaseModel):
@@ -168,11 +189,17 @@ class CvResponse(BaseModel):
     location: dict[str, Any] = Field(default_factory=dict)
     headline: str | None = None
     summary: str | None = None
+    industry: str = "unknown"
+    occupation_group: str = "unknown"
+    career_level: str = "unknown"
+    years_of_experience: float = 0
     target_role: str | None = None
     employment_type: list[str] = Field(default_factory=list)
     salary_expectation: str | None = None
     availability: str | None = None
     skills: list[dict[str, Any]] = Field(default_factory=list)
+    tools_and_technologies: list[str] = Field(default_factory=list)
+    domain_knowledge: list[str] = Field(default_factory=list)
     experiences: list[dict[str, Any]] = Field(default_factory=list)
     education: list[dict[str, Any]] = Field(default_factory=list)
     projects: list[dict[str, Any]] = Field(default_factory=list)
@@ -181,11 +208,12 @@ class CvResponse(BaseModel):
     portfolio: list[dict[str, Any]] = Field(default_factory=list)
     references: list[dict[str, Any]] = Field(default_factory=list)
     status: str
-    visibility: CvVisibility = "public"
+    visibility: CvVisibility = "private"
     tags: list[str] = Field(default_factory=list)
     version: int = 1
     file: dict[str, Any] = Field(default_factory=dict)
     archived: bool = False
+    embedding: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 
@@ -201,11 +229,18 @@ class CvExtractPreview(BaseModel):
     location: dict[str, Any] = Field(default_factory=dict)
     headline: str = ""
     summary: str = ""
+    created_by: str = ""
+    industry: str = "unknown"
+    occupation_group: str = "unknown"
+    career_level: str = "unknown"
+    years_of_experience: float = 0
     target_role: str = ""
     employment_type: list[str] = Field(default_factory=list)
     salary_expectation: str = ""
     availability: str = ""
     skills: list[dict[str, Any]] = Field(default_factory=list)
+    tools_and_technologies: list[str] = Field(default_factory=list)
+    domain_knowledge: list[str] = Field(default_factory=list)
     experiences: list[dict[str, Any]] = Field(default_factory=list)
     education: list[dict[str, Any]] = Field(default_factory=list)
     projects: list[dict[str, Any]] = Field(default_factory=list)
@@ -217,6 +252,7 @@ class CvExtractPreview(BaseModel):
     tags: list[str] = Field(default_factory=list)
     version: int = 1
     file: dict[str, Any] | None = None
+    embedding: dict[str, Any] = Field(default_factory=dict)
 
 
 class CvExtractResponse(BaseModel):
@@ -230,6 +266,10 @@ class CVSearchListItem(BaseModel):
     cv_id: str
     title: str
     fullname: str
+    industry: str = "unknown"
+    occupation_group: str = "unknown"
+    career_level: str = "unknown"
+    years_of_experience: float = 0
     location: str
     location_detail: dict[str, Any] = Field(default_factory=dict)
     job_type: str
@@ -243,6 +283,8 @@ class CVSearchListItem(BaseModel):
     certifications: list[str] = Field(default_factory=list)
     target_role: str | None = None
     availability: str | None = None
+    tools_and_technologies: list[str] = Field(default_factory=list)
+    domain_knowledge: list[str] = Field(default_factory=list)
     file: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -252,3 +294,4 @@ class CVSearchListResponse(BaseModel):
     page: int
     limit: int
     totalPages: int
+    pagination: dict[str, int] = Field(default_factory=dict)

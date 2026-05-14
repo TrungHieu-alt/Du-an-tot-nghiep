@@ -144,6 +144,8 @@ export interface NormalJobSearchItem {
   title: string;
   company_name?: string | null;
   company_industry?: string | null;
+  industry?: string;
+  occupation_group?: string;
   department?: string | null;
   location: string;
   location_detail?: Record<string, unknown>;
@@ -159,6 +161,8 @@ export interface NormalJobSearchItem {
   responsibilities?: string[];
   categories?: string[];
   tags?: string[];
+  tools_and_technologies?: string[];
+  domain_knowledge?: string[];
   salary?: Record<string, unknown>;
   remote?: boolean;
 }
@@ -168,6 +172,10 @@ export interface NormalCVSearchItem {
   cv_id: string;
   title: string;
   fullname?: string;
+  industry?: string;
+  occupation_group?: string;
+  career_level?: string;
+  years_of_experience?: number;
   location: string;
   location_detail?: Record<string, unknown>;
   job_type: string;
@@ -181,6 +189,8 @@ export interface NormalCVSearchItem {
   certifications: string[];
   target_role?: string | null;
   availability?: string | null;
+  tools_and_technologies?: string[];
+  domain_knowledge?: string[];
   file?: Record<string, unknown>;
 }
 
@@ -190,6 +200,12 @@ export interface NormalSearchResponse<T> {
   page: number;
   limit: number;
   totalPages: number;
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 export interface NormalJobSearchParams {
@@ -202,15 +218,28 @@ export interface NormalJobSearchParams {
   location?: string;
   category?: string;
   industry?: string;
+  occupationGroup?: string;
+  status?: string;
+  visibility?: string;
   categories?: string;
   tags?: string;
   employmentType?: string;
+  remoteType?: string;
+  seniority?: string;
   experienceLevel?: string;
+  experienceYearsMin?: number;
+  experienceYearsMax?: number;
   salaryMin?: number;
   salaryMax?: number;
   educationLevel?: string;
+  salaryCurrency?: string;
+  salaryPeriod?: string;
   workingModel?: string;
   skills?: string;
+  mustHaveSkills?: string;
+  niceToHaveSkills?: string;
+  toolsAndTechnologies?: string;
+  domainKnowledge?: string;
   page?: number;
   limit?: number;
   sort?: string;
@@ -219,16 +248,31 @@ export interface NormalJobSearchParams {
 export interface NormalCVSearchParams {
   q?: string;
   location?: string;
+  locationCountry?: string;
   desiredCategory?: string;
   desiredIndustry?: string;
+  industry?: string;
+  occupationGroup?: string;
+  status?: string;
+  careerLevel?: string;
   experienceLevel?: string;
   yearsOfExperience?: string;
+  yearsOfExperienceMin?: number;
+  yearsOfExperienceMax?: number;
   educationLevel?: string;
+  educationMajor?: string;
   expectedSalaryMin?: number;
   expectedSalaryMax?: number;
   workingModel?: string;
+  employmentType?: string;
   availability?: string;
   skills?: string;
+  toolsAndTechnologies?: string;
+  domainKnowledge?: string;
+  certificationName?: string;
+  languageName?: string;
+  languageLevel?: string;
+  tags?: string;
   page?: number;
   limit?: number;
   sort?: string;
@@ -240,14 +284,16 @@ export interface NormalJob {
   company_id?: string | null;
   title: string;
   slug?: string | null;
-  status: 'draft' | 'published' | 'closed';
-  visibility: 'public' | 'private' | 'unlisted';
+  status: 'draft' | 'published' | 'closed' | 'unknown';
+  visibility: 'public' | 'private' | 'unlisted' | 'unknown';
   company_name?: string | null;
   company_logo_url?: string | null;
   company_website?: string | null;
   company_location?: string | null;
   company_size?: string | null;
   company_industry?: string | null;
+  industry?: string;
+  occupation_group?: string;
   department?: string | null;
   location: Record<string, unknown>;
   employment_type: string[];
@@ -258,8 +304,14 @@ export interface NormalJob {
   requirements: string[];
   nice_to_have?: string[];
   skills: Array<Record<string, unknown>>;
+  must_have_skills?: Array<Record<string, unknown>>;
+  nice_to_have_skills?: Array<Record<string, unknown>>;
+  tools_and_technologies?: string[];
+  domain_knowledge?: string[];
   experience_years?: number | null;
   education_level?: string | null;
+  required_education?: Record<string, unknown>;
+  required_certifications?: string[];
   salary: Record<string, unknown>;
   benefits?: string[];
   bonus?: string | null;
@@ -272,9 +324,12 @@ export interface NormalJob {
   tags: string[];
   categories: string[];
   remote: boolean;
+  views?: number;
   archived: boolean;
   applications_count?: number;
+  pre_screen_questions?: Array<Record<string, unknown>>;
   required_docs?: string[];
+  version?: number;
   created_at: string;
   updated_at: string;
 }
@@ -290,11 +345,17 @@ export interface NormalCv {
   location: Record<string, unknown>;
   headline?: string | null;
   summary?: string | null;
+  industry?: string;
+  occupation_group?: string;
+  career_level?: string;
+  years_of_experience?: number;
   target_role?: string | null;
   employment_type: string[];
   salary_expectation?: string | null;
   availability?: string | null;
   skills: Array<Record<string, unknown>>;
+  tools_and_technologies?: string[];
+  domain_knowledge?: string[];
   experiences: Array<Record<string, unknown>>;
   education: Array<Record<string, unknown>>;
   projects?: Array<Record<string, unknown>>;
@@ -303,7 +364,7 @@ export interface NormalCv {
   portfolio?: Array<Record<string, unknown>>;
   references?: Array<Record<string, unknown>>;
   status: string;
-  visibility: 'public' | 'private' | 'unlisted';
+  visibility: 'public' | 'private' | 'unlisted' | 'unknown';
   tags: string[];
   file: Record<string, unknown>;
   archived: boolean;
@@ -315,14 +376,16 @@ export interface NormalJobCreatePayload {
   company_id?: string;
   title: string;
   slug?: string;
-  status?: 'draft' | 'published' | 'closed';
-  visibility?: 'public' | 'private' | 'unlisted';
+  status?: 'draft' | 'published' | 'closed' | 'unknown';
+  visibility?: 'public' | 'private' | 'unlisted' | 'unknown';
   company_name?: string;
   company_logo_url?: string;
   company_website?: string;
   company_location?: string;
   company_size?: string;
   company_industry?: string;
+  industry?: string;
+  occupation_group?: string;
   department?: string;
   location?: Record<string, unknown>;
   employment_type?: string[];
@@ -333,8 +396,14 @@ export interface NormalJobCreatePayload {
   requirements?: string[];
   nice_to_have?: string[];
   skills?: Array<Record<string, unknown>>;
+  must_have_skills?: Array<Record<string, unknown>>;
+  nice_to_have_skills?: Array<Record<string, unknown>>;
+  tools_and_technologies?: string[];
+  domain_knowledge?: string[];
   experience_years?: number;
   education_level?: string;
+  required_education?: Record<string, unknown>;
+  required_certifications?: string[];
   salary?: Record<string, unknown>;
   benefits?: string[];
   bonus?: string;
@@ -347,8 +416,10 @@ export interface NormalJobCreatePayload {
   tags?: string[];
   categories?: string[];
   remote?: boolean;
+  pre_screen_questions?: Array<Record<string, unknown>>;
   archived?: boolean;
   required_docs?: string[];
+  version?: number;
 }
 
 export type NormalJobUpdatePayload = Partial<NormalJobCreatePayload>;
@@ -362,11 +433,17 @@ export interface NormalCvCreatePayload {
   location?: Record<string, unknown>;
   headline?: string;
   summary?: string;
+  industry?: string;
+  occupation_group?: string;
+  career_level?: string;
+  years_of_experience?: number;
   target_role?: string;
   employment_type?: string[];
   salary_expectation?: string;
   availability?: string;
   skills?: Array<Record<string, unknown>>;
+  tools_and_technologies?: string[];
+  domain_knowledge?: string[];
   experiences?: Array<Record<string, unknown>>;
   education?: Array<Record<string, unknown>>;
   projects?: Array<Record<string, unknown>>;
@@ -375,7 +452,7 @@ export interface NormalCvCreatePayload {
   portfolio?: Array<Record<string, unknown>>;
   references?: Array<Record<string, unknown>>;
   status?: string;
-  visibility?: 'public' | 'private' | 'unlisted';
+  visibility?: 'public' | 'private' | 'unlisted' | 'unknown';
   tags?: string[];
   archived?: boolean;
 }

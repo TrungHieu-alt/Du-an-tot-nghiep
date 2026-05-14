@@ -21,26 +21,42 @@ import type {
 import { searchCvs, searchJobs } from '../src/api/normal';
 import { useAuth } from '../contexts/AuthContext';
 import V2SearchFilterPanel, {
-  LOCATION_OPTIONS,
+  splitFilterValues,
   type V2SearchFilters,
 } from '../components/v2/V2SearchFilterPanel';
 import V2SearchResultCard from '../components/v2/V2SearchResultCard';
+import { normalizeSkillNameForForm } from '../src/reference/normalEnums';
 
 const PAGE_LIMIT = 10;
 
 const FILTER_KEYS: Array<keyof V2SearchFilters> = [
   'location',
+  'city',
+  'country',
   'industry',
+  'occupationGroup',
   'employmentType',
   'experienceLevel',
+  'careerLevel',
   'salaryRange',
   'educationLevel',
+  'educationMajor',
   'workingModel',
+  'remoteType',
   'sort',
   'skills',
+  'toolsAndTechnologies',
+  'domainKnowledge',
   'yearsOfExperience',
+  'yearsOfExperienceMin',
+  'yearsOfExperienceMax',
   'expectedSalaryRange',
   'availability',
+  'certificationName',
+  'languageName',
+  'languageLevel',
+  'status',
+  'tags',
 ];
 
 const parseType = (v: string | null, pathname: string): AnchorTypeV2 => {
@@ -64,6 +80,41 @@ const salaryToRange = (value?: string): { min?: number; max?: number } => {
     default:
       return {};
   }
+};
+
+const yearsToRange = (value?: string): { min?: number; max?: number } => {
+  switch (value) {
+    case 'less_than_1':
+      return { max: 1 };
+    case '1_2':
+      return { min: 1, max: 2 };
+    case '2_5':
+      return { min: 2, max: 5 };
+    case '5_10':
+      return { min: 5, max: 10 };
+    case '10_plus':
+      return { min: 10 };
+    default:
+      return {};
+  }
+};
+
+const toNumberFilter = (value?: string): number | undefined => {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+};
+
+const joinNormalizedList = (value?: string): string | undefined => {
+  const values = splitFilterValues(value).map((item) => item.trim().toLowerCase()).filter(Boolean);
+  return values.length > 0 ? Array.from(new Set(values)).join(',') : undefined;
+};
+
+const normalizeSkillFilter = (value?: string): string | undefined => {
+  const values = splitFilterValues(value)
+    .map((item) => normalizeSkillNameForForm(item).normalizedName)
+    .filter((item) => item && item !== 'unknown');
+  return values.length > 0 ? Array.from(new Set(values)).join(',') : undefined;
 };
 
 const hasActiveSearch = (q: string, filters: V2SearchFilters): boolean =>
@@ -90,10 +141,8 @@ const V2Search: React.FC = () => {
   }, [searchParams]);
 
   const [inputQ, setInputQ] = useState(urlQ);
-  const [inputLocation, setInputLocation] = useState(filtersFromUrl.location ?? '');
 
   useEffect(() => setInputQ(urlQ), [urlQ]);
-  useEffect(() => setInputLocation(filtersFromUrl.location ?? ''), [filtersFromUrl.location]);
 
   const [items, setItems] = useState<Array<NormalJobSearchItem | NormalCVSearchItem>>([]);
   const [total, setTotal] = useState(0);
@@ -121,39 +170,59 @@ const V2Search: React.FC = () => {
 
     const salary = salaryToRange(filtersFromUrl.salaryRange);
     const expectedSalary = salaryToRange(filtersFromUrl.expectedSalaryRange);
+    const legacyYears = yearsToRange(filtersFromUrl.yearsOfExperience);
+    const yearsMin = toNumberFilter(filtersFromUrl.yearsOfExperienceMin) ?? legacyYears.min;
+    const yearsMax = toNumberFilter(filtersFromUrl.yearsOfExperienceMax) ?? legacyYears.max;
+    const city = filtersFromUrl.city ?? filtersFromUrl.location;
 
     const promise =
       urlType === 'job'
         ? searchJobs({
             q: urlQ.trim() || undefined,
-            location: filtersFromUrl.location,
+            location: city,
             industry: filtersFromUrl.industry,
+            occupationGroup: filtersFromUrl.occupationGroup,
             employmentType: filtersFromUrl.employmentType,
             experienceLevel: filtersFromUrl.experienceLevel,
             salaryMin: salary.min,
             salaryMax: salary.max,
             educationLevel: filtersFromUrl.educationLevel,
-            workingModel: filtersFromUrl.workingModel,
-            skills: filtersFromUrl.skills,
+            workingModel: filtersFromUrl.workingModel ?? filtersFromUrl.remoteType,
+            skills: normalizeSkillFilter(filtersFromUrl.skills),
+            toolsAndTechnologies: joinNormalizedList(filtersFromUrl.toolsAndTechnologies),
+            domainKnowledge: joinNormalizedList(filtersFromUrl.domainKnowledge),
+            tags: joinNormalizedList(filtersFromUrl.tags),
             page: urlPage,
             limit: PAGE_LIMIT,
-            sort: filtersFromUrl.sort ?? 'newest',
+            sort: filtersFromUrl.sort ?? 'createdAt_desc',
           } satisfies NormalJobSearchParams)
         : searchCvs({
             q: urlQ.trim() || undefined,
-            location: filtersFromUrl.location,
+            location: city,
+            locationCountry: filtersFromUrl.country,
             desiredIndustry: filtersFromUrl.industry,
-            experienceLevel: filtersFromUrl.experienceLevel,
-            yearsOfExperience: filtersFromUrl.yearsOfExperience,
+            occupationGroup: filtersFromUrl.occupationGroup,
+            status: filtersFromUrl.status,
+            careerLevel: filtersFromUrl.careerLevel ?? filtersFromUrl.experienceLevel,
+            yearsOfExperienceMin: yearsMin,
+            yearsOfExperienceMax: yearsMax,
             educationLevel: filtersFromUrl.educationLevel,
+            educationMajor: filtersFromUrl.educationMajor,
             expectedSalaryMin: expectedSalary.min,
             expectedSalaryMax: expectedSalary.max,
-            workingModel: filtersFromUrl.workingModel,
+            workingModel: filtersFromUrl.workingModel ?? filtersFromUrl.remoteType,
+            employmentType: filtersFromUrl.employmentType,
             availability: filtersFromUrl.availability,
-            skills: filtersFromUrl.skills,
+            skills: normalizeSkillFilter(filtersFromUrl.skills),
+            toolsAndTechnologies: joinNormalizedList(filtersFromUrl.toolsAndTechnologies),
+            domainKnowledge: joinNormalizedList(filtersFromUrl.domainKnowledge),
+            certificationName: joinNormalizedList(filtersFromUrl.certificationName),
+            languageName: filtersFromUrl.languageName,
+            languageLevel: filtersFromUrl.languageLevel,
+            tags: joinNormalizedList(filtersFromUrl.tags),
             page: urlPage,
             limit: PAGE_LIMIT,
-            sort: filtersFromUrl.sort ?? 'newest',
+            sort: filtersFromUrl.sort ?? 'createdAt_desc',
           } satisfies NormalCVSearchParams);
 
     promise
@@ -219,7 +288,6 @@ const V2Search: React.FC = () => {
     updateUrl({
       q: inputQ.trim(),
       type: urlType,
-      location: inputLocation || undefined,
     });
   };
 
@@ -228,8 +296,15 @@ const V2Search: React.FC = () => {
     updateUrl({ type: next });
   };
 
-  const handleFiltersChange = (next: V2SearchFilters) => {
-    updateUrl(next);
+  const handleFiltersApply = (keyword: string, next: V2SearchFilters) => {
+    updateUrl({ q: keyword.trim(), ...next });
+  };
+
+  const handleFiltersClear = () => {
+    updateUrl({
+      q: '',
+      ...Object.fromEntries(FILTER_KEYS.map((key) => [key, undefined])),
+    } as Partial<V2SearchFilters> & { q: string });
   };
 
   const handlePageChange = (page: number) => {
@@ -280,21 +355,6 @@ const V2Search: React.FC = () => {
                 className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-full text-[15px] placeholder-gray-400 focus:outline-none focus:bg-white focus:border-[#0A65CC] focus:ring-2 focus:ring-[#0A65CC]/20"
               />
             </div>
-            <div className="md:w-64">
-              <select
-                value={inputLocation}
-                onChange={(event) => setInputLocation(event.target.value)}
-                className="w-full rounded-full border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 focus:border-[#0A65CC] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0A65CC]/20"
-                aria-label="Khu vực"
-              >
-                <option value="">Khu vực</option>
-                {LOCATION_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
             <button
               type="submit"
               className="px-6 py-3 rounded-full bg-[#0A65CC] text-white font-semibold text-sm hover:bg-[#085bb8] transition-colors whitespace-nowrap"
@@ -309,8 +369,10 @@ const V2Search: React.FC = () => {
         <div className="lg:col-span-3">
           <V2SearchFilterPanel
             mode={urlType}
+            keyword={urlQ}
             filters={filtersFromUrl}
-            onChange={handleFiltersChange}
+            onApply={handleFiltersApply}
+            onClear={handleFiltersClear}
           />
           <div className="mt-4 px-4 py-3 bg-amber-50 border border-amber-100 rounded-lg text-xs text-amber-800">
             <p className="font-semibold mb-1 flex items-center gap-1">

@@ -1,7 +1,7 @@
 import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('../src/api/normal', () => ({
@@ -43,7 +43,7 @@ const buildJobs = (count: number): NormalJobSearchItem[] =>
     education: 'dai_hoc',
     skills: ['python'],
     requirement: 'General job requirement',
-    employment_type: ['remote'],
+    employment_type: ['fulltime'],
     working_model: 'remote',
   }));
 
@@ -69,6 +69,20 @@ describe('V2Search page', () => {
   beforeEach(() => {
     mockedSearchJobs.mockReset();
     mockedSearchCvs.mockReset();
+    mockedSearchJobs.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      limit: 10,
+      totalPages: 0,
+    });
+    mockedSearchCvs.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      limit: 10,
+      totalPages: 0,
+    });
   });
 
   it('loads public jobs when q and filters are empty in job mode', async () => {
@@ -83,7 +97,7 @@ describe('V2Search page', () => {
     renderAt('/jobs/search');
 
     await waitFor(() => {
-      expect(mockedSearchJobs).toHaveBeenCalledWith({
+      expect(mockedSearchJobs).toHaveBeenCalledWith(expect.objectContaining({
         q: undefined,
         location: undefined,
         industry: undefined,
@@ -96,8 +110,8 @@ describe('V2Search page', () => {
         skills: undefined,
         page: 1,
         limit: 10,
-        sort: 'newest',
-      });
+        sort: 'createdAt_desc',
+      }));
     });
     expect(await screen.findByText('Job 1')).toBeInTheDocument();
   });
@@ -115,22 +129,33 @@ describe('V2Search page', () => {
 
     expect(mockedSearchJobs).not.toHaveBeenCalled();
     await waitFor(() => {
-      expect(mockedSearchCvs).toHaveBeenCalledWith({
+      expect(mockedSearchCvs).toHaveBeenCalledWith(expect.objectContaining({
         q: undefined,
         location: undefined,
+        locationCountry: undefined,
         desiredIndustry: undefined,
-        experienceLevel: undefined,
-        yearsOfExperience: undefined,
+        careerLevel: undefined,
+        yearsOfExperienceMin: undefined,
+        yearsOfExperienceMax: undefined,
         educationLevel: undefined,
+        educationMajor: undefined,
         expectedSalaryMin: undefined,
         expectedSalaryMax: undefined,
         workingModel: undefined,
+        employmentType: undefined,
         availability: undefined,
         skills: undefined,
+        toolsAndTechnologies: undefined,
+        domainKnowledge: undefined,
+        certificationName: undefined,
+        languageName: undefined,
+        languageLevel: undefined,
+        status: undefined,
+        tags: undefined,
         page: 1,
         limit: 10,
-        sort: 'newest',
-      });
+        sort: 'createdAt_desc',
+      }));
     });
     expect(await screen.findByText('Candidate 1')).toBeInTheDocument();
   });
@@ -148,7 +173,7 @@ describe('V2Search page', () => {
     renderAt('/v2/search?q=marketing&type=job');
 
     await waitFor(() => {
-      expect(mockedSearchJobs).toHaveBeenCalledWith({
+      expect(mockedSearchJobs).toHaveBeenCalledWith(expect.objectContaining({
         q: 'marketing',
         location: undefined,
         industry: undefined,
@@ -161,8 +186,8 @@ describe('V2Search page', () => {
         skills: undefined,
         page: 1,
         limit: 10,
-        sort: 'newest',
-      });
+        sort: 'createdAt_desc',
+      }));
     });
     expect(await screen.findByText('Job 1')).toBeInTheDocument();
     expect(screen.queryByText(/match/i)).not.toBeInTheDocument();
@@ -179,11 +204,11 @@ describe('V2Search page', () => {
       totalPages: 0,
     });
     renderAt(
-      '/v2/search?q=x&type=job&location=ha_noi&industry=marketing&employmentType=fulltime&experienceLevel=junior&educationLevel=bachelor&workingModel=onsite&skills=excel&sort=most_relevant'
+      '/v2/search?q=x&type=job&location=ha_noi&industry=marketing&employmentType=fulltime&experienceLevel=junior&educationLevel=bachelor&workingModel=onsite&skills=excel&sort=createdAt_desc'
     );
 
     await waitFor(() => {
-      expect(mockedSearchJobs).toHaveBeenCalledWith({
+      expect(mockedSearchJobs).toHaveBeenCalledWith(expect.objectContaining({
         q: 'x',
         location: 'ha_noi',
         industry: 'marketing',
@@ -196,8 +221,8 @@ describe('V2Search page', () => {
         skills: 'excel',
         page: 1,
         limit: 10,
-        sort: 'most_relevant',
-      });
+        sort: 'createdAt_desc',
+      }));
     });
   });
 
@@ -217,7 +242,7 @@ describe('V2Search page', () => {
           title: 'Marketing Candidate',
           location: 'tp_hcm',
           job_type: 'fulltime',
-          seniority: 'mid',
+          seniority: 'middle',
           education: 'dai_hoc',
           skills: ['content'],
           summary: 'Marketing summary',
@@ -243,12 +268,13 @@ describe('V2Search page', () => {
     await userEvent.click(screen.getByRole('button', { name: /Tìm CV/i }));
 
     await waitFor(() => {
-      expect(mockedSearchCvs).toHaveBeenCalledWith({
+      expect(mockedSearchCvs).toHaveBeenCalledWith(expect.objectContaining({
         q: 'marketing',
         location: undefined,
         desiredIndustry: undefined,
-        experienceLevel: undefined,
-        yearsOfExperience: undefined,
+        careerLevel: undefined,
+        yearsOfExperienceMin: undefined,
+        yearsOfExperienceMax: undefined,
         educationLevel: undefined,
         expectedSalaryMin: undefined,
         expectedSalaryMax: undefined,
@@ -257,10 +283,115 @@ describe('V2Search page', () => {
         skills: undefined,
         page: 1,
         limit: 10,
-        sort: 'newest',
-      });
+        sort: 'createdAt_desc',
+      }));
     });
     expect(await screen.findByText('Marketing Candidate')).toBeInTheDocument();
+  });
+
+  it('sends normalized multi-industry CV filters from the panel', async () => {
+    const user = userEvent.setup();
+    renderAt('/cvs/search?type=cv');
+
+    await waitFor(() => expect(mockedSearchCvs).toHaveBeenCalled());
+
+    await user.selectOptions(screen.getByLabelText(/^industry$/i), 'information_technology');
+    await user.selectOptions(screen.getByLabelText(/occupation group/i), 'software_engineering');
+    await user.click(screen.getByRole('button', { name: /^Junior$/i }));
+    await user.click(screen.getByRole('button', { name: /^Middle$/i }));
+    await user.click(screen.getByRole('button', { name: /^Full-time$/i }));
+    await user.type(screen.getByLabelText(/years min/i), '1');
+    await user.type(screen.getByLabelText(/years max/i), '4');
+    await user.type(screen.getByLabelText(/^city$/i), 'Hà Nội');
+    await user.type(screen.getByLabelText(/^country$/i), 'Việt Nam');
+    await user.type(screen.getByLabelText(/^skills/i), 'ReactJS, Postgres, MS Excel');
+    await user.type(screen.getByLabelText(/tools and technologies/i), 'FastAPI');
+    await user.type(screen.getByLabelText(/domain knowledge/i), 'ecommerce');
+    await user.click(screen.getByRole('button', { name: /^Bachelor$/i }));
+    await user.type(screen.getByLabelText(/education major/i), 'Computer Science');
+    await user.type(screen.getByLabelText(/certifications/i), 'AWS');
+    await user.type(screen.getByLabelText(/language name/i), 'English');
+    await user.selectOptions(screen.getByLabelText(/language level/i), 'intermediate');
+    await user.type(screen.getByLabelText(/^tags/i), 'backend');
+    await user.selectOptions(screen.getByLabelText(/sort results/i), 'yearsOfExperience_desc');
+    await user.click(screen.getByRole('button', { name: /apply filters/i }));
+
+    await waitFor(() => {
+      expect(mockedSearchCvs).toHaveBeenLastCalledWith(expect.objectContaining({
+        desiredIndustry: 'information_technology',
+        occupationGroup: 'software_engineering',
+        careerLevel: 'junior,middle',
+        yearsOfExperienceMin: 1,
+        yearsOfExperienceMax: 4,
+        employmentType: 'fulltime',
+        location: 'Hà Nội',
+        locationCountry: 'Việt Nam',
+        skills: 'react,postgresql,excel',
+        toolsAndTechnologies: 'fastapi',
+        domainKnowledge: 'ecommerce',
+        educationLevel: 'bachelor',
+        educationMajor: 'Computer Science',
+        certificationName: 'aws',
+        languageName: 'English',
+        languageLevel: 'intermediate',
+        tags: 'backend',
+        sort: 'yearsOfExperience_desc',
+      }));
+    });
+  });
+
+  it('scopes occupation group options by selected industry', async () => {
+    const user = userEvent.setup();
+    renderAt('/cvs/search?type=cv');
+
+    await user.selectOptions(await screen.findByLabelText(/^industry$/i), 'accounting_finance');
+    const occupationSelect = screen.getByLabelText(/occupation group/i);
+
+    expect(within(occupationSelect).getByRole('option', { name: /^Accountant$/i })).toBeInTheDocument();
+    expect(within(occupationSelect).queryByRole('option', { name: /Software Engineering/i })).not.toBeInTheDocument();
+  });
+
+  it('clears active CV filters and removes filter chips', async () => {
+    const user = userEvent.setup();
+    renderAt('/cvs/search?type=cv&industry=sales&careerLevel=junior,middle&skills=react');
+
+    expect(await screen.findByText(/Industry: Sales/i)).toBeInTheDocument();
+    expect(screen.getByText(/Skill: react/i)).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole('button', { name: /^Clear$/i })[0]);
+
+    await waitFor(() => {
+      expect(mockedSearchCvs).toHaveBeenLastCalledWith(expect.objectContaining({
+        desiredIndustry: undefined,
+        careerLevel: undefined,
+        skills: undefined,
+      }));
+    });
+    expect(screen.queryByText(/Industry: Sales/i)).not.toBeInTheDocument();
+  });
+
+  it('does not render score or recommendation fields in normal CV results', async () => {
+    mockedSearchCvs.mockResolvedValueOnce({
+      items: [
+        {
+          ...buildCvs(1)[0],
+          matchScore: 99,
+          matchLevel: 'excellent_match',
+          recommendation: 'Review as top match',
+        } as NormalCVSearchItem,
+      ],
+      total: 1,
+      page: 1,
+      limit: 10,
+      totalPages: 1,
+    });
+
+    renderAt('/cvs/search?type=cv&q=react');
+
+    expect(await screen.findByText('Candidate 1')).toBeInTheDocument();
+    expect(screen.queryByText(/excellent_match/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Review as top match/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/99/)).not.toBeInTheDocument();
   });
 
   it('shows the empty-state message when total is 0', async () => {

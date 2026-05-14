@@ -30,6 +30,7 @@ normal search endpoints for the JobConnect UI:
 * `GET /api/cvs`
 * `GET /api/candidates`
 * `POST /api/job`
+* `POST /api/job/extract`
 * `GET /api/job/my`
 * `GET /api/job/search`
 * `GET /api/employer/requests/my`
@@ -38,6 +39,7 @@ normal search endpoints for the JobConnect UI:
 * `GET /api/cv/my`
 * `GET /api/cvs/my`
 * `POST /api/cv/upload`
+* `POST /api/cvs/extract-pdf`
 * `POST /api/auth/register`
 * `POST /api/auth/login`
 * `POST /api/auth/google`

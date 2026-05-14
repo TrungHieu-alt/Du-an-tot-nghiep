@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import json
 from io import BytesIO
 from datetime import datetime, timezone
 from pathlib import Path
@@ -64,6 +65,22 @@ def _make_conn(responses):
     return _StubConnection(cur), cur
 
 
+def _json_payload(value):
+    for attr in ("obj", "_obj", "wrapped", "_wrapped"):
+        if hasattr(value, attr):
+            return getattr(value, attr)
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+    return value
+
+
+def _is_json_wrapper(value):
+    return any(hasattr(value, attr) for attr in ("obj", "_obj", "wrapped", "_wrapped"))
+
+
 def _job_row(**overrides):
     data = {
         "id": JOB_ID,
@@ -79,6 +96,8 @@ def _job_row(**overrides):
         "company_location": "Hà Nội",
         "company_size": "100-500",
         "company_industry": "Marketing",
+        "industry": "marketing",
+        "occupation_group": "digital_marketing",
         "department": "Growth",
         "location": {"city": "Hà Nội", "country": "VN", "remote_type": "hybrid"},
         "employment_type": ["fulltime"],
@@ -88,9 +107,15 @@ def _job_row(**overrides):
         "responsibilities": ["Lead campaigns"],
         "requirements": ["Excel", "Communication"],
         "nice_to_have": [],
-        "skills": [{"name": "Excel", "level": "advanced"}],
+        "skills": [{"name": "Excel", "normalized_name": "excel", "level": "advanced", "category": "tool"}],
+        "must_have_skills": [],
+        "nice_to_have_skills": [],
+        "tools_and_technologies": ["excel"],
+        "domain_knowledge": ["brand"],
         "experience_years": 5,
         "education_level": "bachelor",
+        "required_education": {"level": "bachelor", "major": "Marketing"},
+        "required_certifications": [],
         "salary": {"min": 20000000, "max": 35000000, "currency": "VND"},
         "benefits": ["Insurance"],
         "bonus": None,
@@ -112,6 +137,7 @@ def _job_row(**overrides):
         "approved_by": None,
         "archived": False,
         "version": 1,
+        "embedding": {},
         "created_at": NOW,
         "updated_at": NOW,
     }
@@ -131,11 +157,17 @@ def _cv_row(**overrides):
         "location": {"city": "TP. Hồ Chí Minh", "country": "VN", "remote_type": "remote"},
         "headline": "Sales candidate",
         "summary": "B2B sales and customer service.",
+        "industry": "sales",
+        "occupation_group": "sales_executive",
+        "career_level": "manager",
+        "years_of_experience": 5,
         "target_role": "Sales Manager",
         "employment_type": ["fulltime"],
         "salary_expectation": "Negotiable",
         "availability": "immediately",
-        "skills": [{"name": "Communication", "level": "advanced"}],
+        "skills": [{"name": "Communication", "normalized_name": "communication", "level": "advanced", "category": "soft_skill"}],
+        "tools_and_technologies": ["excel"],
+        "domain_knowledge": ["sales"],
         "experiences": [{"title": "Sales Lead", "responsibilities": ["Lead sales"]}],
         "education": [{"degree": "Bachelor"}],
         "projects": [],
@@ -149,6 +181,7 @@ def _cv_row(**overrides):
         "version": 1,
         "file": {},
         "archived": False,
+        "embedding": {},
         "created_at": NOW,
         "updated_at": NOW,
     }
@@ -228,23 +261,92 @@ class NormalJobCvRouterTests(unittest.TestCase):
             "Acme",
         )
 
-    def test_create_job_defaults_to_public_published_searchable_state(self):
+    def test_create_job_defaults_to_draft_private_state(self):
         conn, cur = _make_conn([_job_row()])
         self._override_conn(conn)
 
-        res = self.client.post("/api/job", json={"title": "Public by default"})
+        res = self.client.post("/api/job", json={"title": "Draft by default"})
 
         self.assertEqual(res.status_code, 201)
         insert_params = cur.executed[0][1]
         self.assertEqual(
             insert_params[job_router.INSERTABLE_JOB_COLUMNS.index("status")],
-            "published",
+            "draft",
         )
         self.assertEqual(
             insert_params[job_router.INSERTABLE_JOB_COLUMNS.index("visibility")],
-            "public",
+            "private",
         )
         self.assertFalse(insert_params[job_router.INSERTABLE_JOB_COLUMNS.index("archived")])
+
+    def test_create_job_normalizes_enum_like_fields_before_insert(self):
+        conn, cur = _make_conn([_job_row()])
+        self._override_conn(conn)
+
+        res = self.client.post(
+            "/api/job",
+            json={
+                "title": "Senior React Developer",
+                "status": "Published",
+                "visibility": "Internal",
+                "industry": "Information Technology",
+                "occupation_group": "Software Engineering",
+                "location": {"city": "Hà Nội", "remote_type": "work from home"},
+                "employment_type": ["Full-time", "fulltime", "unsupported"],
+                "seniority": "Senior Developer",
+                "skills": [{"name": "ReactJS", "level": "Good", "category": "Technical Skill"}],
+                "salary": {"currency": "Vietnamese Dong", "period": "Per Month"},
+                "pre_screen_questions": [{"q": "Why?", "type": "short answer"}],
+            },
+        )
+
+        self.assertEqual(res.status_code, 201)
+        params = cur.executed[0][1]
+        self.assertEqual(params[job_router.INSERTABLE_JOB_COLUMNS.index("status")], "published")
+        self.assertEqual(params[job_router.INSERTABLE_JOB_COLUMNS.index("visibility")], "private")
+        self.assertEqual(params[job_router.INSERTABLE_JOB_COLUMNS.index("industry")], "information_technology")
+        self.assertEqual(params[job_router.INSERTABLE_JOB_COLUMNS.index("occupation_group")], "software_engineering")
+        self.assertEqual(params[job_router.INSERTABLE_JOB_COLUMNS.index("employment_type")], ["fulltime"])
+        self.assertEqual(params[job_router.INSERTABLE_JOB_COLUMNS.index("seniority")], "senior")
+        location = _json_payload(params[job_router.INSERTABLE_JOB_COLUMNS.index("location")])
+        self.assertEqual(location["remote_type"], "remote")
+        skills = _json_payload(params[job_router.INSERTABLE_JOB_COLUMNS.index("skills")])
+        self.assertEqual(skills[0]["normalized_name"], "react")
+        self.assertEqual(skills[0]["level"], "intermediate")
+        self.assertEqual(skills[0]["category"], "technical")
+        salary = _json_payload(params[job_router.INSERTABLE_JOB_COLUMNS.index("salary")])
+        self.assertEqual(salary["currency"], "VND")
+        self.assertEqual(salary["period"], "month")
+        questions = _json_payload(params[job_router.INSERTABLE_JOB_COLUMNS.index("pre_screen_questions")])
+        self.assertEqual(questions[0]["type"], "text")
+
+    def test_update_job_normalizes_enum_like_fields_before_update(self):
+        conn, cur = _make_conn([_job_row(), _job_row()])
+        self._override_conn(conn)
+
+        res = self.client.patch(
+            f"/api/job/{JOB_ID}",
+            json={
+                "visibility": "Visible",
+                "seniority": "Engineering Manager",
+                "education_level": "Đại học",
+                "salary": {"currency": "usd", "period": "yearly"},
+            },
+        )
+
+        self.assertEqual(res.status_code, 200)
+        update_params = cur.executed[1][1]
+        update_sql = cur.executed[1][0]
+        self.assertIn("visibility", update_sql)
+        self.assertIn("seniority", update_sql)
+        self.assertIn("education_level", update_sql)
+        self.assertIn("salary", update_sql)
+        self.assertIn("public", update_params)
+        self.assertIn("manager", update_params)
+        self.assertIn("bachelor", update_params)
+        salary = next(_json_payload(param) for param in update_params if _is_json_wrapper(param))
+        self.assertEqual(salary["currency"], "USD")
+        self.assertEqual(salary["period"], "year")
 
     def test_user_can_create_multiple_cvs_and_created_by_is_authenticated_user(self):
         conn, cur = _make_conn([_cv_row(), _cv_row(id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbc")])
@@ -266,11 +368,11 @@ class NormalJobCvRouterTests(unittest.TestCase):
         self.assertEqual(insert_params[0], USER_ID)
         self.assertEqual(
             insert_params[cv_router.INSERTABLE_CV_COLUMNS.index("status")],
-            "published",
+            "draft",
         )
         self.assertEqual(
             insert_params[cv_router.INSERTABLE_CV_COLUMNS.index("visibility")],
-            "public",
+            "private",
         )
         self.assertFalse(insert_params[cv_router.INSERTABLE_CV_COLUMNS.index("archived")])
         self.assertEqual(len(cur.executed), 2)
@@ -300,6 +402,65 @@ class NormalJobCvRouterTests(unittest.TestCase):
             insert_params[cv_router.INSERTABLE_CV_COLUMNS.index("target_role")],
             "Sales Manager",
         )
+
+    def test_create_cv_normalizes_enum_like_fields_before_insert(self):
+        conn, cur = _make_conn([_cv_row()])
+        self._override_conn(conn)
+
+        res = self.client.post(
+            "/api/cv",
+            json={
+                "fullname": "Nguyen Van A",
+                "industry": "Information Technology",
+                "occupation_group": "Software Engineering",
+                "career_level": "Senior Developer",
+                "employment_type": ["Full-time", "fulltime", "bad value"],
+                "skills": [{"name": "ReactJS", "level": "Good", "category": "Technical Skill"}],
+                "education": [{"degree": "Đại học", "level": "Đại học", "school": "Demo"}],
+                "languages": [{"name": "English", "level": "B1"}],
+                "portfolio": [{"media_type": "GitHub", "url": "https://github.com/demo"}],
+                "status": "Published",
+                "visibility": "Internal",
+            },
+        )
+
+        self.assertEqual(res.status_code, 201)
+        params = cur.executed[0][1]
+        self.assertEqual(params[cv_router.INSERTABLE_CV_COLUMNS.index("industry")], "information_technology")
+        self.assertEqual(params[cv_router.INSERTABLE_CV_COLUMNS.index("occupation_group")], "software_engineering")
+        self.assertEqual(params[cv_router.INSERTABLE_CV_COLUMNS.index("career_level")], "senior")
+        self.assertEqual(params[cv_router.INSERTABLE_CV_COLUMNS.index("employment_type")], ["fulltime"])
+        self.assertEqual(params[cv_router.INSERTABLE_CV_COLUMNS.index("status")], "published")
+        self.assertEqual(params[cv_router.INSERTABLE_CV_COLUMNS.index("visibility")], "private")
+        skills = _json_payload(params[cv_router.INSERTABLE_CV_COLUMNS.index("skills")])
+        self.assertEqual(skills[0]["normalized_name"], "react")
+        self.assertEqual(skills[0]["level"], "intermediate")
+        education = _json_payload(params[cv_router.INSERTABLE_CV_COLUMNS.index("education")])
+        self.assertEqual(education[0]["level"], "bachelor")
+        languages = _json_payload(params[cv_router.INSERTABLE_CV_COLUMNS.index("languages")])
+        self.assertEqual(languages[0]["level"], "intermediate")
+        portfolio = _json_payload(params[cv_router.INSERTABLE_CV_COLUMNS.index("portfolio")])
+        self.assertEqual(portfolio[0]["media_type"], "github")
+
+    def test_update_cv_normalizes_enum_like_fields_before_update(self):
+        conn, cur = _make_conn([_cv_row(), _cv_row()])
+        self._override_conn(conn)
+
+        res = self.client.patch(
+            f"/api/cv/{CV_ID}",
+            json={
+                "career_level": "2-4 years experience",
+                "employment_type": ["Part-time"],
+                "languages": [{"name": "English", "level": "C1"}],
+            },
+        )
+
+        self.assertEqual(res.status_code, 200)
+        update_params = cur.executed[1][1]
+        self.assertIn("middle", update_params)
+        self.assertIn(["parttime"], update_params)
+        languages = next(_json_payload(param) for param in update_params if _is_json_wrapper(param))
+        self.assertEqual(languages[0]["level"], "proficient")
 
     def test_extract_pdf_preview_returns_draft_cv_without_saving(self):
         original_extractor = cv_router._extract_pdf_text
@@ -333,7 +494,8 @@ class NormalJobCvRouterTests(unittest.TestCase):
         self.assertEqual(body["cv"]["fullname"], "Nguyen Van A")
         self.assertEqual(body["cv"]["email"], "a@example.com")
         self.assertEqual(body["cv"]["status"], "draft")
-        self.assertIsNone(body["cv"]["file"])
+        self.assertEqual(body["cv"]["careerLevel"], "intern")
+        self.assertEqual(body["cv"]["file"]["mimetype"], "application/pdf")
         self.assertIn("warnings", body)
 
     def test_extract_pdf_preview_rejects_non_pdf(self):
@@ -343,6 +505,32 @@ class NormalJobCvRouterTests(unittest.TestCase):
         )
 
         self.assertEqual(res.status_code, 400)
+
+    def test_extract_job_text_returns_normalized_multi_industry_job(self):
+        conn, _ = _make_conn([])
+        self._override_conn(conn)
+
+        res = self.client.post(
+            "/api/job/extract",
+            json={
+                "text": (
+                    "Senior React Developer\n"
+                    "Good knowledge of React, strong experience with Python. "
+                    "Looking for full-time hybrid role. Graduated from university."
+                )
+            },
+        )
+
+        self.assertEqual(res.status_code, 200)
+        job = res.json()["job"]
+        self.assertEqual(job["status"], "draft")
+        self.assertEqual(job["visibility"], "private")
+        self.assertEqual(job["seniority"], "senior")
+        self.assertEqual(job["employmentType"], ["fulltime"])
+        self.assertEqual(job["location"]["remoteType"], "hybrid")
+        self.assertEqual(job["educationLevel"], "bachelor")
+        self.assertEqual(job["skills"][0]["normalizedName"], "react")
+        self.assertEqual(job["skills"][0]["level"], "intermediate")
 
     def test_created_by_from_client_body_is_rejected(self):
         conn, _ = _make_conn([])
@@ -392,8 +580,8 @@ class NormalJobCvRouterTests(unittest.TestCase):
         body = res.json()
         self.assertEqual(body["created_by"], USER_ID)
         self.assertEqual(body["file"]["uploaded_at"], NOW.isoformat())
-        self.assertEqual(cur.executed[0][1][cv_router.INSERTABLE_CV_COLUMNS.index("status")], "published")
-        self.assertEqual(cur.executed[0][1][cv_router.INSERTABLE_CV_COLUMNS.index("visibility")], "public")
+        self.assertEqual(cur.executed[0][1][cv_router.INSERTABLE_CV_COLUMNS.index("status")], "draft")
+        self.assertEqual(cur.executed[0][1][cv_router.INSERTABLE_CV_COLUMNS.index("visibility")], "private")
         self.assertFalse(cur.executed[0][1][cv_router.INSERTABLE_CV_COLUMNS.index("archived")])
         self.assertIn("UPDATE cvs", cur.executed[1][0])
 
@@ -438,6 +626,20 @@ class NormalJobCvRouterTests(unittest.TestCase):
         self.assertIn("visibility = 'public'", sql)
         self.assertIn("archived = false", sql)
         self.assertNotIn("job_posts_v2", sql)
+        forbidden = {
+            "totalScore",
+            "matchScore",
+            "matchLevel",
+            "scores",
+            "strengths",
+            "weaknesses",
+            "recommendation",
+            "matchedSkills",
+            "missingMustHaveSkills",
+            "missingNiceToHaveSkills",
+        }
+        self.assertTrue(forbidden.isdisjoint(body["items"][0]))
+        self.assertEqual(body["pagination"]["total"], 1)
 
     def test_public_job_search_with_no_query_returns_public_published_jobs(self):
         conn, _ = _make_conn([[_job_row(), _job_row(id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaf", status="draft")]])
@@ -455,6 +657,26 @@ class NormalJobCvRouterTests(unittest.TestCase):
         self._override_conn(conn)
 
         res = self.client.get("/api/job/search", params={"employment_type": "fulltime"})
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["total"], 1)
+
+    def test_public_job_search_filters_use_normalized_enum_keys(self):
+        conn, _ = _make_conn([[_job_row()]])
+        self._override_conn(conn)
+
+        res = self.client.get(
+            "/api/job/search",
+            params={
+                "industry": "Marketing",
+                "occupationGroup": "Digital Marketing",
+                "employmentType": "Full-time",
+                "remote_type": "2 days office, 3 days remote",
+                "seniority": "Engineering Manager",
+                "educationLevel": "University",
+                "salary.currency": "Vietnamese Dong",
+            },
+        )
 
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()["total"], 1)
@@ -484,6 +706,47 @@ class NormalJobCvRouterTests(unittest.TestCase):
         self.assertIn("visibility = 'public'", sql)
         self.assertIn("archived = false", sql)
         self.assertNotIn("candidate_profiles_v2", sql)
+        forbidden = {
+            "totalScore",
+            "matchScore",
+            "matchLevel",
+            "scores",
+            "strengths",
+            "weaknesses",
+            "recommendation",
+            "matchedSkills",
+            "missingMustHaveSkills",
+            "missingNiceToHaveSkills",
+        }
+        self.assertTrue(forbidden.isdisjoint(body["items"][0]))
+        self.assertEqual(body["pagination"]["total"], 1)
+
+    def test_public_cv_search_filters_use_normalized_enum_keys(self):
+        conn, _ = _make_conn([
+            [
+                _cv_row(
+                    education=[{"degree": "Bachelor", "level": "bachelor", "major": "Sales"}],
+                    languages=[{"name": "English", "level": "intermediate"}],
+                )
+            ]
+        ])
+        self._override_conn(conn)
+
+        res = self.client.get(
+            "/api/cv/search",
+            params={
+                "industry": "Sales",
+                "occupationGroup": "Sales Executive",
+                "careerLevel": "Engineering Manager",
+                "employmentType": "Full-time",
+                "educationLevel": "University",
+                "languageName": "English",
+                "languageLevel": "B1",
+            },
+        )
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["total"], 1)
 
     def test_public_cv_search_filters_by_skills_and_target_role(self):
         conn, _ = _make_conn(
@@ -511,6 +774,89 @@ class NormalJobCvRouterTests(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()["total"], 1)
         self.assertEqual(res.json()["items"][0]["target_role"], "Frontend Developer")
+
+    def test_public_cv_search_keyword_includes_language_names(self):
+        conn, _ = _make_conn(
+            [
+                [
+                    _cv_row(languages=[{"name": "Japanese", "level": "intermediate"}]),
+                    _cv_row(
+                        id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbc5",
+                        languages=[{"name": "English", "level": "intermediate"}],
+                    ),
+                ]
+            ]
+        )
+        self._override_conn(conn)
+
+        res = self.client.get("/api/cv/search", params={"q": "Japanese"})
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["total"], 1)
+        self.assertEqual(res.json()["items"][0]["id"], CV_ID)
+
+    def test_public_cv_search_accepts_multi_industry_filter_aliases(self):
+        conn, _ = _make_conn(
+            [
+                [
+                    _cv_row(
+                        industry="information_technology",
+                        occupation_group="software_engineering",
+                        career_level="middle",
+                        years_of_experience=3,
+                        target_role="Backend Developer",
+                        location={"city": "Hà Nội", "country": "Việt Nam"},
+                        employment_type=["fulltime"],
+                        skills=[{"name": "React", "normalized_name": "react"}],
+                        tools_and_technologies=["FastAPI"],
+                        domain_knowledge=["ecommerce"],
+                        education=[{"level": "bachelor", "major": "Computer Science", "school": "Demo University"}],
+                        certifications=[{"name": "AWS"}],
+                        languages=[{"name": "English", "level": "intermediate"}],
+                        tags=["backend"],
+                    ),
+                    _cv_row(
+                        id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbc6",
+                        industry="sales",
+                        occupation_group="sales_executive",
+                        career_level="manager",
+                        target_role="Sales Manager",
+                        location={"city": "Đà Nẵng", "country": "Việt Nam"},
+                        skills=[{"name": "Excel", "normalized_name": "excel"}],
+                        education=[{"level": "associate", "major": "Sales"}],
+                        languages=[{"name": "English", "level": "basic"}],
+                    ),
+                ]
+            ]
+        )
+        self._override_conn(conn)
+
+        res = self.client.get(
+            "/api/cv/search",
+            params={
+                "industry": "information_technology",
+                "occupationGroup": "software_engineering",
+                "careerLevel": "junior,middle",
+                "yearsOfExperienceMin": 1,
+                "yearsOfExperienceMax": 4,
+                "employmentType": "fulltime",
+                "city": "Hà Nội",
+                "locationCountry": "Việt Nam",
+                "skills": "ReactJS",
+                "toolsAndTechnologies": "fastapi",
+                "domainKnowledge": "ecommerce",
+                "educationLevel": "bachelor,master",
+                "educationMajor": "Computer",
+                "certifications.name": "AWS",
+                "languages.name": "English",
+                "languages.level": "B1",
+                "tags": "backend",
+            },
+        )
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["total"], 1)
+        self.assertEqual(res.json()["items"][0]["target_role"], "Backend Developer")
 
     def test_unauthenticated_user_can_view_public_job_detail(self):
         conn, _ = _make_conn([_job_row()])
@@ -634,12 +980,14 @@ class NormalJobCvRouterTests(unittest.TestCase):
         paths = set(schema["paths"])
 
         self.assertIn("/api/job", paths)
+        self.assertIn("/api/job/extract", paths)
         self.assertIn("/api/job/my", paths)
         self.assertIn("/api/job/search", paths)
         self.assertIn("/api/job/{job_id}", paths)
         self.assertIn("/api/cv", paths)
         self.assertIn("/api/cv/my", paths)
         self.assertIn("/api/cv/upload", paths)
+        self.assertIn("/api/cvs/extract-pdf", paths)
         self.assertIn("/api/cv/{cv_id}", paths)
         self.assertIn("/api/jobs", paths)
         self.assertIn("/api/cvs", paths)

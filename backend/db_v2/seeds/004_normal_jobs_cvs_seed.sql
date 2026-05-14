@@ -750,3 +750,74 @@ SET created_by = EXCLUDED.created_by,
     visibility = 'public',
     file = EXCLUDED.file,
     archived = false;
+
+UPDATE jobs
+SET industry = CASE
+        WHEN company_industry ILIKE '%Information Technology%' OR company_industry ILIKE '%Software%' THEN 'information_technology'
+        WHEN company_industry ILIKE '%Accounting%' OR company_industry ILIKE '%Finance%' THEN 'accounting_finance'
+        WHEN company_industry ILIKE '%Sales%' THEN 'sales'
+        WHEN company_industry ILIKE '%Marketing%' THEN 'marketing'
+        WHEN company_industry ILIKE '%Human Resources%' OR company_industry ILIKE '%HR%' THEN 'human_resources'
+        WHEN company_industry ILIKE '%Education%' THEN 'education'
+        WHEN company_industry ILIKE '%Healthcare%' THEN 'healthcare'
+        WHEN company_industry ILIKE '%Construction%' OR company_industry ILIKE '%Engineering%' THEN 'engineering_construction'
+        WHEN company_industry ILIKE '%Design%' OR company_industry ILIKE '%Creative%' THEN 'design_creative'
+        WHEN company_industry ILIKE '%Customer Service%' THEN 'customer_service'
+        WHEN company_industry ILIKE '%Operations%' THEN 'operations'
+        WHEN company_industry ILIKE '%Logistics%' OR company_industry ILIKE '%Supply Chain%' THEN 'logistics_supply_chain'
+        WHEN company_industry ILIKE '%Hospitality%' OR company_industry ILIKE '%Tourism%' THEN 'hospitality_tourism'
+        WHEN company_industry ILIKE '%Legal%' THEN 'legal'
+        WHEN company_industry ILIKE '%Manufacturing%' THEN 'manufacturing'
+        WHEN company_industry ILIKE '%Retail%' THEN 'retail'
+        ELSE 'unknown'
+    END,
+    occupation_group = CASE
+        WHEN title ILIKE '%DevOps%' THEN 'devops_cloud'
+        WHEN title ILIKE '%Backend%' OR title ILIKE '%Frontend%' OR title ILIKE '%Developer%' OR title ILIKE '%Engineer%' THEN 'software_engineering'
+        WHEN title ILIKE '%Marketing%' THEN 'digital_marketing'
+        WHEN title ILIKE '%Sales%' THEN 'sales_executive'
+        WHEN title ILIKE '%Accountant%' OR title ILIKE '%Accounting%' THEN 'accountant'
+        WHEN title ILIKE '%Finance%' THEN 'financial_analyst'
+        WHEN title ILIKE '%HR%' OR title ILIKE '%Recruit%' THEN 'hr_recruitment'
+        WHEN title ILIKE '%Teacher%' THEN 'teacher'
+        WHEN title ILIKE '%Doctor%' THEN 'doctor'
+        WHEN title ILIKE '%Nurse%' THEN 'nurse'
+        WHEN title ILIKE '%Designer%' THEN 'ui_ux_designer'
+        WHEN title ILIKE '%Customer%' THEN 'customer_support'
+        WHEN title ILIKE '%Logistics%' THEN 'logistics_staff'
+        WHEN title ILIKE '%Legal%' THEN 'legal_staff'
+        WHEN title ILIKE '%Production%' THEN 'production_worker'
+        WHEN title ILIKE '%Retail%' THEN 'retail_staff'
+        WHEN title ILIKE '%Hotel%' THEN 'hotel_staff'
+        ELSE 'unknown'
+    END
+WHERE id::text LIKE '91000000-0000-0000-0000-%';
+
+UPDATE cvs
+SET industry = CASE
+        WHEN target_role ILIKE '%Developer%' OR target_role ILIKE '%Backend%' OR target_role ILIKE '%Frontend%' OR summary ILIKE '%React%' OR summary ILIKE '%Python%' THEN 'information_technology'
+        WHEN target_role ILIKE '%Account%' OR summary ILIKE '%Finance%' THEN 'accounting_finance'
+        WHEN target_role ILIKE '%Sales%' THEN 'sales'
+        WHEN target_role ILIKE '%Marketing%' THEN 'marketing'
+        WHEN target_role ILIKE '%HR%' OR target_role ILIKE '%Recruit%' THEN 'human_resources'
+        WHEN target_role ILIKE '%Teacher%' THEN 'education'
+        WHEN target_role ILIKE '%Doctor%' OR target_role ILIKE '%Nurse%' THEN 'healthcare'
+        WHEN target_role ILIKE '%Designer%' OR summary ILIKE '%Figma%' THEN 'design_creative'
+        WHEN target_role ILIKE '%Logistics%' THEN 'logistics_supply_chain'
+        WHEN target_role ILIKE '%Customer%' THEN 'customer_service'
+        WHEN target_role ILIKE '%Hotel%' OR target_role ILIKE '%Receptionist%' THEN 'hospitality_tourism'
+        ELSE 'unknown'
+    END,
+    occupation_group = CASE
+        WHEN target_role ILIKE '%Backend%' OR target_role ILIKE '%Frontend%' OR target_role ILIKE '%Developer%' THEN 'software_engineering'
+        WHEN target_role ILIKE '%Account%' THEN 'accountant'
+        WHEN target_role ILIKE '%Sales%' THEN 'sales_executive'
+        WHEN target_role ILIKE '%Marketing%' THEN 'digital_marketing'
+        WHEN target_role ILIKE '%HR%' OR target_role ILIKE '%Recruit%' THEN 'hr_recruitment'
+        WHEN target_role ILIKE '%Teacher%' THEN 'teacher'
+        WHEN target_role ILIKE '%Designer%' THEN 'ui_ux_designer'
+        WHEN target_role ILIKE '%Customer%' THEN 'customer_support'
+        WHEN target_role ILIKE '%Hotel%' OR target_role ILIKE '%Receptionist%' THEN 'hotel_staff'
+        ELSE 'unknown'
+    END
+WHERE id::text LIKE '92000000-0000-0000-0000-%';

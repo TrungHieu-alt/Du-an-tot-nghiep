@@ -16,12 +16,13 @@ vi.mock('../src/api/normal', () => ({
 
 import MyJobs from './MyJobs';
 import { useAuth } from '../contexts/AuthContext';
-import { listMyJobs, updateJob } from '../src/api/normal';
+import { createJob, listMyJobs, updateJob } from '../src/api/normal';
 import type { NormalJob } from '../types';
 
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedListMyJobs = vi.mocked(listMyJobs);
 const mockedUpdateJob = vi.mocked(updateJob);
+const mockedCreateJob = vi.mocked(createJob);
 
 const authValue = {
   accessToken: 'token',
@@ -85,7 +86,9 @@ describe('MyJobs card grid management', () => {
     mockedUseAuth.mockReturnValue(authValue);
     mockedListMyJobs.mockReset();
     mockedUpdateJob.mockReset();
+    mockedCreateJob.mockReset();
     mockedUpdateJob.mockResolvedValue(job());
+    mockedCreateJob.mockResolvedValue(job());
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
@@ -155,5 +158,38 @@ describe('MyJobs card grid management', () => {
 
     expect(await screen.findByText(/bạn chưa có yêu cầu tuyển dụng nào/i)).toBeInTheDocument();
     expect(screen.getByLabelText('Tạo yêu cầu tuyển dụng mới')).toBeInTheDocument();
+  });
+
+  it('creates jobs with normalized enum keys from the form defaults', async () => {
+    mockedListMyJobs.mockResolvedValue([]);
+    const user = userEvent.setup();
+
+    renderPage('/employer/requests/new');
+
+    expect(screen.getByText(/step 1 of 7/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/basic job information/i).length).toBeGreaterThan(0);
+
+    await user.type(screen.getByLabelText(/job title/i), 'Accountant');
+    await user.type(screen.getByLabelText(/^company name/i), 'Finance Co');
+    await user.click(screen.getByRole('button', { name: /save draft/i }));
+
+    expect(mockedCreateJob).toHaveBeenCalledWith('token', expect.objectContaining({
+      title: 'Accountant',
+      company_name: 'Finance Co',
+      industry: 'unknown',
+      occupation_group: 'unknown',
+      seniority: 'unknown',
+      employment_type: ['fulltime'],
+      status: 'draft',
+      visibility: 'private',
+      education_level: 'unknown',
+      salary: expect.objectContaining({
+        currency: 'VND',
+        period: 'month',
+      }),
+    }));
+    expect(mockedCreateJob.mock.calls[0][1]).not.toHaveProperty('matchScore');
+    expect(mockedCreateJob.mock.calls[0][1]).not.toHaveProperty('matchLevel');
+    expect(mockedCreateJob.mock.calls[0][1]).not.toHaveProperty('recommendation');
   });
 });

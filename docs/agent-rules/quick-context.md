@@ -33,7 +33,8 @@ Purpose: concise system reality snapshot for V2 target documentation.
   `/api/jobs`, `/api/cvs`, and `/api/candidates` route to normal tables and do
   not read V2 data.
 - PDF CV upload is `POST /api/cv/upload`; it stores file metadata in
-  `cvs.file` and does not parse PDFs yet.
+  `cvs.file`. Preview extraction is `POST /api/cvs/extract-pdf` and uses
+  local/offline parsers only when available.
 
 ## Current Constraints
 - The original matcher keeps exact-match seniority and lowercase/trim/unique skill behavior from `docs/REQUIREMENTS.md`.

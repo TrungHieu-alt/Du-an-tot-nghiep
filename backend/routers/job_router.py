@@ -10,6 +10,7 @@ import math
 import re
 import unicodedata
 from collections.abc import Iterable
+from datetime import datetime
 from typing import Annotated, Any
 
 import psycopg
@@ -18,6 +19,22 @@ from fastapi.encoders import jsonable_encoder
 from jose import JWTError, jwt
 from psycopg.types.json import Jsonb
 
+from core.normalizers import (
+    as_text_list,
+    normalize_currency,
+    normalize_education_level,
+    normalize_employment_types,
+    normalize_industry,
+    normalize_job_payload,
+    normalize_occupation_group,
+    normalize_remote_type,
+    normalize_salary_period,
+    normalize_seniority,
+    normalize_skill_level,
+    normalize_skill_name,
+    normalize_status,
+    normalize_visibility,
+)
 from routers.auth import (
     AuthUser,
     get_current_user,
@@ -28,6 +45,8 @@ from routers.auth import (
 )
 from schemas.normal_job_schema import (
     JobCreateRequest,
+    JobExtractRequest,
+    JobExtractResponse,
     JobResponse,
     JobSearchFiltersResponse,
     JobSearchListItem,
@@ -59,6 +78,8 @@ JOB_COLUMNS = [
     "company_location",
     "company_size",
     "company_industry",
+    "industry",
+    "occupation_group",
     "department",
     "location",
     "employment_type",
@@ -69,8 +90,14 @@ JOB_COLUMNS = [
     "requirements",
     "nice_to_have",
     "skills",
+    "must_have_skills",
+    "nice_to_have_skills",
+    "tools_and_technologies",
+    "domain_knowledge",
     "experience_years",
     "education_level",
+    "required_education",
+    "required_certifications",
     "salary",
     "benefits",
     "bonus",
@@ -92,6 +119,7 @@ JOB_COLUMNS = [
     "approved_by",
     "archived",
     "version",
+    "embedding",
     "created_at",
     "updated_at",
 ]
@@ -109,6 +137,8 @@ INSERTABLE_JOB_COLUMNS = [
     "company_location",
     "company_size",
     "company_industry",
+    "industry",
+    "occupation_group",
     "department",
     "location",
     "employment_type",
@@ -119,8 +149,14 @@ INSERTABLE_JOB_COLUMNS = [
     "requirements",
     "nice_to_have",
     "skills",
+    "must_have_skills",
+    "nice_to_have_skills",
+    "tools_and_technologies",
+    "domain_knowledge",
     "experience_years",
     "education_level",
+    "required_education",
+    "required_certifications",
     "salary",
     "benefits",
     "bonus",
@@ -140,9 +176,20 @@ INSERTABLE_JOB_COLUMNS = [
     "approved_by",
     "archived",
     "version",
+    "embedding",
 ]
 
-JSON_COLUMNS = {"location", "skills", "salary", "recruiter", "pre_screen_questions"}
+JSON_COLUMNS = {
+    "location",
+    "skills",
+    "must_have_skills",
+    "nice_to_have_skills",
+    "required_education",
+    "salary",
+    "recruiter",
+    "pre_screen_questions",
+    "embedding",
+}
 
 
 def _normalize_text(value: Any) -> str:
@@ -177,6 +224,10 @@ def _as_list(value: Any) -> list[str]:
     return []
 
 
+def _split_or_list(value: Any) -> list[str]:
+    return [_normalize_text(item) for item in as_text_list(value) if _normalize_text(item)]
+
+
 def _json_value(value: Any) -> Any:
     return Jsonb(value if value is not None else {})
 
@@ -187,25 +238,25 @@ def _json_array_value(value: Any) -> Any:
 
 def _dump_payload(payload: JobCreateRequest | JobUpdateRequest, *, partial: bool) -> dict[str, Any]:
     data = payload.model_dump(mode="json", exclude_unset=partial)
-    for field in ("location", "salary", "recruiter"):
+    for field in ("location", "required_education", "salary", "recruiter", "embedding"):
         if field in data and data[field] is None:
             data[field] = {}
-    for field in ("skills", "pre_screen_questions"):
+    for field in ("skills", "must_have_skills", "nice_to_have_skills", "pre_screen_questions"):
         if field in data and data[field] is None:
             data[field] = []
     return data
 
 
 def _apply_create_defaults(data: dict[str, Any]) -> None:
-    data["status"] = data.get("status") or "published"
-    data["visibility"] = data.get("visibility") or "public"
+    data["status"] = data.get("status") or "draft"
+    data["visibility"] = data.get("visibility") or "private"
     data["archived"] = bool(data.get("archived", False))
 
 
 def _encode_column_value(column: str, value: Any) -> Any:
-    if column in {"location", "salary", "recruiter"}:
+    if column in {"location", "required_education", "salary", "recruiter", "embedding"}:
         return _json_value(value)
-    if column in {"skills", "pre_screen_questions"}:
+    if column in {"skills", "must_have_skills", "nice_to_have_skills", "pre_screen_questions"}:
         return _json_array_value(value)
     return value
 
@@ -218,15 +269,25 @@ def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
     data["responsibilities"] = _as_list(data.get("responsibilities"))
     data["requirements"] = _as_list(data.get("requirements"))
     data["nice_to_have"] = _as_list(data.get("nice_to_have"))
+    data["tools_and_technologies"] = _as_list(data.get("tools_and_technologies"))
+    data["domain_knowledge"] = _as_list(data.get("domain_knowledge"))
+    data["required_certifications"] = _as_list(data.get("required_certifications"))
     data["benefits"] = _as_list(data.get("benefits"))
     data["tags"] = _as_list(data.get("tags"))
     data["categories"] = _as_list(data.get("categories"))
     data["required_docs"] = _as_list(data.get("required_docs"))
     data["location"] = data.get("location") or {}
     data["skills"] = data.get("skills") or []
+    data["must_have_skills"] = data.get("must_have_skills") or []
+    data["nice_to_have_skills"] = data.get("nice_to_have_skills") or []
+    data["required_education"] = data.get("required_education") or {}
     data["salary"] = data.get("salary") or {}
     data["recruiter"] = data.get("recruiter") or {}
     data["pre_screen_questions"] = data.get("pre_screen_questions") or []
+    data["embedding"] = data.get("embedding") or {}
+    data["industry"] = data.get("industry") or "unknown"
+    data["occupation_group"] = data.get("occupation_group") or "unknown"
+    data["seniority"] = data.get("seniority") or "unknown"
     if data.get("experience_years") is not None:
         data["experience_years"] = float(data["experience_years"])
     return data
@@ -241,12 +302,20 @@ CAMEL_TO_SNAKE = {
     "companyLocation": "company_location",
     "companySize": "company_size",
     "companyIndustry": "company_industry",
+    "occupationGroup": "occupation_group",
     "remoteType": "remote_type",
     "employmentType": "employment_type",
     "teamSize": "team_size",
     "niceToHave": "nice_to_have",
+    "mustHaveSkills": "must_have_skills",
+    "niceToHaveSkills": "nice_to_have_skills",
+    "normalizedName": "normalized_name",
+    "toolsAndTechnologies": "tools_and_technologies",
+    "domainKnowledge": "domain_knowledge",
     "experienceYears": "experience_years",
     "educationLevel": "education_level",
+    "requiredEducation": "required_education",
+    "requiredCertifications": "required_certifications",
     "applyUrl": "apply_url",
     "applyEmail": "apply_email",
     "howToApply": "how_to_apply",
@@ -387,9 +456,20 @@ def _skill_names(skills: Any) -> list[str]:
                 name = item.get("name")
                 if name:
                     names.append(str(name))
+                normalized_name = item.get("normalized_name")
+                if normalized_name and normalized_name != name:
+                    names.append(str(normalized_name))
             elif item:
                 names.append(str(item))
     return names
+
+
+def _all_job_skill_names(job: dict[str, Any]) -> list[str]:
+    return (
+        _skill_names(job.get("skills"))
+        + _skill_names(job.get("must_have_skills"))
+        + _skill_names(job.get("nice_to_have_skills"))
+    )
 
 
 def _location_city(job: dict[str, Any]) -> str:
@@ -421,15 +501,20 @@ def _job_type(job: dict[str, Any]) -> str:
 
 
 def _search_text(job: dict[str, Any]) -> str:
-    skill_names = _skill_names(job.get("skills"))
+    skill_names = _all_job_skill_names(job)
     values: list[Any] = [
         job.get("title"),
         job.get("company_name"),
         job.get("company_industry"),
+        job.get("industry"),
+        job.get("occupation_group"),
         job.get("department"),
         job.get("description"),
         job.get("requirements"),
         job.get("responsibilities"),
+        job.get("nice_to_have"),
+        job.get("tools_and_technologies"),
+        job.get("domain_knowledge"),
         skill_names,
         job.get("tags"),
         job.get("categories"),
@@ -474,6 +559,44 @@ def _matches_salary(job: dict[str, Any], salary_min: float | None, salary_max: f
     return True
 
 
+def _matches_number_range(value: Any, minimum: float | None, maximum: float | None) -> bool:
+    if minimum is None and maximum is None:
+        return True
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return False
+    if minimum is not None and number < minimum:
+        return False
+    if maximum is not None and number > maximum:
+        return False
+    return True
+
+
+def _matches_datetime_range(value: Any, start: datetime | None, end: datetime | None) -> bool:
+    if start is None and end is None:
+        return True
+    if value is None:
+        return False
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+    if start is not None and value < start:
+        return False
+    if end is not None and value > end:
+        return False
+    return True
+
+
+def _contains_normalized(values: Iterable[str], wanted: list[str]) -> bool:
+    if not wanted:
+        return True
+    normalized_values = {_normalize_text(value) for value in values}
+    return any(term in normalized_values or any(term in value or value in term for value in normalized_values) for term in wanted)
+
+
 def _matches_job_filters(
     job: dict[str, Any],
     *,
@@ -481,6 +604,10 @@ def _matches_job_filters(
     title: str | None,
     company_name: str | None,
     company_industry: str | None,
+    industry: str | None,
+    occupation_group: str | None,
+    status_filter: str | None,
+    visibility: str | None,
     department: str | None,
     location_city: str | None,
     location_country: str | None,
@@ -488,11 +615,23 @@ def _matches_job_filters(
     remote_type: str | None,
     employment_type: str | None,
     seniority: str | None,
+    experience_years_min: float | None,
+    experience_years_max: float | None,
+    education_level: str | None,
     skills: str | None,
+    must_have_skills: str | None,
+    nice_to_have_skills: str | None,
+    tools_and_technologies: str | None,
+    domain_knowledge: str | None,
     categories: str | None,
     tags: str | None,
     salary_min: float | None,
     salary_max: float | None,
+    salary_currency: str | None,
+    salary_period: str | None,
+    archived: bool | None,
+    application_deadline_from: datetime | None,
+    application_deadline_to: datetime | None,
 ) -> bool:
     search_text = _search_text(job)
     location = job.get("location") if isinstance(job.get("location"), dict) else {}
@@ -505,6 +644,14 @@ def _matches_job_filters(
         return False
     if company_industry and not _matches_query(_normalize_text(job.get("company_industry")), company_industry):
         return False
+    if industry and job.get("industry") != normalize_industry(industry):
+        return False
+    if occupation_group and job.get("occupation_group") != normalize_occupation_group(occupation_group):
+        return False
+    if status_filter and job.get("status") != normalize_status(status_filter, "job"):
+        return False
+    if visibility and job.get("visibility") != normalize_visibility(visibility):
+        return False
     if department and not _matches_query(_normalize_text(job.get("department")), department):
         return False
     if location_city and not _matches_query(_normalize_text(location.get("city") or job.get("company_location")), location_city):
@@ -513,13 +660,25 @@ def _matches_job_filters(
         return False
     if remote is not None and bool(job.get("remote")) is not remote:
         return False
-    if remote_type and not _matches_query(_normalize_text(location.get("remote_type")), remote_type):
+    if remote_type and location.get("remote_type") != normalize_remote_type(remote_type):
         return False
-    if not _contains_any(job.get("employment_type") or [], _split_values(employment_type)):
+    if not _contains_normalized(job.get("employment_type") or [], normalize_employment_types(employment_type) if employment_type else []):
         return False
-    if seniority and not _matches_query(_normalize_text(job.get("seniority")), seniority):
+    if seniority and job.get("seniority") not in [normalize_seniority(item) for item in as_text_list(seniority)]:
         return False
-    if not _contains_any(_skill_names(job.get("skills")), _split_values(skills)):
+    if not _matches_number_range(job.get("experience_years"), experience_years_min, experience_years_max):
+        return False
+    if education_level and job.get("education_level") != normalize_education_level(education_level):
+        return False
+    if not _contains_normalized(_all_job_skill_names(job), _split_values(skills)):
+        return False
+    if not _contains_normalized(_skill_names(job.get("must_have_skills")), _split_values(must_have_skills)):
+        return False
+    if not _contains_normalized(_skill_names(job.get("nice_to_have_skills")), _split_values(nice_to_have_skills)):
+        return False
+    if not _contains_normalized(job.get("tools_and_technologies") or [], _split_values(tools_and_technologies)):
+        return False
+    if not _contains_normalized(job.get("domain_knowledge") or [], _split_values(domain_knowledge)):
         return False
     if not _contains_any(job.get("categories") or [], _split_values(categories)):
         return False
@@ -527,37 +686,45 @@ def _matches_job_filters(
         return False
     if not _matches_salary(job, salary_min, salary_max):
         return False
+    salary = job.get("salary") if isinstance(job.get("salary"), dict) else {}
+    if salary_currency and salary.get("currency") != normalize_currency(salary_currency):
+        return False
+    if salary_period and salary.get("period") != normalize_salary_period(salary_period):
+        return False
+    if archived is not None and bool(job.get("archived")) is not archived:
+        return False
+    if not _matches_datetime_range(job.get("application_deadline"), application_deadline_from, application_deadline_to):
+        return False
     return True
 
 
-def _relevance(job: dict[str, Any], keyword: str | None) -> int:
-    text = _search_text(job)
-    score = 0
-    for token in _normalize_text(keyword).split():
-        if token in text:
-            score += 2
-    if _normalize_text(job.get("title")) and _matches_query(_normalize_text(job.get("title")), keyword):
-        score += 3
-    return score
-
-
-def _sort_jobs(items: list[dict[str, Any]], sort: str | None, keyword: str | None) -> list[dict[str, Any]]:
-    key = _normalize_text(sort or "newest")
-    if key == "oldest":
+def _sort_jobs(items: list[dict[str, Any]], sort: str | None) -> list[dict[str, Any]]:
+    key = _normalize_text(sort or "createdAt_desc")
+    if key in {"createdat_asc", "oldest"}:
         return sorted(items, key=lambda item: item["created_at"])
-    if key in {"most relevant", "most_relevant", "relevant"}:
-        return sorted(items, key=lambda item: (-_relevance(item, keyword), item["created_at"]), reverse=False)
-    if key in {"salary high to low", "salary_high_to_low"}:
+    if key == "updatedat_asc":
+        return sorted(items, key=lambda item: item["updated_at"])
+    if key == "updatedat_desc":
+        return sorted(items, key=lambda item: item["updated_at"], reverse=True)
+    if key in {"salary_desc", "salary high to low", "salary_high_to_low"}:
         return sorted(
             items,
             key=lambda item: _salary_number(item.get("salary") or {}, "max") or -1,
             reverse=True,
         )
-    if key in {"salary low to high", "salary_low_to_high"}:
+    if key in {"salary_asc", "salary low to high", "salary_low_to_high"}:
         return sorted(
             items,
             key=lambda item: _salary_number(item.get("salary") or {}, "min") or math.inf,
         )
+    if key == "views_desc":
+        return sorted(items, key=lambda item: int(item.get("views") or 0), reverse=True)
+    if key == "applicationscount_desc":
+        return sorted(items, key=lambda item: int(item.get("applications_count") or 0), reverse=True)
+    if key == "applicationdeadline_asc":
+        return sorted(items, key=lambda item: item.get("application_deadline") or datetime.max)
+    if key == "applicationdeadline_desc":
+        return sorted(items, key=lambda item: item.get("application_deadline") or datetime.min, reverse=True)
     return sorted(items, key=lambda item: item["created_at"], reverse=True)
 
 
@@ -580,6 +747,8 @@ def _to_search_item(job: dict[str, Any]) -> JobSearchListItem:
         title=job["title"],
         company_name=job.get("company_name"),
         company_industry=job.get("company_industry"),
+        industry=job.get("industry") or "unknown",
+        occupation_group=job.get("occupation_group") or "unknown",
         department=job.get("department"),
         location=location_value,
         location_detail=job.get("location") or {},
@@ -595,6 +764,8 @@ def _to_search_item(job: dict[str, Any]) -> JobSearchListItem:
         responsibilities=job.get("responsibilities") or [],
         categories=job.get("categories") or [],
         tags=job.get("tags") or [],
+        tools_and_technologies=job.get("tools_and_technologies") or [],
+        domain_knowledge=job.get("domain_knowledge") or [],
         salary=job.get("salary") or {},
         remote=bool(job.get("remote")),
     )
@@ -624,6 +795,9 @@ def search_jobs_response(
     company_name: str | None = None,
     company_industry: str | None = None,
     industry: str | None = None,
+    occupation_group: str | None = None,
+    status_filter: str | None = None,
+    visibility: str | None = None,
     category: str | None = None,
     department: str | None = None,
     location_city: str | None = None,
@@ -634,17 +808,29 @@ def search_jobs_response(
     working_model: str | None = None,
     employment_type: str | None = None,
     seniority: str | None = None,
+    experience_years_min: float | None = None,
+    experience_years_max: float | None = None,
+    education_level: str | None = None,
     skills: str | None = None,
+    must_have_skills: str | None = None,
+    nice_to_have_skills: str | None = None,
+    tools_and_technologies: str | None = None,
+    domain_knowledge: str | None = None,
     categories: str | None = None,
     tags: str | None = None,
     salary_min: float | None = None,
     salary_max: float | None = None,
+    salary_currency: str | None = None,
+    salary_period: str | None = None,
+    archived: bool | None = None,
+    application_deadline_from: datetime | None = None,
+    application_deadline_to: datetime | None = None,
     page: int = 1,
     limit: int = 10,
     sort: str | None = "newest",
 ) -> JobSearchListResponse:
     selected_keyword = keyword or q
-    selected_industry = company_industry or industry
+    selected_company_industry = company_industry
     selected_categories = categories or category
     selected_location_city = location_city or location
     selected_remote_type = remote_type or working_model
@@ -658,7 +844,11 @@ def search_jobs_response(
             keyword=selected_keyword,
             title=title,
             company_name=company_name,
-            company_industry=selected_industry,
+            company_industry=selected_company_industry,
+            industry=industry,
+            occupation_group=occupation_group,
+            status_filter=status_filter,
+            visibility=visibility,
             department=department,
             location_city=selected_location_city,
             location_country=location_country,
@@ -666,21 +856,174 @@ def search_jobs_response(
             remote_type=selected_remote_type,
             employment_type=employment_type,
             seniority=seniority,
+            experience_years_min=experience_years_min,
+            experience_years_max=experience_years_max,
+            education_level=education_level,
             skills=skills,
+            must_have_skills=must_have_skills,
+            nice_to_have_skills=nice_to_have_skills,
+            tools_and_technologies=tools_and_technologies,
+            domain_knowledge=domain_knowledge,
             categories=selected_categories,
             tags=tags,
             salary_min=salary_min,
             salary_max=salary_max,
+            salary_currency=salary_currency,
+            salary_period=salary_period,
+            archived=archived,
+            application_deadline_from=application_deadline_from,
+            application_deadline_to=application_deadline_to,
         )
     ]
-    ordered = _sort_jobs(jobs, sort, selected_keyword)
+    ordered = _sort_jobs(jobs, sort)
     paged, total = _paginate(ordered, page, limit)
+    total_pages = _total_pages(total, limit)
     return JobSearchListResponse(
         items=[_to_search_item(job) for job in paged],
         total=total,
         page=page,
         limit=limit,
-        totalPages=_total_pages(total, limit),
+        totalPages=total_pages,
+        pagination={
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "totalPages": total_pages,
+        },
+    )
+
+
+JOB_SKILL_SCAN_TERMS = (
+    "React",
+    "Node.js",
+    "Python",
+    "FastAPI",
+    "PostgreSQL",
+    "Postgres",
+    "Excel",
+    "MISA",
+    "SAP",
+    "Tax Declaration",
+    "Financial Reporting",
+    "Photoshop",
+    "Illustrator",
+    "Figma",
+    "AutoCAD",
+    "Google Ads",
+    "Facebook Ads",
+    "SEO",
+    "Sales",
+    "Customer Service",
+    "Recruitment",
+    "Communication",
+    "Teamwork",
+    "Leadership",
+)
+
+
+def _sentence_for_term(text: str, term: str) -> str:
+    normalized_term = _normalize_text(term)
+    fallback = term
+    for sentence in re.split(r"[\n.;,]", text):
+        if re.search(rf"(?<![a-z0-9]){re.escape(normalized_term)}(?![a-z0-9])", _normalize_text(sentence)):
+            cleaned = sentence.strip()
+            if normalize_skill_level(cleaned) != "unknown":
+                return cleaned
+            fallback = cleaned or fallback
+    return fallback
+
+
+def _extract_job_skills_from_text(text: str) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    skills: list[dict[str, Any]] = []
+    normalized_text = _normalize_text(text)
+    for term in JOB_SKILL_SCAN_TERMS:
+        normalized_term = _normalize_text(term)
+        if not re.search(rf"(?<![a-z0-9]){re.escape(normalized_term)}(?![a-z0-9])", normalized_text):
+            continue
+        skill = normalize_skill_name(term)
+        if skill["normalized_name"] in seen:
+            continue
+        seen.add(skill["normalized_name"])
+        skills.append(
+            {
+                "name": skill["name"],
+                "normalized_name": skill["normalized_name"],
+                "level": _sentence_for_term(text, term),
+                "category": skill["category"],
+            }
+        )
+    return skills
+
+
+def _rule_based_job_extract(text: str) -> tuple[dict[str, Any], list[str]]:
+    lines = [line.strip(" \t-•*") for line in text.splitlines() if line.strip(" \t-•*")]
+    title = lines[0] if lines else ""
+    skills = _extract_job_skills_from_text(text)
+    job = {
+        "company_id": "",
+        "title": title or "Untitled Job",
+        "slug": "",
+        "status": "draft",
+        "visibility": "private",
+        "company_name": "",
+        "company_logo_url": "",
+        "company_website": "",
+        "company_location": "",
+        "company_size": "",
+        "company_industry": "",
+        "industry": "",
+        "occupation_group": "",
+        "department": "",
+        "location": {"city": "", "state": "", "country": "", "remote_type": text},
+        "employment_type": [text],
+        "seniority": text,
+        "team_size": 0,
+        "description": "\n".join(lines[:12]),
+        "responsibilities": [],
+        "requirements": lines[1:],
+        "nice_to_have": [],
+        "skills": skills,
+        "must_have_skills": [],
+        "nice_to_have_skills": [],
+        "tools_and_technologies": [],
+        "domain_knowledge": [],
+        "experience_years": None,
+        "education_level": text,
+        "required_education": {"level": text, "major": ""},
+        "required_certifications": [],
+        "salary": {},
+        "benefits": [],
+        "bonus": "",
+        "equity": "",
+        "apply_url": "",
+        "apply_email": None,
+        "recruiter": {"name": "", "email": None, "phone": ""},
+        "how_to_apply": "",
+        "application_deadline": None,
+        "tags": [skill["normalized_name"] for skill in skills[:8]],
+        "categories": [],
+        "remote": False,
+        "pre_screen_questions": [],
+        "required_docs": [],
+        "published_by": None,
+        "approved_at": None,
+        "approved_by": None,
+        "archived": False,
+        "version": 1,
+    }
+    warnings = ["Used deterministic rule-based Job parser; review extracted fields before saving."]
+    return normalize_job_payload(job, include_missing=True, source_text=text), warnings
+
+
+@router.post("/extract", response_model=JobExtractResponse)
+def extract_job_text(payload: JobExtractRequest, user: CurrentUser) -> JobExtractResponse:
+    job_data, warnings = _rule_based_job_extract(payload.text)
+    job_data["created_by"] = user.id
+    return JobExtractResponse(
+        extractedText=payload.text,
+        job=_camelize(jsonable_encoder(job_data)),
+        warnings=warnings,
     )
 
 
@@ -688,6 +1031,7 @@ def search_jobs_response(
 def create_job(payload: JobCreateRequest, conn: DbConnection, user: CurrentUser) -> JobResponse:
     data = _dump_payload(payload, partial=False)
     _apply_create_defaults(data)
+    data = normalize_job_payload(data, for_create=True, include_missing=True)
     data["created_by"] = user.id
     columns = INSERTABLE_JOB_COLUMNS
     values = [_encode_column_value(column, data.get(column)) for column in columns]
@@ -735,6 +1079,10 @@ def search_jobs(
     company_name: str | None = None,
     company_industry: str | None = None,
     industry: str | None = None,
+    occupation_group: str | None = Query(default=None, alias="occupationGroup"),
+    occupation_group_snake: str | None = Query(default=None, alias="occupation_group"),
+    status_value: str | None = Query(default=None, alias="status"),
+    visibility: str | None = None,
     category: str | None = None,
     department: str | None = None,
     location_city: str | None = Query(default=None, alias="location.city"),
@@ -747,13 +1095,25 @@ def search_jobs(
     employment_type_snake: str | None = Query(default=None, alias="employment_type"),
     seniority: str | None = None,
     experience_level: str | None = Query(default=None, alias="experienceLevel"),
+    experience_years_min: float | None = Query(default=None, alias="experienceYearsMin", ge=0),
+    experience_years_max: float | None = Query(default=None, alias="experienceYearsMax", ge=0),
+    education_level: str | None = Query(default=None, alias="educationLevel"),
     skills: str | None = None,
+    must_have_skills: str | None = Query(default=None, alias="mustHaveSkills"),
+    nice_to_have_skills: str | None = Query(default=None, alias="niceToHaveSkills"),
+    tools_and_technologies: str | None = Query(default=None, alias="toolsAndTechnologies"),
+    domain_knowledge: str | None = Query(default=None, alias="domainKnowledge"),
     categories: str | None = None,
     tags: str | None = None,
     salary_min: float | None = Query(default=None, alias="salaryMin", ge=0),
     salary_max: float | None = Query(default=None, alias="salaryMax", ge=0),
     salary_min_snake: float | None = Query(default=None, alias="salary_min", ge=0),
     salary_max_snake: float | None = Query(default=None, alias="salary_max", ge=0),
+    salary_currency: str | None = Query(default=None, alias="salary.currency"),
+    salary_period: str | None = Query(default=None, alias="salary.period"),
+    archived: bool | None = None,
+    application_deadline_from: datetime | None = Query(default=None, alias="applicationDeadlineFrom"),
+    application_deadline_to: datetime | None = Query(default=None, alias="applicationDeadlineTo"),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1, le=50),
     sort: str | None = "newest",
@@ -766,6 +1126,9 @@ def search_jobs(
         company_name=company_name,
         company_industry=company_industry,
         industry=industry,
+        occupation_group=occupation_group or occupation_group_snake,
+        status_filter=status_value,
+        visibility=visibility,
         category=category,
         department=department,
         location_city=location_city,
@@ -776,11 +1139,23 @@ def search_jobs(
         working_model=working_model,
         employment_type=employment_type or employment_type_snake,
         seniority=seniority or experience_level,
+        experience_years_min=experience_years_min,
+        experience_years_max=experience_years_max,
+        education_level=education_level,
         skills=skills,
+        must_have_skills=must_have_skills,
+        nice_to_have_skills=nice_to_have_skills,
+        tools_and_technologies=tools_and_technologies,
+        domain_knowledge=domain_knowledge,
         categories=categories,
         tags=tags,
         salary_min=salary_min if salary_min is not None else salary_min_snake,
         salary_max=salary_max if salary_max is not None else salary_max_snake,
+        salary_currency=salary_currency,
+        salary_period=salary_period,
+        archived=archived,
+        application_deadline_from=application_deadline_from,
+        application_deadline_to=application_deadline_to,
         page=page,
         limit=limit,
         sort=sort,
@@ -852,6 +1227,7 @@ def update_job(
     data = _dump_payload(payload, partial=True)
     if not data:
         return JobResponse(**job)
+    data = normalize_job_payload(data, for_create=False, include_missing=False)
 
     allowed = [column for column in data if column in INSERTABLE_JOB_COLUMNS and column != "created_by"]
     assignments = ", ".join(f"{column} = %s" for column in allowed)

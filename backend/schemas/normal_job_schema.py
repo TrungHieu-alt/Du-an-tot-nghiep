@@ -8,13 +8,13 @@ industry search flow.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
-JobStatus = Literal["draft", "published", "closed"]
-JobVisibility = Literal["public", "private", "unlisted"]
+JobStatus = str
+JobVisibility = str
 
 
 class LocationPayload(BaseModel):
@@ -30,7 +30,13 @@ class JobSkillPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=120)
+    normalized_name: str | None = None
     level: str | None = None
+    category: str | None = None
+
+
+class WeightedJobSkillPayload(JobSkillPayload):
+    weight: int | None = Field(default=None, ge=0)
 
 
 class SalaryPayload(BaseModel):
@@ -40,6 +46,13 @@ class SalaryPayload(BaseModel):
     max: float | None = Field(default=None, ge=0)
     currency: str | None = None
     period: str | None = None
+
+
+class RequiredEducationPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    level: str | None = None
+    major: str | None = None
 
 
 class RecruiterPayload(BaseModel):
@@ -65,14 +78,16 @@ class JobCreateRequest(BaseModel):
     company_id: str | None = None
     title: str = Field(min_length=1, max_length=255)
     slug: str | None = None
-    status: JobStatus = "published"
-    visibility: JobVisibility = "public"
+    status: JobStatus = "draft"
+    visibility: JobVisibility = "private"
     company_name: str | None = None
     company_logo_url: str | None = None
     company_website: str | None = None
     company_location: str | None = None
     company_size: str | None = None
     company_industry: str | None = None
+    industry: str | None = None
+    occupation_group: str | None = None
     department: str | None = None
     location: LocationPayload = Field(default_factory=LocationPayload)
     employment_type: list[str] = Field(default_factory=list)
@@ -83,8 +98,14 @@ class JobCreateRequest(BaseModel):
     requirements: list[str] = Field(default_factory=list)
     nice_to_have: list[str] = Field(default_factory=list)
     skills: list[JobSkillPayload] = Field(default_factory=list)
+    must_have_skills: list[WeightedJobSkillPayload] = Field(default_factory=list)
+    nice_to_have_skills: list[WeightedJobSkillPayload] = Field(default_factory=list)
+    tools_and_technologies: list[str] = Field(default_factory=list)
+    domain_knowledge: list[str] = Field(default_factory=list)
     experience_years: float | None = Field(default=None, ge=0)
     education_level: str | None = None
+    required_education: RequiredEducationPayload = Field(default_factory=RequiredEducationPayload)
+    required_certifications: list[str] = Field(default_factory=list)
     salary: SalaryPayload = Field(default_factory=SalaryPayload)
     benefits: list[str] = Field(default_factory=list)
     bonus: str | None = None
@@ -104,6 +125,7 @@ class JobCreateRequest(BaseModel):
     approved_by: str | None = None
     archived: bool = False
     version: int = Field(default=1, ge=1)
+    embedding: dict[str, Any] = Field(default_factory=dict)
 
 
 class JobUpdateRequest(BaseModel):
@@ -120,6 +142,8 @@ class JobUpdateRequest(BaseModel):
     company_location: str | None = None
     company_size: str | None = None
     company_industry: str | None = None
+    industry: str | None = None
+    occupation_group: str | None = None
     department: str | None = None
     location: LocationPayload | None = None
     employment_type: list[str] | None = None
@@ -130,8 +154,14 @@ class JobUpdateRequest(BaseModel):
     requirements: list[str] | None = None
     nice_to_have: list[str] | None = None
     skills: list[JobSkillPayload] | None = None
+    must_have_skills: list[WeightedJobSkillPayload] | None = None
+    nice_to_have_skills: list[WeightedJobSkillPayload] | None = None
+    tools_and_technologies: list[str] | None = None
+    domain_knowledge: list[str] | None = None
     experience_years: float | None = Field(default=None, ge=0)
     education_level: str | None = None
+    required_education: RequiredEducationPayload | None = None
+    required_certifications: list[str] | None = None
     salary: SalaryPayload | None = None
     benefits: list[str] | None = None
     bonus: str | None = None
@@ -151,6 +181,7 @@ class JobUpdateRequest(BaseModel):
     approved_by: str | None = None
     archived: bool | None = None
     version: int | None = Field(default=None, ge=1)
+    embedding: dict[str, Any] | None = None
 
 
 class JobResponse(BaseModel):
@@ -167,6 +198,8 @@ class JobResponse(BaseModel):
     company_location: str | None = None
     company_size: str | None = None
     company_industry: str | None = None
+    industry: str = "unknown"
+    occupation_group: str = "unknown"
     department: str | None = None
     location: dict[str, Any] = Field(default_factory=dict)
     employment_type: list[str] = Field(default_factory=list)
@@ -177,8 +210,14 @@ class JobResponse(BaseModel):
     requirements: list[str] = Field(default_factory=list)
     nice_to_have: list[str] = Field(default_factory=list)
     skills: list[dict[str, Any]] = Field(default_factory=list)
+    must_have_skills: list[dict[str, Any]] = Field(default_factory=list)
+    nice_to_have_skills: list[dict[str, Any]] = Field(default_factory=list)
+    tools_and_technologies: list[str] = Field(default_factory=list)
+    domain_knowledge: list[str] = Field(default_factory=list)
     experience_years: float | None = None
     education_level: str | None = None
+    required_education: dict[str, Any] = Field(default_factory=dict)
+    required_certifications: list[str] = Field(default_factory=list)
     salary: dict[str, Any] = Field(default_factory=dict)
     benefits: list[str] = Field(default_factory=list)
     bonus: str | None = None
@@ -200,8 +239,21 @@ class JobResponse(BaseModel):
     approved_by: str | None = None
     archived: bool = False
     version: int = 1
+    embedding: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
+
+
+class JobExtractRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1)
+
+
+class JobExtractResponse(BaseModel):
+    extractedText: str
+    job: dict[str, Any]
+    warnings: list[str] = Field(default_factory=list)
 
 
 class JobSearchListItem(BaseModel):
@@ -210,6 +262,8 @@ class JobSearchListItem(BaseModel):
     title: str
     company_name: str | None = None
     company_industry: str | None = None
+    industry: str = "unknown"
+    occupation_group: str = "unknown"
     department: str | None = None
     location: str
     location_detail: dict[str, Any] = Field(default_factory=dict)
@@ -225,6 +279,8 @@ class JobSearchListItem(BaseModel):
     responsibilities: list[str] = Field(default_factory=list)
     categories: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    tools_and_technologies: list[str] = Field(default_factory=list)
+    domain_knowledge: list[str] = Field(default_factory=list)
     salary: dict[str, Any] = Field(default_factory=dict)
     remote: bool = False
 
@@ -235,6 +291,7 @@ class JobSearchListResponse(BaseModel):
     page: int
     limit: int
     totalPages: int
+    pagination: dict[str, int] = Field(default_factory=dict)
 
 
 class JobSearchFiltersResponse(BaseModel):

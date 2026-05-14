@@ -30,6 +30,19 @@ uses `GET /api/job/search` and `GET /api/cv/search`; compatibility aliases
 `GET /api/jobs`, `GET /api/cvs`, and `GET /api/candidates` remain available.
 Matching V2 and catalog semantic endpoints remain available for matching and
 detail workflows.
+
+## Normal Create/Edit Forms
+
+`pages/MyCvs.tsx` and `pages/MyJobs.tsx` use the shared normal form wizards in
+`components/normal/` for create and inline edit. These forms save normalized
+multi-industry CV/Job fields through the existing normal CRUD APIs. Enum-like
+fields are selected from `src/reference/normalEnums.ts` and are submitted as
+normalized values such as `fulltime`, `intermediate`, `bachelor`, or `unknown`.
+
+The normal create/edit forms do not calculate or return matching output. Score,
+match level, recommendation, hard-filter, and V2 matching behavior remains in
+the separate V2 pages and APIs.
+
 `VITE_API_BASE_URL` may point either at the backend origin
 (`http://localhost:8000`) or the API root (`http://localhost:8000/api`); the
 config normalizes both forms.

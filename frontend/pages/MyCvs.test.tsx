@@ -166,7 +166,7 @@ describe('MyCvs card grid management', () => {
     expect(screen.getByLabelText('Tạo CV mới')).toBeInTheDocument();
   });
 
-  it('extracts a PDF into the create form and saves only after review', async () => {
+  it('extracts a PDF into the multi-step create form and saves only after user action', async () => {
     mockedListMyCvs.mockResolvedValue([]);
     mockedExtractCvPdf.mockResolvedValue({
       extractedText: 'Nguyen Van A\nEmail: a@example.com',
@@ -191,14 +191,24 @@ describe('MyCvs card grid management', () => {
     expect(screen.getByTestId('path')).toHaveTextContent('/cvs/new');
     expect(await screen.findByDisplayValue('Nguyen Van A')).toBeInTheDocument();
     expect(screen.getByDisplayValue('a@example.com')).toBeInTheDocument();
-    expect(screen.getByText(/cảnh báo trích xuất pdf/i)).toBeInTheDocument();
+    expect(screen.getByText(/pdf extraction warnings/i)).toBeInTheDocument();
+    expect(screen.getByText(/step 1 of 7/i)).toBeInTheDocument();
     expect(mockedCreateCv).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: /^tạo cv mới$/i }));
+    await user.click(screen.getByRole('button', { name: /save draft/i }));
     expect(mockedCreateCv).toHaveBeenCalledWith('token', expect.objectContaining({
       fullname: 'Nguyen Van A',
       email: 'a@example.com',
+      industry: 'unknown',
+      occupation_group: 'unknown',
+      career_level: 'unknown',
       target_role: 'Frontend Developer',
+      employment_type: ['fulltime'],
+      status: 'draft',
+      visibility: 'private',
     }));
+    expect(mockedCreateCv.mock.calls[0][1]).not.toHaveProperty('matchScore');
+    expect(mockedCreateCv.mock.calls[0][1]).not.toHaveProperty('matchLevel');
+    expect(mockedCreateCv.mock.calls[0][1]).not.toHaveProperty('recommendation');
   });
 });

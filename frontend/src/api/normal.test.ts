@@ -67,6 +67,32 @@ describe('normal API client', () => {
     expect(result).toEqual(payload);
   });
 
+  it('serializes normalized normal CV filter query values', async () => {
+    const payload: NormalSearchResponse<NormalCVSearchItem> = {
+      items: [],
+      total: 0,
+      page: 1,
+      limit: 10,
+      totalPages: 0,
+    };
+    mockedApi.get.mockResolvedValueOnce({ data: payload });
+
+    await searchCvs({
+      q: 'Python FastAPI',
+      desiredIndustry: 'information_technology',
+      occupationGroup: 'software_engineering',
+      careerLevel: 'junior,middle',
+      skills: 'python,fastapi',
+      educationLevel: 'bachelor',
+      languageLevel: 'intermediate',
+      sort: 'yearsOfExperience_desc',
+    });
+
+    expect(mockedApi.get).toHaveBeenCalledWith(
+      '/cv/search?q=Python+FastAPI&desiredIndustry=information_technology&occupationGroup=software_engineering&careerLevel=junior%2Cmiddle&skills=python%2Cfastapi&educationLevel=bachelor&languageLevel=intermediate&sort=yearsOfExperience_desc'
+    );
+  });
+
   it('gets public CV detail without an auth header', async () => {
     const payload = {
       id: 'cv-1',
