@@ -23,10 +23,34 @@ curl "http://localhost:8000/api/v2/prototype/catalog/cvs/3001"
 curl "http://localhost:8000/api/jobs?q=marketing&industry=marketing&page=1&limit=10"
 curl "http://localhost:8000/api/cvs?q=sales&skills=communication&page=1&limit=10"
 curl "http://localhost:8000/api/candidates?desiredIndustry=human_resources"
+curl "http://localhost:8000/api/cv/search?q=Python+FastAPI&industry=information_technology&occupationGroup=software_engineering&careerLevel=junior,middle&yearsOfExperienceMin=1&yearsOfExperienceMax=4&skills=python,fastapi&employmentType=fulltime&educationLevel=bachelor&languageLevel=intermediate&sort=yearsOfExperience_desc"
 ```
 
 Normal search returns `{items,total,page,limit,totalPages}` and does not return
 matching percentages.
+
+## Normal Applications
+
+```bash
+curl -X POST "http://localhost:8000/api/applications" \
+  -H "Authorization: Bearer <candidate-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"jobId":"<job-uuid>","cvId":"<cv-uuid>","coverLetter":"I can start next month."}'
+
+curl "http://localhost:8000/api/applications/me" \
+  -H "Authorization: Bearer <candidate-token>"
+
+curl "http://localhost:8000/api/job/<job-uuid>/applications" \
+  -H "Authorization: Bearer <recruiter-token>"
+
+curl -X PATCH "http://localhost:8000/api/applications/<application-uuid>/status" \
+  -H "Authorization: Bearer <recruiter-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"reviewing"}'
+```
+
+Normal application responses connect `jobId`, `cvId`, `candidateId`, and
+`recruiterId`; they do not include matching scores or recommendations.
 
 ## Catalog Search
 

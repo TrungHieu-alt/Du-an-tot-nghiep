@@ -139,8 +139,6 @@ describe('V2Search page', () => {
         yearsOfExperienceMax: undefined,
         educationLevel: undefined,
         educationMajor: undefined,
-        expectedSalaryMin: undefined,
-        expectedSalaryMax: undefined,
         workingModel: undefined,
         employmentType: undefined,
         availability: undefined,
@@ -276,8 +274,6 @@ describe('V2Search page', () => {
         yearsOfExperienceMin: undefined,
         yearsOfExperienceMax: undefined,
         educationLevel: undefined,
-        expectedSalaryMin: undefined,
-        expectedSalaryMax: undefined,
         workingModel: undefined,
         availability: undefined,
         skills: undefined,
@@ -370,13 +366,58 @@ describe('V2Search page', () => {
     expect(screen.queryByText(/Industry: Sales/i)).not.toBeInTheDocument();
   });
 
+  it('removes one active CV filter chip without clearing the other filters', async () => {
+    const user = userEvent.setup();
+    renderAt('/cvs/search?type=cv&industry=sales&careerLevel=junior,middle&skills=react');
+
+    expect(await screen.findByRole('button', { name: /Skill: react/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Skill: react/i }));
+
+    await waitFor(() => {
+      expect(mockedSearchCvs).toHaveBeenLastCalledWith(expect.objectContaining({
+        desiredIndustry: 'sales',
+        careerLevel: 'junior,middle',
+        skills: undefined,
+      }));
+    });
+    expect(screen.getByText(/Industry: Sales/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Skill: react/i)).not.toBeInTheDocument();
+  });
+
+  it('does not forward matching or scoring fields in normal CV search requests', async () => {
+    renderAt('/cvs/search?type=cv&q=react&matchScore=99&matchLevel=top&totalScore=99&recommendation=review');
+
+    await waitFor(() => expect(mockedSearchCvs).toHaveBeenCalled());
+
+    const lastCall = mockedSearchCvs.mock.calls[mockedSearchCvs.mock.calls.length - 1];
+    const request = lastCall[0] as Record<string, unknown>;
+    [
+      'totalScore',
+      'matchScore',
+      'matchLevel',
+      'scores',
+      'strengths',
+      'weaknesses',
+      'recommendation',
+      'matchedSkills',
+      'missingMustHaveSkills',
+      'missingNiceToHaveSkills',
+    ].forEach((field) => {
+      expect(request).not.toHaveProperty(field);
+    });
+  });
+
   it('does not render score or recommendation fields in normal CV results', async () => {
     mockedSearchCvs.mockResolvedValueOnce({
       items: [
         {
           ...buildCvs(1)[0],
+          totalScore: 99,
           matchScore: 99,
           matchLevel: 'excellent_match',
+          strengths: ['Score strength text'],
+          weaknesses: ['Score weakness text'],
           recommendation: 'Review as top match',
         } as NormalCVSearchItem,
       ],
@@ -391,6 +432,8 @@ describe('V2Search page', () => {
     expect(await screen.findByText('Candidate 1')).toBeInTheDocument();
     expect(screen.queryByText(/excellent_match/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Review as top match/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Score strength text/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Score weakness text/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/99/)).not.toBeInTheDocument();
   });
 

@@ -7,6 +7,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ErrorToastProvider } from './contexts/ErrorToastContext';
 import Home from './pages/Home';
 import Login from './pages/Login';
+import MyApplications from './pages/MyApplications';
 import MyCvs from './pages/MyCvs';
 import MyJobs from './pages/MyJobs';
 import NormalCvDetail from './pages/NormalCvDetail';
@@ -34,6 +35,8 @@ export const AppRoutes: React.FC = () => {
           <Route path="/cvs/search" element={<V2Search />} />
           <Route path="/job/my" element={<MyJobs />} />
           <Route path="/job/new" element={<MyJobs />} />
+          <Route path="/applications/me" element={<MyApplications />} />
+          <Route path="/applications" element={<MyApplications />} />
           <Route path="/employer/requests" element={<MyJobs />} />
           <Route path="/employer/requests/new" element={<MyJobs />} />
           <Route path="/cv/my" element={<MyCvs />} />

@@ -32,6 +32,10 @@ class AppSurfaceTests(unittest.TestCase):
         self.assertIn("/api/employer/requests", paths)
         self.assertIn("/api/employer/requests/my", paths)
         self.assertIn("/api/employer/requests/{request_id}", paths)
+        self.assertIn("/api/applications", paths)
+        self.assertIn("/api/applications/me", paths)
+        self.assertIn("/api/applications/{application_id}/status", paths)
+        self.assertIn("/api/job/{job_id}/applications", paths)
         self.assertIn("/api/v2/prototype/matching/job/{job_id}/run", paths)
         self.assertIn("/api/v2/prototype/matching/cv/{cv_id}/run", paths)
         self.assertIn("/api/v2/prototype/matching-hybrid/job/{job_id}/run", paths)
@@ -52,6 +56,7 @@ class AppSurfaceTests(unittest.TestCase):
             and not path.startswith("/api/job")
             and not path.startswith("/api/cv")
             and not path.startswith("/api/employer/requests")
+            and not path.startswith("/api/applications")
             and not path.startswith("/api/auth/")
             and not path.startswith("/api/v2/prototype/catalog/")
             and not path.startswith("/api/v2/prototype/matching/")
@@ -75,6 +80,7 @@ class AppSurfaceTests(unittest.TestCase):
                 "normal-cv",
                 "normal-cv-management",
                 "normal-employer-request-management",
+                "normal-applications",
                 "system",
                 "root",
             },

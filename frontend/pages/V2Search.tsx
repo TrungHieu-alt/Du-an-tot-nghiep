@@ -50,7 +50,6 @@ const FILTER_KEYS: Array<keyof V2SearchFilters> = [
   'yearsOfExperience',
   'yearsOfExperienceMin',
   'yearsOfExperienceMax',
-  'expectedSalaryRange',
   'availability',
   'certificationName',
   'languageName',
@@ -169,7 +168,6 @@ const V2Search: React.FC = () => {
     setError(null);
 
     const salary = salaryToRange(filtersFromUrl.salaryRange);
-    const expectedSalary = salaryToRange(filtersFromUrl.expectedSalaryRange);
     const legacyYears = yearsToRange(filtersFromUrl.yearsOfExperience);
     const yearsMin = toNumberFilter(filtersFromUrl.yearsOfExperienceMin) ?? legacyYears.min;
     const yearsMax = toNumberFilter(filtersFromUrl.yearsOfExperienceMax) ?? legacyYears.max;
@@ -208,8 +206,6 @@ const V2Search: React.FC = () => {
             yearsOfExperienceMax: yearsMax,
             educationLevel: filtersFromUrl.educationLevel,
             educationMajor: filtersFromUrl.educationMajor,
-            expectedSalaryMin: expectedSalary.min,
-            expectedSalaryMax: expectedSalary.max,
             workingModel: filtersFromUrl.workingModel ?? filtersFromUrl.remoteType,
             employmentType: filtersFromUrl.employmentType,
             availability: filtersFromUrl.availability,
@@ -342,8 +338,12 @@ const V2Search: React.FC = () => {
 
           <form onSubmit={handleSubmit} className="flex flex-col md:flex-row gap-2">
             <div className="flex-1 relative">
+              <label htmlFor="normal-search-keyword" className="sr-only">
+                Keyword search
+              </label>
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input
+                id="normal-search-keyword"
                 type="text"
                 value={inputQ}
                 onChange={(e) => setInputQ(e.target.value)}

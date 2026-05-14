@@ -208,6 +208,68 @@ export interface NormalSearchResponse<T> {
   };
 }
 
+export type NormalApplicationStatus =
+  | 'submitted'
+  | 'reviewing'
+  | 'shortlisted'
+  | 'rejected'
+  | 'accepted'
+  | 'withdrawn';
+
+export interface NormalApplicationCreatePayload {
+  jobId: string;
+  cvId: string;
+  coverLetter?: string;
+}
+
+export interface NormalApplicationJobSummary {
+  id: string;
+  title: string;
+  companyName?: string | null;
+}
+
+export interface NormalApplicationCvSummary {
+  id: string;
+  fullname: string;
+  headline?: string | null;
+}
+
+export interface NormalApplicationUserSummary {
+  id: string;
+  email: string;
+  fullName?: string | null;
+  role: string;
+}
+
+export interface NormalApplication {
+  id: string;
+  jobId: string;
+  cvId: string;
+  candidateId: string;
+  recruiterId: string;
+  status: NormalApplicationStatus;
+  coverLetter?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  job: NormalApplicationJobSummary;
+  cv: NormalApplicationCvSummary;
+  candidate?: NormalApplicationUserSummary | null;
+}
+
+export interface NormalApplicationListResponse {
+  items: NormalApplication[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 export interface NormalJobSearchParams {
   q?: string;
   keyword?: string;

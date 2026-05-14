@@ -858,6 +858,28 @@ class NormalJobCvRouterTests(unittest.TestCase):
         self.assertEqual(res.json()["total"], 1)
         self.assertEqual(res.json()["items"][0]["target_role"], "Backend Developer")
 
+    def test_public_cv_search_education_level_matches_legacy_degree_values(self):
+        conn, _ = _make_conn(
+            [
+                [
+                    _cv_row(
+                        education=[{"degree": "Bachelor", "major": "Computer Science", "school": "Demo University"}],
+                    ),
+                    _cv_row(
+                        id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbc7",
+                        education=[{"degree": "High School", "major": "General", "school": "Demo High School"}],
+                    ),
+                ]
+            ]
+        )
+        self._override_conn(conn)
+
+        res = self.client.get("/api/cv/search", params={"educationLevel": "bachelor"})
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["total"], 1)
+        self.assertEqual(res.json()["items"][0]["id"], CV_ID)
+
     def test_unauthenticated_user_can_view_public_job_detail(self):
         conn, _ = _make_conn([_job_row()])
         self._override_conn(conn)

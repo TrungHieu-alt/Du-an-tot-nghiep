@@ -150,6 +150,15 @@ const Header: React.FC = () => {
                   </Link>
                   <Link
                     role="menuitem"
+                    to="/applications"
+                    className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-blue-50 hover:text-[#0F6FD6]"
+                    onClick={() => setProfileOpen(false)}
+                  >
+                    <FileText className="h-4 w-4" />
+                    Hồ sơ đã ứng tuyển
+                  </Link>
+                  <Link
+                    role="menuitem"
                     to="/employer/requests"
                     className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-blue-50 hover:text-[#0F6FD6]"
                     onClick={() => setProfileOpen(false)}

@@ -1,15 +1,36 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Briefcase, Eye, EyeOff, Pencil, Plus, Trash2, XCircle } from 'lucide-react';
+import { Briefcase, Eye, EyeOff, Pencil, Plus, Trash2, Users, XCircle } from 'lucide-react';
 
 import { useAuth } from '../contexts/AuthContext';
-import { createJob, deleteJob, listMyJobs, updateJob } from '../src/api/normal';
+import {
+  createJob,
+  deleteJob,
+  listJobApplications,
+  listMyJobs,
+  updateApplicationStatus,
+  updateJob,
+} from '../src/api/normal';
 import JobFormWizard, {
   createEmptyJobForm,
   jobFormFromNormalJob,
   type JobFormState,
 } from '../components/normal/JobFormWizard';
-import type { NormalJob, NormalJobCreatePayload } from '../types';
+import type {
+  NormalApplication,
+  NormalApplicationStatus,
+  NormalJob,
+  NormalJobCreatePayload,
+} from '../types';
+
+const APPLICATION_STATUSES: NormalApplicationStatus[] = [
+  'submitted',
+  'reviewing',
+  'shortlisted',
+  'rejected',
+  'accepted',
+  'withdrawn',
+];
 
 const formatDate = (value?: string): string => {
   if (!value) return 'Chưa rõ';
@@ -30,6 +51,12 @@ const salarySummary = (job: NormalJob): string => {
   return `${min ?? '?'} - ${max ?? '?'} ${currency}`.trim();
 };
 
+const errorMessage = (err: unknown, fallback: string): string => {
+  const responseDetail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  if (typeof responseDetail === 'string') return responseDetail;
+  return err instanceof Error ? err.message : fallback;
+};
+
 const MyJobs: React.FC = () => {
   const { accessToken, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -42,6 +69,10 @@ const MyJobs: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<JobFormState>(createEmptyJobForm());
   const [editForm, setEditForm] = useState<JobFormState | null>(null);
+  const [applicantsJobId, setApplicantsJobId] = useState<string | null>(null);
+  const [applicants, setApplicants] = useState<NormalApplication[]>([]);
+  const [applicantsLoading, setApplicantsLoading] = useState(false);
+  const [applicantsError, setApplicantsError] = useState<string | null>(null);
 
   const load = async () => {
     if (!accessToken) return;
@@ -122,6 +153,38 @@ const MyJobs: React.FC = () => {
     if (!window.confirm('Bạn chắc chắn muốn xóa yêu cầu tuyển dụng này?')) return;
     await deleteJob(accessToken, job.id);
     await load();
+  };
+
+  const viewApplicants = async (job: NormalJob) => {
+    if (!accessToken) return;
+    if (applicantsJobId === job.id) {
+      setApplicantsJobId(null);
+      setApplicants([]);
+      return;
+    }
+    setApplicantsJobId(job.id);
+    setApplicants([]);
+    setApplicantsLoading(true);
+    setApplicantsError(null);
+    try {
+      const result = await listJobApplications(accessToken, job.id, { limit: 50 });
+      setApplicants(result.items);
+    } catch (err) {
+      setApplicantsError(errorMessage(err, 'Không tải được danh sách ứng viên.'));
+    } finally {
+      setApplicantsLoading(false);
+    }
+  };
+
+  const changeApplicationStatus = async (
+    applicationId: string,
+    nextStatus: NormalApplicationStatus
+  ) => {
+    if (!accessToken) return;
+    const updated = await updateApplicationStatus(accessToken, applicationId, nextStatus);
+    setApplicants((current) =>
+      current.map((application) => application.id === applicationId ? updated : application)
+    );
   };
 
   if (!isAuthenticated) {
@@ -228,15 +291,25 @@ const MyJobs: React.FC = () => {
                     <div>Cập nhật: {formatDate(job.updated_at || job.created_at)}</div>
                   </div>
 
-                  <div className="mt-auto pt-5">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          beginEdit(job);
-                        }}
-                        className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700"
-                      >
+	                  <div className="mt-auto pt-5">
+	                    <div className="flex flex-wrap gap-2">
+	                      <button
+	                        onClick={(event) => {
+	                          event.stopPropagation();
+	                          void viewApplicants(job);
+	                        }}
+	                        className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-[#0F6FD6]"
+	                      >
+	                        <Users className="h-3.5 w-3.5" />
+	                        View applicants
+	                      </button>
+	                      <button
+	                        onClick={(event) => {
+	                          event.stopPropagation();
+	                          beginEdit(job);
+	                        }}
+	                        className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700"
+	                      >
                         <Pencil className="h-3.5 w-3.5" />
                         Chỉnh sửa
                       </button>
@@ -283,15 +356,67 @@ const MyJobs: React.FC = () => {
                         saving={saving}
                         onSubmit={saveEdit}
                         compact
-                        onCancel={() => {
-                          setEditingId(null);
-                          setEditForm(null);
-                        }}
-                      />
-                    </div>
-                  ) : null}
-                </article>
-              );
+	                        onCancel={() => {
+	                          setEditingId(null);
+	                          setEditForm(null);
+	                        }}
+	                      />
+	                    </div>
+	                  ) : null}
+
+	                  {applicantsJobId === job.id ? (
+	                    <div
+	                      onClick={(event) => event.stopPropagation()}
+	                      className="mt-5 border-t border-gray-100 pt-4"
+	                    >
+	                      <h3 className="text-sm font-bold text-gray-900">Applicants</h3>
+	                      {applicantsLoading ? <p className="mt-2 text-sm text-gray-500">Loading applicants...</p> : null}
+	                      {applicantsError ? <p className="mt-2 text-sm text-red-600">{applicantsError}</p> : null}
+	                      {!applicantsLoading && applicants.length === 0 ? (
+	                        <p className="mt-2 text-sm text-gray-500">No applications yet.</p>
+	                      ) : null}
+	                      <div className="mt-3 space-y-3">
+	                        {applicants.map((application) => (
+	                          <article key={application.id} className="border-t border-gray-100 pt-3">
+	                            <div className="flex flex-col gap-2">
+	                              <div>
+	                                <p className="font-semibold text-gray-900">{application.cv.fullname}</p>
+	                                {application.cv.headline ? (
+	                                  <p className="text-sm text-gray-600">{application.cv.headline}</p>
+	                                ) : null}
+	                                <p className="text-xs text-gray-500">
+	                                  Submitted {formatDate(application.createdAt)}
+	                                </p>
+	                                {application.coverLetter ? (
+	                                  <p className="mt-1 line-clamp-3 text-sm text-gray-700">{application.coverLetter}</p>
+	                                ) : null}
+	                              </div>
+	                              <label className="text-xs font-semibold text-gray-700">
+	                                Status
+	                                <select
+	                                  value={application.status}
+	                                  onChange={(event) =>
+	                                    void changeApplicationStatus(
+	                                      application.id,
+	                                      event.target.value as NormalApplicationStatus
+	                                    )
+	                                  }
+	                                  aria-label={`Application status for ${application.cv.fullname}`}
+	                                  className="mt-1 block w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+	                                >
+	                                  {APPLICATION_STATUSES.map((statusValue) => (
+	                                    <option key={statusValue} value={statusValue}>{statusValue}</option>
+	                                  ))}
+	                                </select>
+	                              </label>
+	                            </div>
+	                          </article>
+	                        ))}
+	                      </div>
+	                    </div>
+	                  ) : null}
+	                </article>
+	              );
             })}
           </div>
         </>

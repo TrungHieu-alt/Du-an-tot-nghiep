@@ -13,6 +13,8 @@ backend/db_v2/
 ├── migrations/003_normal_jobs_cvs.sql # normal Job/CV tables for public search
 ├── migrations/004_normal_public_defaults.sql # public defaults for existing normal rows
 ├── migrations/005_google_auth.sql # Google auth columns/default role compatibility
+├── migrations/006_normal_multi_industry_fields.sql # normalized multi-industry Job/CV fields
+├── migrations/007_normal_applications.sql # normal application submissions
 ├── seeds/001_seed.sql        # deterministic JD/CV rows + 384-dim embeddings
 ├── seeds/002_extra_test_data.sql
 ├── seeds/003_broad_ranking_test_data.sql
@@ -30,8 +32,9 @@ Matching V2 data still lives in exactly **four** tables:
 `job_embeddings_v2`. Auth data lives separately in `users`; registration
 defaults to `role='user'`, and Google login stores `google_id`, `avatar_url`,
 and `auth_provider` on the same PostgreSQL row. Normal public search data lives
-in `jobs` and `cvs`, seeded by `004_normal_jobs_cvs_seed.sql`. There is **no**
-`match_results_v2` table — the matching prototype is run-only.
+in `jobs` and `cvs`, seeded by `004_normal_jobs_cvs_seed.sql`; normal candidate
+submissions live in `applications`. There is **no** `match_results_v2` table —
+the matching prototype is run-only.
 
 ## Start the database
 

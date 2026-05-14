@@ -3,7 +3,7 @@ import { apiRoutes } from './api-routes';
 
 describe('apiRoutes', () => {
   it('exposes only expected route builder groups', () => {
-    expect(Object.keys(apiRoutes).sort()).toEqual(['auth', 'cv', 'job', 'normalSearch', 'system', 'v2']);
+    expect(Object.keys(apiRoutes).sort()).toEqual(['applications', 'auth', 'cv', 'job', 'normalSearch', 'system', 'v2']);
   });
 
   describe('auth', () => {
@@ -48,6 +48,7 @@ describe('apiRoutes', () => {
       expect(apiRoutes.job.create()).toBe('/employer/requests');
       expect(apiRoutes.job.my()).toBe('/employer/requests/my');
       expect(apiRoutes.job.byId('abc')).toBe('/employer/requests/abc');
+      expect(apiRoutes.job.detail('abc')).toBe('/job/abc');
       expect(apiRoutes.job.filters()).toBe('/job/search/filters');
     });
 
@@ -57,6 +58,15 @@ describe('apiRoutes', () => {
       expect(apiRoutes.cv.extractPdf()).toBe('/cvs/extract-pdf');
       expect(apiRoutes.cv.my()).toBe('/cvs/my');
       expect(apiRoutes.cv.byId('abc')).toBe('/cvs/abc');
+    });
+  });
+
+  describe('normal applications', () => {
+    it('builds normal application endpoints', () => {
+      expect(apiRoutes.applications.create()).toBe('/applications');
+      expect(apiRoutes.applications.my({ page: 1, limit: 20 })).toBe('/applications/me?page=1&limit=20');
+      expect(apiRoutes.applications.byJob('job-1', { limit: 50 })).toBe('/job/job-1/applications?limit=50');
+      expect(apiRoutes.applications.status('app-1')).toBe('/applications/app-1/status');
     });
   });
 

@@ -4,8 +4,8 @@ FastAPI backend for the Matching V2 prototype.
 
 ## Active Modules
 
-- `main.py` mounts normal Job/CV CRUD/search, the v2 catalog, original v2
-  matching, hybrid matching, auth, and health routers.
+- `main.py` mounts normal Job/CV CRUD/search, normal applications, the v2
+  catalog, original v2 matching, hybrid matching, auth, and health routers.
 - `routers/auth.py` exposes PostgreSQL-backed register/login/Google-login/current-user endpoints.
 - `routers/job_router.py` exposes normal Job CRUD and public multi-industry
   search over the `jobs` table.
@@ -13,6 +13,8 @@ FastAPI backend for the Matching V2 prototype.
   `cvs` table.
 - `routers/normal_search_router.py` keeps `/api/jobs`, `/api/cvs`, and
   `/api/candidates` compatibility aliases pointed at normal tables.
+- `routers/application_router.py` exposes normal application submissions that
+  connect `jobs`, `cvs`, candidate users, and recruiter users without scoring.
 - `routers/match_v2_router.py` exposes run-only matching endpoints.
 - `routers/match_hybrid_router.py` exposes additive hybrid matching endpoints.
 - `routers/v2_catalog_router.py` exposes read-only browse/detail/search helpers.
@@ -45,12 +47,12 @@ docker compose exec backend python -m unittest discover -s tests
 bash scripts/smoke_match_v2_live.sh
 ```
 
-The backend has no application workflow, advanced role guard, or persisted
-match result endpoints in the current prototype surface. Hybrid
-matching is run-only and does not write match results. Normal search endpoints
-read the normal `jobs`/`cvs` tables and do not call matching, pgvector search,
-or embedding code. PDF CV upload stores file metadata only; PDF parsing is not
-implemented yet.
+The backend has no advanced role guard or persisted match result endpoints in
+the current prototype surface. Hybrid matching is run-only and does not write
+match results. Normal search endpoints read the normal `jobs`/`cvs` tables and
+do not call matching, pgvector search, or embedding code. Normal applications
+write only submission/status rows and do not calculate match output. PDF CV
+upload stores file metadata only; PDF parsing is not implemented yet.
 
 Registration does not accept client-selected roles; new users default to
 `role='user'`. Google login is available at `POST /api/auth/google` and verifies

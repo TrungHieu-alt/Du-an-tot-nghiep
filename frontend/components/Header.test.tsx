@@ -74,6 +74,10 @@ describe('Header profile dropdown', () => {
       'href',
       '/cvs'
     );
+    expect(screen.getByRole('menuitem', { name: /hồ sơ đã ứng tuyển/i })).toHaveAttribute(
+      'href',
+      '/applications'
+    );
     expect(
       screen.getByRole('menuitem', { name: /quản lý yêu cầu tuyển dụng/i })
     ).toHaveAttribute('href', '/employer/requests');

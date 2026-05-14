@@ -3,6 +3,10 @@ import { apiRoutes } from '../../lib/api-routes';
 import type {
   NormalCVSearchItem,
   NormalCVSearchParams,
+  NormalApplication,
+  NormalApplicationCreatePayload,
+  NormalApplicationListResponse,
+  NormalApplicationStatus,
   CvExtractResponse,
   NormalCv,
   NormalCvCreatePayload,
@@ -117,7 +121,7 @@ export async function listMyJobs(token: string): Promise<NormalJob[]> {
 }
 
 export async function getJob(jobId: string, token?: string | null): Promise<NormalJob> {
-  const response = await api.get<NormalJob>(apiRoutes.job.byId(jobId), {
+  const response = await api.get<NormalJob>(apiRoutes.job.detail(jobId), {
     headers: token ? authHeaders(token) : undefined,
   });
   return toSnakeResponse(response.data);
@@ -205,4 +209,53 @@ export async function deleteCv(token: string, cvId: string): Promise<void> {
   await api.delete(apiRoutes.cv.byId(cvId), {
     headers: authHeaders(token),
   });
+}
+
+export async function createApplication(
+  token: string,
+  payload: NormalApplicationCreatePayload
+): Promise<NormalApplication> {
+  const response = await api.post<NormalApplication>(apiRoutes.applications.create(), payload, {
+    headers: authHeaders(token),
+  });
+  return response.data;
+}
+
+export async function listMyApplications(
+  token: string,
+  params: { page?: number; limit?: number } = {}
+): Promise<NormalApplicationListResponse> {
+  const response = await api.get<NormalApplicationListResponse>(apiRoutes.applications.my(params), {
+    headers: authHeaders(token),
+  });
+  return response.data;
+}
+
+export async function listJobApplications(
+  token: string,
+  jobId: string,
+  params: { page?: number; limit?: number } = {}
+): Promise<NormalApplicationListResponse> {
+  const response = await api.get<NormalApplicationListResponse>(
+    apiRoutes.applications.byJob(jobId, params),
+    {
+      headers: authHeaders(token),
+    }
+  );
+  return response.data;
+}
+
+export async function updateApplicationStatus(
+  token: string,
+  applicationId: string,
+  status: NormalApplicationStatus
+): Promise<NormalApplication> {
+  const response = await api.patch<NormalApplication>(
+    apiRoutes.applications.status(applicationId),
+    { status },
+    {
+      headers: authHeaders(token),
+    }
+  );
+  return response.data;
 }

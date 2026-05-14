@@ -3,15 +3,28 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../lib/api', () => ({
   default: {
     get: vi.fn(),
-    post: vi.fn(),
-    put: vi.fn(),
-    delete: vi.fn(),
-  },
-}));
+      post: vi.fn(),
+      patch: vi.fn(),
+      put: vi.fn(),
+      delete: vi.fn(),
+    },
+  }));
 
 import api from '../../lib/api';
-import { extractCvPdf, getCv, listMyCvs, searchCvs, searchJobs } from './normal';
+import {
+  createApplication,
+  extractCvPdf,
+  getJob,
+  getCv,
+  listJobApplications,
+  listMyApplications,
+  listMyCvs,
+  searchCvs,
+  searchJobs,
+  updateApplicationStatus,
+} from './normal';
 import type {
+  NormalApplication,
   NormalCVSearchItem,
   NormalCv,
   NormalJobSearchItem,
@@ -21,6 +34,7 @@ import type {
 const mockedApi = api as unknown as {
   get: ReturnType<typeof vi.fn>;
   post: ReturnType<typeof vi.fn>;
+  patch: ReturnType<typeof vi.fn>;
   put: ReturnType<typeof vi.fn>;
 };
 
@@ -28,6 +42,7 @@ describe('normal API client', () => {
   beforeEach(() => {
     mockedApi.get.mockReset();
     mockedApi.post.mockReset();
+    mockedApi.patch.mockReset();
     mockedApi.put.mockReset();
   });
 
@@ -121,6 +136,36 @@ describe('normal API client', () => {
     });
   });
 
+  it('gets public job detail through the normal job endpoint', async () => {
+    mockedApi.get.mockResolvedValueOnce({
+      data: {
+        id: 'job-1',
+        created_by: 'recruiter-1',
+        title: 'Backend Engineer',
+        status: 'published',
+        visibility: 'public',
+        location: {},
+        employmentType: ['fulltime'],
+        responsibilities: [],
+        requirements: [],
+        skills: [],
+        salary: {},
+        tags: [],
+        categories: [],
+        remote: false,
+        archived: false,
+        created_at: '2026-05-14T00:00:00Z',
+        updated_at: '2026-05-14T00:00:00Z',
+      },
+    });
+
+    await getJob('job-1', null);
+
+    expect(mockedApi.get).toHaveBeenCalledWith('/job/job-1', {
+      headers: undefined,
+    });
+  });
+
   it('keeps my CVs behind an auth header', async () => {
     mockedApi.get.mockResolvedValueOnce({ data: [] });
 
@@ -153,5 +198,88 @@ describe('normal API client', () => {
     });
     expect(result.cv.fullname).toBe('Nguyen Van A');
     expect(result.cv.employment_type).toEqual(['fulltime']);
+  });
+
+  it('creates normal applications with jobId and cvId only, no matching fields', async () => {
+    const payload: NormalApplication = {
+      id: 'app-1',
+      jobId: 'job-1',
+      cvId: 'cv-1',
+      candidateId: 'candidate-1',
+      recruiterId: 'recruiter-1',
+      status: 'submitted',
+      coverLetter: 'Hello',
+      createdAt: '2026-05-14T00:00:00Z',
+      updatedAt: '2026-05-14T00:00:00Z',
+      job: { id: 'job-1', title: 'Backend Engineer', companyName: 'Demo Co' },
+      cv: { id: 'cv-1', fullname: 'Nguyen Van A', headline: 'Backend Candidate' },
+    };
+    mockedApi.post.mockResolvedValueOnce({ data: payload });
+
+    const result = await createApplication('token', {
+      jobId: 'job-1',
+      cvId: 'cv-1',
+      coverLetter: 'Hello',
+    });
+
+    expect(mockedApi.post).toHaveBeenCalledWith(
+      '/applications',
+      {
+        jobId: 'job-1',
+        cvId: 'cv-1',
+        coverLetter: 'Hello',
+      },
+      {
+        headers: { Authorization: 'Bearer token' },
+      }
+    );
+    expect(mockedApi.post.mock.calls[0][1]).not.toHaveProperty('matchScore');
+    expect(mockedApi.post.mock.calls[0][1]).not.toHaveProperty('matchingWeights');
+    expect(result).toEqual(payload);
+  });
+
+  it('lists candidate and recruiter application endpoints without V2 paths', async () => {
+    mockedApi.get.mockResolvedValue({ data: { items: [], total: 0, page: 1, limit: 10, totalPages: 0 } });
+
+    await listMyApplications('token', { page: 1, limit: 10 });
+    await listJobApplications('token', 'job-1', { limit: 50 });
+
+    expect(mockedApi.get).toHaveBeenNthCalledWith(1, '/applications/me?page=1&limit=10', {
+      headers: { Authorization: 'Bearer token' },
+    });
+    expect(mockedApi.get).toHaveBeenNthCalledWith(2, '/job/job-1/applications?limit=50', {
+      headers: { Authorization: 'Bearer token' },
+    });
+    expect(mockedApi.get.mock.calls[0][0]).not.toContain('/v2/prototype');
+    expect(mockedApi.get.mock.calls[1][0]).not.toContain('/v2/prototype');
+  });
+
+  it('updates normal application status without score fields', async () => {
+    const payload: NormalApplication = {
+      id: 'app-1',
+      jobId: 'job-1',
+      cvId: 'cv-1',
+      candidateId: 'candidate-1',
+      recruiterId: 'recruiter-1',
+      status: 'reviewing',
+      coverLetter: null,
+      createdAt: '2026-05-14T00:00:00Z',
+      updatedAt: '2026-05-14T00:00:00Z',
+      job: { id: 'job-1', title: 'Backend Engineer' },
+      cv: { id: 'cv-1', fullname: 'Nguyen Van A' },
+    };
+    mockedApi.patch.mockResolvedValueOnce({ data: payload });
+
+    await updateApplicationStatus('token', 'app-1', 'reviewing');
+
+    expect(mockedApi.patch).toHaveBeenCalledWith(
+      '/applications/app-1/status',
+      { status: 'reviewing' },
+      {
+        headers: { Authorization: 'Bearer token' },
+      }
+    );
+    expect(mockedApi.patch.mock.calls[0][1]).not.toHaveProperty('recommendation');
+    expect(mockedApi.patch.mock.calls[0][1]).not.toHaveProperty('totalScore');
   });
 });

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from routers import (
+    application_router,
     auth,
     cv_router,
     job_router,
@@ -40,6 +41,10 @@ normal search endpoints for the JobConnect UI:
 * `GET /api/cvs/my`
 * `POST /api/cv/upload`
 * `POST /api/cvs/extract-pdf`
+* `POST /api/applications`
+* `GET /api/applications/me`
+* `GET /api/job/{job_id}/applications`
+* `PATCH /api/applications/{application_id}/status`
 * `POST /api/auth/register`
 * `POST /api/auth/login`
 * `POST /api/auth/google`
@@ -114,6 +119,13 @@ OPENAPI_TAGS = [
         ),
     },
     {
+        "name": "normal-applications",
+        "description": (
+            "Normal candidate applications linking PostgreSQL `jobs`, `cvs`, "
+            "candidate users, and recruiter users. No matching scores."
+        ),
+    },
+    {
         "name": "auth",
         "description": (
             "JobConnect authentication. PostgreSQL-backed registration, "
@@ -153,6 +165,7 @@ app.include_router(job_router.router, prefix="/api")
 app.include_router(job_router.employer_requests_router, prefix="/api")
 app.include_router(cv_router.router, prefix="/api")
 app.include_router(cv_router.cvs_router, prefix="/api")
+app.include_router(application_router.router, prefix="/api")
 app.include_router(normal_search_router.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(system_router.router, prefix="/api")

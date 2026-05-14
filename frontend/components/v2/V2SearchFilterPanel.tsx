@@ -36,7 +36,6 @@ export interface V2SearchFilters {
   yearsOfExperience?: string;
   yearsOfExperienceMin?: string;
   yearsOfExperienceMax?: string;
-  expectedSalaryRange?: string;
   availability?: string;
   certificationName?: string;
   languageName?: string;
@@ -122,6 +121,12 @@ const toggleValue = (current: string | undefined, value: string): string | undef
 const hasAnyFilters = (keyword: string, filters: V2SearchFilters): boolean =>
   Boolean(keyword.trim()) || Object.values(filters).some((value) => Boolean(value));
 
+const fieldIdFromLabel = (label: string): string =>
+  `normal-filter-${label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')}`;
+
 const Section: React.FC<{
   title: string;
   description?: string;
@@ -137,21 +142,30 @@ const Section: React.FC<{
 );
 
 const Field: React.FC<{
+  id: string;
   label: string;
   children: React.ReactNode;
   helper?: string;
-}> = ({ label, children, helper }) => (
-  <label className="block">
-    <span className="mb-1 block text-xs font-semibold text-gray-700">{label}</span>
+  helperId?: string;
+}> = ({ id, label, children, helper, helperId }) => (
+  <div className="block">
+    <label htmlFor={id} className="mb-1 block text-xs font-semibold text-gray-700">
+      {label}
+    </label>
     {children}
-    {helper ? <span className="mt-1 block text-[11px] leading-4 text-gray-500">{helper}</span> : null}
-  </label>
+    {helper ? (
+      <span id={helperId} className="mt-1 block text-[11px] leading-4 text-gray-500">
+        {helper}
+      </span>
+    ) : null}
+  </div>
 );
 
 const inputClass =
   'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-[#0A65CC] focus:outline-none focus:ring-2 focus:ring-[#0A65CC]/15';
 
 const TextInput: React.FC<{
+  id?: string;
   label: string;
   value?: string;
   placeholder?: string;
@@ -159,20 +173,27 @@ const TextInput: React.FC<{
   type?: string;
   min?: number;
   onChange: (value?: string) => void;
-}> = ({ label, value, placeholder, helper, type = 'text', min, onChange }) => (
-  <Field label={label} helper={helper}>
-    <input
-      type={type}
-      min={min}
-      value={value ?? ''}
-      placeholder={placeholder}
-      onChange={(event) => onChange(event.target.value || undefined)}
-      className={inputClass}
-    />
-  </Field>
-);
+}> = ({ id, label, value, placeholder, helper, type = 'text', min, onChange }) => {
+  const inputId = id ?? fieldIdFromLabel(label);
+  const helperId = helper ? `${inputId}-helper` : undefined;
+  return (
+    <Field id={inputId} label={label} helper={helper} helperId={helperId}>
+      <input
+        id={inputId}
+        type={type}
+        min={min}
+        value={value ?? ''}
+        placeholder={placeholder}
+        aria-describedby={helperId}
+        onChange={(event) => onChange(event.target.value || undefined)}
+        className={inputClass}
+      />
+    </Field>
+  );
+};
 
 const SelectInput: React.FC<{
+  id?: string;
   label: string;
   value?: string;
   options: FilterOption[];
@@ -180,23 +201,29 @@ const SelectInput: React.FC<{
   helper?: string;
   disabled?: boolean;
   onChange: (value?: string) => void;
-}> = ({ label, value, options, placeholder = 'Any', helper, disabled, onChange }) => (
-  <Field label={label} helper={helper}>
-    <select
-      value={value ?? ''}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value || undefined)}
-      className={`${inputClass} disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400`}
-    >
-      <option value="">{placeholder}</option>
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  </Field>
-);
+}> = ({ id, label, value, options, placeholder = 'Any', helper, disabled, onChange }) => {
+  const selectId = id ?? fieldIdFromLabel(label);
+  const helperId = helper ? `${selectId}-helper` : undefined;
+  return (
+    <Field id={selectId} label={label} helper={helper} helperId={helperId}>
+      <select
+        id={selectId}
+        value={value ?? ''}
+        disabled={disabled}
+        aria-describedby={helperId}
+        onChange={(event) => onChange(event.target.value || undefined)}
+        className={`${inputClass} disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400`}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+};
 
 const MultiChipField: React.FC<{
   label: string;
@@ -206,9 +233,11 @@ const MultiChipField: React.FC<{
   onChange: (value?: string) => void;
 }> = ({ label, value, options, helper, onChange }) => {
   const selected = splitFilterValues(value);
+  const groupId = fieldIdFromLabel(label);
+  const helperId = helper ? `${groupId}-helper` : undefined;
   return (
-    <div>
-      <span className="mb-1 block text-xs font-semibold text-gray-700">{label}</span>
+    <fieldset aria-describedby={helperId}>
+      <legend className="mb-1 block text-xs font-semibold text-gray-700">{label}</legend>
       <div className="flex flex-wrap gap-1.5">
         {options.map((option) => {
           const active = selected.includes(option.value);
@@ -229,8 +258,12 @@ const MultiChipField: React.FC<{
           );
         })}
       </div>
-      {helper ? <span className="mt-1 block text-[11px] leading-4 text-gray-500">{helper}</span> : null}
-    </div>
+      {helper ? (
+        <span id={helperId} className="mt-1 block text-[11px] leading-4 text-gray-500">
+          {helper}
+        </span>
+      ) : null}
+    </fieldset>
   );
 };
 
@@ -377,8 +410,12 @@ const V2SearchFilterPanel: React.FC<V2SearchFilterPanelProps> = ({
 
       <Section title="Keyword" description="Search normal PostgreSQL CV/Job fields.">
         <div className="relative">
+          <label htmlFor="normal-filter-keyword" className="sr-only">
+            Keyword
+          </label>
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
+            id="normal-filter-keyword"
             value={draftKeyword}
             onChange={(event) => setDraftKeyword(event.target.value)}
             onKeyDown={(event) => {
@@ -455,6 +492,7 @@ const V2SearchFilterPanel: React.FC<V2SearchFilterPanelProps> = ({
 
       <Section title="Skills & tools">
         <TextInput
+          id="skills-input"
           label="Skills"
           value={draft.skills}
           placeholder="ReactJS, Postgres, MS Excel"
@@ -464,6 +502,7 @@ const V2SearchFilterPanel: React.FC<V2SearchFilterPanelProps> = ({
         {!isJob ? (
           <>
             <TextInput
+              id="tools-and-technologies-input"
               label="Tools and technologies"
               value={draft.toolsAndTechnologies}
               placeholder="FastAPI, Excel, AutoCAD"
@@ -471,6 +510,7 @@ const V2SearchFilterPanel: React.FC<V2SearchFilterPanelProps> = ({
               onChange={(value) => setKey('toolsAndTechnologies', value)}
             />
             <TextInput
+              id="domain-knowledge-input"
               label="Domain knowledge"
               value={draft.domainKnowledge}
               placeholder="accounting, tax, healthcare"
@@ -566,6 +606,7 @@ const V2SearchFilterPanel: React.FC<V2SearchFilterPanelProps> = ({
               onChange={(value) => setKey('status', value)}
             />
             <TextInput
+              id="tags-input"
               label="Tags"
               value={draft.tags}
               placeholder="backend, remote"

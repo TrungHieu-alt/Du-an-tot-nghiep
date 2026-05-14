@@ -9,10 +9,12 @@ NORMAL_RUNTIME_FILES = [
     REPO_ROOT / "backend" / "main.py",
     REPO_ROOT / "backend" / "routers" / "job_router.py",
     REPO_ROOT / "backend" / "routers" / "cv_router.py",
+    REPO_ROOT / "backend" / "routers" / "application_router.py",
     REPO_ROOT / "backend" / "routers" / "normal_search_router.py",
     REPO_ROOT / "backend" / "routers" / "auth.py",
     REPO_ROOT / "backend" / "schemas" / "normal_job_schema.py",
     REPO_ROOT / "backend" / "schemas" / "normal_cv_schema.py",
+    REPO_ROOT / "backend" / "schemas" / "normal_application_schema.py",
     REPO_ROOT / "frontend" / "src" / "api" / "normal.ts",
     REPO_ROOT / "frontend" / "lib" / "api-routes.ts",
 ]

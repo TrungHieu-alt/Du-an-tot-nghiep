@@ -12,8 +12,9 @@ React + Vite frontend for the Matching V2 prototype.
 | `/jobs/search` | `pages/V2Search.tsx` | Normal Find Job search via `/api/job/search` |
 | `/cvs/search` | `pages/V2Search.tsx` | Normal Find CV search via `/api/cv/search` |
 | `/job/my` | `pages/MyJobs.tsx` | Owner-managed normal Job CRUD |
+| `/applications` | `pages/MyApplications.tsx` | Candidate submitted normal applications |
 | `/cv/my` | `pages/MyCvs.tsx` | Owner-managed normal CV CRUD and PDF upload |
-| `/job/:id` | `pages/NormalJobDetail.tsx` | Normal public/owner Job detail |
+| `/job/:id` | `pages/NormalJobDetail.tsx` | Normal public/owner Job detail with apply/applicants flow |
 | `/cv/:id` | `pages/NormalCvDetail.tsx` | Owner CV detail |
 | `/v2/search` | `pages/V2Search.tsx` | Compatibility route for the shared normal search UI |
 | `/v2/jobs/:id` | `pages/V2JobDetail.tsx` | Full job detail with matching CTA |
@@ -30,6 +31,19 @@ uses `GET /api/job/search` and `GET /api/cv/search`; compatibility aliases
 `GET /api/jobs`, `GET /api/cvs`, and `GET /api/candidates` remain available.
 Matching V2 and catalog semantic endpoints remain available for matching and
 detail workflows.
+
+Normal applications use `POST /api/applications`, `GET /api/applications/me`,
+`GET /api/job/{job_id}/applications`, and
+`PATCH /api/applications/{application_id}/status`. These endpoints link normal
+Jobs and CVs only; they do not return score, recommendation, or V2 matching
+fields.
+
+The normal CV search page groups candidate filters around the normalized
+multi-industry CV schema: industry, occupation group, career level, experience
+range, employment type, skills, tools, domain knowledge, education, languages,
+location, status, tags, sort, and pagination. Skill aliases are normalized
+before query serialization, and normal search does not send or render matching
+score/recommendation fields.
 
 ## Normal Create/Edit Forms
 

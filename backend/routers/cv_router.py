@@ -813,7 +813,19 @@ def _education_values(education: Any, key: str) -> list[str]:
     values: list[str] = []
     if isinstance(education, list):
         for item in education:
-            if isinstance(item, dict) and item.get(key):
+            if not isinstance(item, dict):
+                continue
+            if key == "level":
+                source = item.get("level")
+                if source:
+                    values.append(normalize_education_level(source))
+                    continue
+                fallback = " ".join(str(item.get(field) or "") for field in ("degree", "major", "school"))
+                inferred = normalize_education_level(fallback)
+                if inferred != "unknown":
+                    values.append(inferred)
+                continue
+            if item.get(key):
                 values.append(str(item[key]))
     return values
 

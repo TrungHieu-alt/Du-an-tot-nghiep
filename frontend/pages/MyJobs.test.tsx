@@ -10,19 +10,29 @@ vi.mock('../contexts/AuthContext', () => ({
 vi.mock('../src/api/normal', () => ({
   createJob: vi.fn(),
   deleteJob: vi.fn(),
+  listJobApplications: vi.fn(),
   listMyJobs: vi.fn(),
+  updateApplicationStatus: vi.fn(),
   updateJob: vi.fn(),
 }));
 
 import MyJobs from './MyJobs';
 import { useAuth } from '../contexts/AuthContext';
-import { createJob, listMyJobs, updateJob } from '../src/api/normal';
-import type { NormalJob } from '../types';
+import {
+  createJob,
+  listJobApplications,
+  listMyJobs,
+  updateApplicationStatus,
+  updateJob,
+} from '../src/api/normal';
+import type { NormalApplication, NormalJob } from '../types';
 
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedListMyJobs = vi.mocked(listMyJobs);
 const mockedUpdateJob = vi.mocked(updateJob);
 const mockedCreateJob = vi.mocked(createJob);
+const mockedListJobApplications = vi.mocked(listJobApplications);
+const mockedUpdateApplicationStatus = vi.mocked(updateApplicationStatus);
 
 const authValue = {
   accessToken: 'token',
@@ -68,6 +78,21 @@ const job = (overrides: Partial<NormalJob> = {}): NormalJob => ({
   ...overrides,
 });
 
+const application = (overrides: Partial<NormalApplication> = {}): NormalApplication => ({
+  id: 'app-1',
+  jobId: 'job-1',
+  cvId: 'cv-1',
+  candidateId: 'candidate-1',
+  recruiterId: 'user-1',
+  status: 'submitted',
+  coverLetter: 'I can start next month.',
+  createdAt: '2026-05-14T00:00:00Z',
+  updatedAt: '2026-05-14T00:00:00Z',
+  job: { id: 'job-1', title: 'Marketing Executive', companyName: 'Demo Co' },
+  cv: { id: 'cv-1', fullname: 'Nguyen Van A', headline: 'Marketing Candidate' },
+  ...overrides,
+});
+
 const PathProbe = () => {
   const location = useLocation();
   return <span data-testid="path">{location.pathname}</span>;
@@ -87,8 +112,18 @@ describe('MyJobs card grid management', () => {
     mockedListMyJobs.mockReset();
     mockedUpdateJob.mockReset();
     mockedCreateJob.mockReset();
+    mockedListJobApplications.mockReset();
+    mockedUpdateApplicationStatus.mockReset();
     mockedUpdateJob.mockResolvedValue(job());
     mockedCreateJob.mockResolvedValue(job());
+    mockedListJobApplications.mockResolvedValue({
+      items: [application()],
+      total: 1,
+      page: 1,
+      limit: 50,
+      totalPages: 1,
+    });
+    mockedUpdateApplicationStatus.mockResolvedValue(application({ status: 'reviewing' }));
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
@@ -191,5 +226,25 @@ describe('MyJobs card grid management', () => {
     expect(mockedCreateJob.mock.calls[0][1]).not.toHaveProperty('matchScore');
     expect(mockedCreateJob.mock.calls[0][1]).not.toHaveProperty('matchLevel');
     expect(mockedCreateJob.mock.calls[0][1]).not.toHaveProperty('recommendation');
+  });
+
+  it('loads applicants for a recruiter job and updates application status', async () => {
+    mockedListMyJobs.mockResolvedValue([job()]);
+    const user = userEvent.setup();
+
+    renderPage();
+
+    await screen.findByText('Marketing Executive');
+    await user.click(screen.getByRole('button', { name: /view applicants/i }));
+    expect(await screen.findByText('Nguyen Van A')).toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByLabelText(/application status for nguyen van a/i),
+      'reviewing'
+    );
+
+    expect(mockedListJobApplications).toHaveBeenCalledWith('token', 'job-1', { limit: 50 });
+    expect(mockedUpdateApplicationStatus).toHaveBeenCalledWith('token', 'app-1', 'reviewing');
+    expect(screen.queryByText(/matchScore|totalScore|recommendation/i)).not.toBeInTheDocument();
   });
 });

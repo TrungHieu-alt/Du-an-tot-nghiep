@@ -56,6 +56,7 @@ export const apiRoutes = {
     create: () => '/employer/requests',
     my: () => '/employer/requests/my',
     byId: (jobId: RouteId) => `/employer/requests/${toPathId(jobId)}`,
+    detail: (jobId: RouteId) => `/job/${toPathId(jobId)}`,
     search: <T extends object>(params?: T) =>
       `/job/search${buildAnyQueryString(params)}`,
     filters: () => '/job/search/filters',
@@ -68,6 +69,15 @@ export const apiRoutes = {
     byId: (cvId: RouteId) => `/cvs/${toPathId(cvId)}`,
     search: <T extends object>(params?: T) =>
       `/cv/search${buildAnyQueryString(params)}`,
+  },
+  applications: {
+    create: () => '/applications',
+    my: <T extends object>(params?: T) =>
+      `/applications/me${buildAnyQueryString(params)}`,
+    byJob: <T extends object>(jobId: RouteId, params?: T) =>
+      `/job/${toPathId(jobId)}/applications${buildAnyQueryString(params)}`,
+    status: (applicationId: RouteId) =>
+      `/applications/${toPathId(applicationId)}/status`,
   },
   v2: {
     catalog: {
