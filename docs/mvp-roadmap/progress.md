@@ -31,7 +31,7 @@ Keep updates concrete and evidence-backed.
 
 | Slice ID | Status | Owner | Current branch/PR | Started date | Last updated | Worktree status | Blocker | Current next action | Verification evidence | Acceptance evidence | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 0 Baseline Contract Audit | not_started | TBD | TBD | TBD | TBD | not checked | none | Confirm current OpenAPI and implementation matrix. | none yet | none yet | Backend contract audit comes first. |
+| 0 Baseline Contract Audit | done | AI agent | v2 (working tree) | 2026-05-16 | 2026-05-16 | clean before run; CLAUDE.md untracked + matrix/progress edits after | none | Hand off impact-classified backlog to Slice 1 owner. | docker compose up postgres+backend (both healthy); `db/apply_migrations.py` exit 0; `GET /api/health` → `{"status":"ok"}`; `/openapi.json` 200, 47 paths / 58 operations matching router.py enum; `python -m unittest discover -s tests` → 6/6 OK in 0.067s | Matrix updated with `Gap Impact Classification And Slice Mapping` section: 5 confirmed breaking + 2 policy-pending breaking + ~30 non-breaking + 5 none. | See `docs/backend/LLD/50-current-api-implementation-matrix.md` for slice-mapped impact tables. |
 | 1 Auth, Session, `/api/me` | not_started | TBD | TBD | TBD | TBD | not checked | none | Wait for Slice 0 output or begin from known auth drift. | none yet | none yet | Expected `/api/me` response change is breaking relative to current runtime. |
 | 2 Ownership And Authorization | not_started | TBD | TBD | TBD | TBD | not checked | none | Wait for auth/session baseline. | none yet | none yet | Focus on recruiter/candidate ownership and disabled-user behavior. |
 | 3 API Contract Drift Cleanup | not_started | TBD | TBD | TBD | TBD | not checked | none | Use Slice 0 drift list to prioritize. | none yet | none yet | Includes PATCH semantics, filters, explicit response models. |
@@ -57,3 +57,22 @@ Keep updates concrete and evidence-backed.
 - Frontend runtime is not active.
 - Upload, parser/provider execution, real embedding provider, email delivery,
   and several contract drifts remain open.
+
+## Slice 0 Verification Snapshot (2026-05-16)
+
+- Docker Compose: `jobmatcher-postgres` healthy, `jobmatcher-backend` healthy.
+- Migration: `docker compose exec backend python db/apply_migrations.py` exit 0.
+- Health: `GET /api/health` → `{"status":"ok"}` (200).
+- OpenAPI: `GET /openapi.json` → 200, 47 paths, 58 operations, no
+  `/api/v2/prototype/*` routes present.
+- Tests: `python -m unittest discover -s tests` → 6/6 passing.
+- Impact backlog confirmed:
+  - 5 confirmed breaking: `/api/me`, `POST /api/documents`,
+    `GET /api/documents/{id}/download-url`, `POST /api/notifications/read-all`,
+    plus auth `expires_in` if treated as required.
+  - 2 policy-pending breaking: role scope of `POST /api/organizations` and
+    `POST /api/jobs` (admin currently allowed).
+  - ~30 non-breaking adjustments (partial PATCH, additive filters, ownership
+    tightening, transition guards, additive response fields).
+  - 5 already aligned (`logout`, `GET /api/organizations/{id}`, list listings,
+    basic notifications read).
