@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, Optional
 
 import psycopg
-from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, Header, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 
 from jobconnect.core.database import get_connection
@@ -33,6 +33,7 @@ from jobconnect.modules.matching.scoring import (
     exact_overlap_ratio,
     matched_skills_sorted,
 )
+from jobconnect.modules.documents.worker import run_parse_job
 
 
 Role = Literal["candidate", "recruiter", "admin"]
@@ -1425,6 +1426,7 @@ def create_document(
     resume_id: Optional[int] = Form(default=None),
     job_id: Optional[int] = Form(default=None),
     user: CurrentUser = Depends(require_active),
+    background_tasks: BackgroundTasks = None,
 ) -> DocumentUploadResponse:
     # Slice 4: multipart upload writes through the Storage adapter before any DB rows
     # are persisted, so a failed upload never leaves orphan rows.
@@ -1485,6 +1487,9 @@ def create_document(
         )
         parse_row = cur.fetchone()
         _audit(cur, user.user_id, "document_uploaded", "document", document_row[0])
+    parse_job_id: int = parse_row[0]
+    if background_tasks is not None:
+        background_tasks.add_task(run_parse_job, parse_job_id)
     return DocumentUploadResponse(
         document=_document_detail(document_row),
         parse_job=_parse_job_detail(parse_row),
@@ -1588,7 +1593,11 @@ def get_parse_job(document_id: int, parse_job_id: int, user: CurrentUser = Depen
 
 
 @documents_router.post("/{document_id}/parse-jobs", response_model=ParseJobDetail, status_code=201)
-def create_parse_job(document_id: int, user: CurrentUser = Depends(require_active)):
+def create_parse_job(
+    document_id: int,
+    user: CurrentUser = Depends(require_active),
+    background_tasks: BackgroundTasks = None,
+):
     row = _get_document_row(document_id, user)
     if row is None:
         raise business_error(404, "not_found", "Document not found.")
@@ -1597,15 +1606,17 @@ def create_parse_job(document_id: int, user: CurrentUser = Depends(require_activ
             """
             INSERT INTO parse_jobs
                 (document_id, target_entity_type, resume_id, job_id, parser_version, embedding_version_requested)
-            VALUES (%s, %s, %s, %s, 'external-parser-v1', 'hash-v1')
+            VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING parse_job_id, document_id, target_entity_type, resume_id, job_id, status,
                       error_code, error_message, created_at, updated_at
             """,
-            (document_id, row[2], row[8], row[9]),
+            (document_id, row[2], row[8], row[9], "local-v1", "hash-v1"),
         )
         parse = cur.fetchone()
-        # Slice 4: retry is auditable so admins can trace re-parses.
         _audit(cur, user.user_id, "parse_job_retried", "parse_job", parse[0])
+    parse_job_id: int = parse[0]
+    if background_tasks is not None:
+        background_tasks.add_task(run_parse_job, parse_job_id)
     return _parse_job_detail(parse)
 
 

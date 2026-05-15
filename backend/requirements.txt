@@ -7,5 +7,8 @@ numpy==1.26.4
 # Slice 4: multipart/form-data uploads for /api/documents.
 python-multipart==0.0.20
 
+# Slice 5: PDF text extraction for parse worker.
+pypdf==4.3.1
+
 # TestClient support
 httpx==0.28.1

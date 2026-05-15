@@ -79,6 +79,12 @@ class LocalFilesystemStorage:
             expires_at=expires_at.isoformat(),
         )
 
+    def open(self, object_key: str) -> BinaryIO:
+        path = self._root / object_key
+        if not path.is_file():
+            raise FileNotFoundError(f"Object not found: {object_key}")
+        return path.open("rb")
+
     def exists(self, object_key: str) -> bool:
         return (self._root / object_key).is_file()
 

@@ -38,5 +38,8 @@ class Storage(Protocol):
     def download_url(self, object_key: str, ttl_seconds: int = 900) -> DownloadLink:
         """Build a short-lived URL for retrieving the stored object."""
 
+    def open(self, object_key: str) -> BinaryIO:
+        """Open a stored object for reading. Caller is responsible for closing."""
+
     def exists(self, object_key: str) -> bool:
         """True if the object is reachable through this adapter."""
