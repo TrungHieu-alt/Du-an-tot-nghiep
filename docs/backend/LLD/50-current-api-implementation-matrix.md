@@ -46,7 +46,7 @@ not treat it as the final architecture contract.
 | Error envelope | `HTTPException` and validation errors are normalized into `{ "error": ... }`. | Broadly aligned with target error envelope. |
 | Request validation | Pydantic models use `extra="forbid"`; PATCH endpoints mostly use full request models. | Target describes partial PATCH semantics for resumes/jobs; implementation currently behaves like replace/update with full body. |
 | Pagination | Offset pagination with `limit` and `offset` on list endpoints. | Aligned. |
-| Uploads | `POST /api/documents` accepts JSON metadata for an already-uploaded file, not multipart file upload. | Target contract expects `multipart/form-data` upload and object storage write. |
+| Uploads | `POST /api/documents` accepts `multipart/form-data` and writes through the Storage adapter (`backend/src/jobconnect/integrations/storage/`). Default backend is `local` (filesystem under `STORAGE_LOCAL_ROOT`); cloud adapters slot in by implementing the same protocol. | Aligned (Slice 4). |
 | Parsing | Document create/retry inserts `parse_jobs` rows only. No worker/provider parse execution appears in this router. | Target flow expects extraction, preprocessing, LLM parse, entity creation/update, embeddings. |
 | Embeddings | Manual resume/job create and update write deterministic local hash embeddings. | Useful for local matching; provider-backed embedding lifecycle is still future work. |
 | Matching rerank | Request has `rerank`, response always reports `rerank_ms: 0.0`; no reranker path. | Target allows optional rerank, but fallback deterministic scoring is acceptable. |
@@ -77,7 +77,7 @@ not treat it as the final architecture contract.
 | `PUT` | `/api/candidate/profile` | candidate | `CandidateProfileRequest` | `CandidateProfile` | Upserts current candidate profile | `candidate_profiles` insert/update | Aligned. |
 | `GET` | `/api/recruiter/profile` | recruiter | bearer token | `RecruiterProfile` | none | `recruiter_profiles` read | Aligned (Slice 2): admin role removed; admin must use `/api/admin/users/{user_id}`. |
 | `PUT` | `/api/recruiter/profile` | recruiter | `RecruiterProfileRequest` | `RecruiterProfile` | Upserts current recruiter profile after organization check | `organizations` read; `recruiter_profiles` insert/update | Aligned. |
-| `GET` | `/api/organizations` | authenticated | `limit`, `offset` | paginated `Organization` | none | `organizations` read | Partial: target includes `q?`; runtime has no `q`. |
+| `GET` | `/api/organizations` | authenticated | `q?`, `limit`, `offset` | paginated `Organization` | none | `organizations` read | Aligned (Slice 3): `q` matches name + slug (ILIKE). |
 | `POST` | `/api/organizations` | recruiter, admin | `OrganizationRequest` | `Organization` | Creates organization; writes audit event | `organizations` insert; `audit_logs` insert | Partial: target says recruiter; runtime also allows admin. |
 | `GET` | `/api/organizations/{organization_id}` | authenticated | organization id | `Organization` | none | `organizations` read | Aligned. |
 | `PATCH` | `/api/organizations/{organization_id}` | recruiter (member), admin | full `OrganizationRequest` | `Organization` | Updates organization; writes audit event | `recruiter_profiles` read (recruiter only); `organizations` update; `audit_logs` insert | Aligned (Slice 2): recruiter must belong to the target organization (`recruiter_profiles.organization_id`); admin bypasses. Non-member recruiter → 404. |
@@ -89,24 +89,24 @@ not treat it as the final architecture contract.
 | `GET` | `/api/candidate/resumes` | candidate, admin | `status?`, `limit`, `offset` | paginated `ResumeSummary` | none | `candidate_resumes` read | Partial: admin sees all; candidate sees own. |
 | `POST` | `/api/candidate/resumes` | candidate | full `ResumeRequest` | `ResumeDetail` | Creates draft resume; upserts hash embeddings | `candidate_resumes` insert; `candidate_resume_embeddings` insert/update | Aligned for manual create; embedding is immediate local hash rather than async queue. |
 | `GET` | `/api/candidate/resumes/search` | recruiter, admin | `q?`, `location?`, `job_type?`, `seniority?`, `limit`, `offset` | paginated `ResumeSummary` | none | `candidate_resumes` read | Partial: `q` searches title and skills, not candidate display name/email policy from target. |
-| `POST` | `/api/candidate/resumes/semantic-search` | recruiter, admin | `SemanticSearchRequest` | paginated resume summaries with `relevance_score` | Computes query embedding | `candidate_resumes` read; `candidate_resume_embeddings` read | Partial: response uses generic `Paginated`; no explicit semantic result schema. |
+| `POST` | `/api/candidate/resumes/semantic-search` | recruiter, admin | `SemanticSearchRequest` | `SemanticResumeSearchResponse` (items are `SemanticResumeItem` with `relevance_score`) | Computes query embedding | `candidate_resumes` read; `candidate_resume_embeddings` read | Aligned (Slice 3): explicit semantic response schema. |
 | `GET` | `/api/candidate/resumes/{resume_id}` | candidate, recruiter, admin | resume id | `ResumeDetail` | none | `candidate_resumes` read | Partial: recruiter can read only active resumes; response shape does not apply separate recruiter privacy DTO. |
-| `PATCH` | `/api/candidate/resumes/{resume_id}` | candidate | full `ResumeRequest` | `ResumeDetail` | Updates owned resume; refreshes hash embeddings | `candidate_resumes` update; `candidate_resume_embeddings` insert/update | Drift: target says partial update; runtime requires full request model. |
-| `POST` | `/api/candidate/resumes/{resume_id}/activate` | candidate | resume id | `ResumeDetail` | Sets status active; writes audit event | `candidate_resumes` update; `audit_logs` insert | Partial: no lifecycle conflict guard beyond ownership and existence. |
-| `POST` | `/api/candidate/resumes/{resume_id}/archive` | candidate | resume id | `ResumeDetail` | Sets status archived; writes audit event | `candidate_resumes` update; `audit_logs` insert | Partial: no lifecycle conflict guard beyond ownership and existence. |
+| `PATCH` | `/api/candidate/resumes/{resume_id}` | candidate | partial `ResumeUpdateRequest` | `ResumeDetail` | Updates owned resume; refreshes hash embeddings from merged row | `candidate_resumes` update; `candidate_resume_embeddings` insert/update | Aligned (Slice 3): true partial update via `exclude_unset`. Empty body returns current row unchanged. |
+| `POST` | `/api/candidate/resumes/{resume_id}/activate` | candidate | resume id | `ResumeDetail` | Sets status active if `status in {draft, archived}`; writes audit event | `candidate_resumes` update; `audit_logs` insert | Aligned (Slice 3): enforces `RESUME_STATUS_TRANSITIONS['active']`; 409 otherwise. |
+| `POST` | `/api/candidate/resumes/{resume_id}/archive` | candidate | resume id | `ResumeDetail` | Sets status archived if `status in {draft, active}`; writes audit event | `candidate_resumes` update; `audit_logs` insert | Aligned (Slice 3): enforces `RESUME_STATUS_TRANSITIONS['archived']`; 409 otherwise. |
 
 ## Jobs And Job Search
 
 | Method | Path | Roles | Main input | Response | Side effects | DB touchpoints | Contract status |
 |---|---|---|---|---|---|---|---|
-| `GET` | `/api/jobs` | authenticated active user | `status?`, `limit`, `offset` | paginated `JobSummary` | none | `job_posts` read | Partial: target includes filters `location`, `job_type`, `seniority`, `q`; runtime list endpoint only has status plus pagination. |
+| `GET` | `/api/jobs` | authenticated active user | `status?`, `location?`, `job_type?`, `seniority?`, `q?`, `limit`, `offset` | paginated `JobSummary` | none | `job_posts` read | Aligned (Slice 3): list and search share the same filter helper. |
 | `POST` | `/api/jobs` | recruiter, admin | full `JobRequest` | `JobDetail` | Creates draft job; upserts hash embeddings | `organizations` read; `job_posts` insert; `job_post_embeddings` insert/update | Partial: target says recruiter; runtime also allows admin. |
-| `GET` | `/api/jobs/search` | authenticated active user | `q?`, `location?`, `job_type?`, `seniority?`, `status?`, `limit`, `offset` | paginated `JobSummary` | none | `job_posts` read | Partial: `q` searches title and skills, not organization name. |
-| `POST` | `/api/jobs/semantic-search` | authenticated active user | `SemanticSearchRequest` | paginated job summaries with `relevance_score` | Computes query embedding | `job_posts` read; `job_post_embeddings` read | Partial: response uses generic `Paginated`; relevance uses title embedding only. |
+| `GET` | `/api/jobs/search` | authenticated active user | `q?`, `location?`, `job_type?`, `seniority?`, `status?`, `limit`, `offset` | paginated `JobSummary` | none | `job_posts` read; `organizations` read for q-name match | Aligned (Slice 3): `q` matches title, skills, AND organization name. |
+| `POST` | `/api/jobs/semantic-search` | authenticated active user | `SemanticSearchRequest` | `SemanticJobSearchResponse` (items are `SemanticJobItem` with `relevance_score`) | Computes query embedding | `job_posts` read; `job_post_embeddings` read | Aligned (Slice 3): explicit semantic response schema. Relevance still uses title embedding only (Slice 7 ownership). |
 | `GET` | `/api/jobs/{job_id}` | authenticated active user | job id | `JobDetail` | none | `job_posts` read | Aligned on visibility: candidates published only; recruiters own jobs; admins all. |
-| `PATCH` | `/api/jobs/{job_id}` | recruiter, admin | full `JobRequest` | `JobDetail` | Updates job; refreshes hash embeddings | `job_posts` update; `job_post_embeddings` insert/update | Drift: target says partial update; runtime requires full request model. |
-| `POST` | `/api/jobs/{job_id}/publish` | recruiter, admin | job id | `JobDetail` | Sets status published; sets `published_at` if null; writes audit event | `job_posts` update; `audit_logs` insert | Partial: no strict draft-to-published transition guard. |
-| `POST` | `/api/jobs/{job_id}/close` | recruiter, admin | job id | `JobDetail` | Sets status closed; writes audit event | `job_posts` update; `audit_logs` insert | Partial: no strict state transition guard. |
+| `PATCH` | `/api/jobs/{job_id}` | recruiter (owner), admin | partial `JobUpdateRequest` | `JobDetail` | Updates job; refreshes hash embeddings from merged row | `job_posts` update; `job_post_embeddings` insert/update | Aligned (Slice 3): true partial update. |
+| `POST` | `/api/jobs/{job_id}/publish` | recruiter (owner), admin | job id | `JobDetail` | Sets status published if `status == draft`; sets `published_at`; writes audit event | `job_posts` update; `audit_logs` insert | Aligned (Slice 3): enforces `JOB_STATUS_TRANSITIONS['published'] = {draft}`; 409 otherwise. |
+| `POST` | `/api/jobs/{job_id}/close` | recruiter (owner), admin | job id | `JobDetail` | Sets status closed if `status in {draft, published}`; writes audit event | `job_posts` update; `audit_logs` insert | Aligned (Slice 3): enforces `JOB_STATUS_TRANSITIONS['closed'] = {draft, published}`; 409 otherwise. |
 
 ## Matching
 
@@ -119,12 +119,12 @@ not treat it as the final architecture contract.
 
 | Method | Path | Roles | Main input | Response | Side effects | DB touchpoints | Contract status |
 |---|---|---|---|---|---|---|---|
-| `POST` | `/api/documents` | authenticated active user | JSON `DocumentRequest`: document metadata plus `object_key` or `file_url` | `DocumentDetail` | Creates document metadata; creates queued parse job | `uploaded_documents` insert; `parse_jobs` insert | Drift: target expects multipart upload response with both document and parse job; runtime stores metadata for an already-uploaded file and returns document only. |
-| `GET` | `/api/documents` | authenticated active user | `document_type?`, `parse_status?`, `limit`, `offset` | paginated `DocumentDetail` | none | `uploaded_documents` read; optional `parse_jobs` existence filter | Aligned for visible document listing. |
-| `GET` | `/api/documents/{document_id}` | owner or admin | document id | `DocumentDetail` | none | `uploaded_documents` read | Partial: target detail includes linked parse jobs; runtime returns document metadata only. |
-| `GET` | `/api/documents/{document_id}/download-url` | owner or admin | document id | `{ download_url, expires_in_seconds }` | none | `uploaded_documents` read | Partial: target response uses `expires_at`; runtime uses `expires_in_seconds` and may return `object://...`. |
-| `GET` | `/api/documents/{document_id}/parse-jobs/{parse_job_id}` | owner or admin | document id, parse job id | parse job detail dict | none | `uploaded_documents` read; `parse_jobs` read | Aligned for parse status read. |
-| `POST` | `/api/documents/{document_id}/parse-jobs` | owner or admin | document id | parse job detail dict | Creates queued parse job retry | `uploaded_documents` read; `parse_jobs` insert | Partial: target says owner; runtime also allows admin through document visibility helper. No audit event is written. |
+| `POST` | `/api/documents` | authenticated active user | `multipart/form-data`: `file` + form fields (`document_type`, optional `resume_id`/`job_id`) | `DocumentUploadResponse: { document: DocumentDetail, parse_job: ParseJobDetail }` | Streams file through Storage adapter; inserts document + queued parse job; writes audit event | object storage write; `uploaded_documents` insert; `parse_jobs` insert; `audit_logs` insert | Aligned (Slice 4): multipart upload via `LocalFilesystemStorage` (`STORAGE_BACKEND=local`). Rejects unsupported MIME (415) and oversize files (413). |
+| `GET` | `/api/documents` | authenticated active user | `document_type?`, `parse_status?`, `limit`, `offset` | paginated `DocumentDetail` | none | `uploaded_documents` read; optional `parse_jobs` existence filter | Aligned for visible document listing. List rows leave `parse_jobs` empty by default (cost). |
+| `GET` | `/api/documents/{document_id}` | owner or admin | document id | `DocumentDetail` with `parse_jobs: list[ParseJobDetail]` | none | `uploaded_documents` read; `parse_jobs` read | Aligned (Slice 4): detail includes linked parse jobs. |
+| `GET` | `/api/documents/{document_id}/download-url` | owner or admin | document id | `DocumentDownloadUrlResponse: { download_url, expires_at }` | none | `uploaded_documents` read | Aligned (Slice 4): URL generated through Storage adapter; `expires_at` is ISO timestamp. Local adapter returns `local://<object_key>`; future cloud adapters will return presigned HTTPS URLs. |
+| `GET` | `/api/documents/{document_id}/parse-jobs/{parse_job_id}` | owner or admin | document id, parse job id | `ParseJobDetail` | none | `uploaded_documents` read; `parse_jobs` read | Aligned (Slice 4): explicit response model. |
+| `POST` | `/api/documents/{document_id}/parse-jobs` | owner or admin | document id | `ParseJobDetail` | Creates queued parse job retry; writes audit event | `uploaded_documents` read; `parse_jobs` insert; `audit_logs` insert | Aligned (Slice 4): retry audited as `parse_job_retried`. |
 
 ## Applications
 
@@ -132,7 +132,7 @@ not treat it as the final architecture contract.
 |---|---|---|---|---|---|---|---|
 | `GET` | `/api/applications` | candidate, recruiter, admin | `status?`, `job_id?`, `resume_id?`, `limit`, `offset` | paginated `ApplicationDetail` | none | `applications` read; `job_posts` read for visibility | Aligned for role-scoped listing. |
 | `POST` | `/api/applications` | candidate | `ApplicationRequest`: job id, resume id, optional note | `ApplicationDetail` | Creates application; appends event; notifies recruiter; writes audit event | `candidate_resumes` read; `job_posts` read; `applications` insert; `application_events` insert; `notifications` insert; `audit_logs` insert | Aligned for apply flow. |
-| `GET` | `/api/applications/{application_id}` | candidate, recruiter, admin | application id | `ApplicationDetail` | none | `applications` read; `job_posts` read for visibility | Partial: target detail includes event history; runtime returns application fields only. |
+| `GET` | `/api/applications/{application_id}` | candidate, recruiter, admin | application id | `ApplicationDetail` with `events: list[ApplicationEvent]` | none | `applications` read; `application_events` read; `job_posts` read for visibility | Aligned (Slice 3): detail now includes event history; list endpoint keeps events empty for cost. |
 | `POST` | `/api/applications/{application_id}/status` | authenticated active user | `ApplicationStatusRequest` | `ApplicationDetail` | Updates status; appends event; notifies candidate; writes audit event | `applications` read/update; `job_posts` read; `application_events` insert; `notifications` insert; `audit_logs` insert | Drift: runtime checks role and target status, but does not enforce full allowed transition graph or terminal-state lock. |
 
 ## Invites
@@ -140,9 +140,9 @@ not treat it as the final architecture contract.
 | Method | Path | Roles | Main input | Response | Side effects | DB touchpoints | Contract status |
 |---|---|---|---|---|---|---|---|
 | `GET` | `/api/invites` | candidate, recruiter, admin | `status?`, `job_id?`, `resume_id?`, `limit`, `offset` | paginated `InviteDetail` | none | `recruiter_invites` read; `job_posts` read for visibility | Aligned for role-scoped listing. |
-| `POST` | `/api/invites` | recruiter | `InviteRequest`: job id, resume id, optional message | `InviteDetail` | Creates pending invite; notifies candidate; writes audit event | `candidate_resumes` read; `job_posts` read; `recruiter_invites` insert; `notifications` insert; `audit_logs` insert | Partial: no duplicate pending-invite guard is visible. |
+| `POST` | `/api/invites` | recruiter | `InviteRequest`: job id, resume id, optional message | `InviteDetail` | Creates pending invite; notifies candidate; writes audit event. Rejects duplicate pending invite with 409 `duplicate_invite`. | `candidate_resumes` read; `job_posts` read; `recruiter_invites` read (dup check) + insert; `notifications` insert; `audit_logs` insert | Aligned (Slice 3). |
 | `GET` | `/api/invites/{invite_id}` | candidate, recruiter, admin | invite id | `InviteDetail` | none | `recruiter_invites` read; `job_posts` read for visibility | Aligned. |
-| `POST` | `/api/invites/{invite_id}/accept` | candidate | invite id | `{ invite, application }` | Sets invite accepted; notifies recruiter; writes audit event; creates or returns application | `recruiter_invites` read/update; `notifications` insert; `audit_logs` insert; `candidate_resumes` read; `job_posts` read; `applications` insert/read; `application_events` insert when new | Aligned on duplicate application behavior; partial because response has no explicit response model. |
+| `POST` | `/api/invites/{invite_id}/accept` | candidate | invite id | `InviteAcceptResponse: { invite, application }` | Sets invite accepted; notifies recruiter; writes audit event; creates or returns application | `recruiter_invites` read/update; `notifications` insert; `audit_logs` insert; `candidate_resumes` read; `job_posts` read; `applications` insert/read; `application_events` insert when new | Aligned (Slice 3): explicit response model. |
 | `POST` | `/api/invites/{invite_id}/reject` | candidate | optional note | `InviteDetail` | Sets invite rejected; notifies recruiter; writes audit event | `recruiter_invites` read/update; `notifications` insert; `audit_logs` insert | Aligned. |
 
 ## Notifications
@@ -151,7 +151,7 @@ not treat it as the final architecture contract.
 |---|---|---|---|---|---|---|---|
 | `GET` | `/api/notifications` | authenticated active user | `status?`, `limit`, `offset` | paginated `NotificationDetail` | none | `notifications` read | Aligned. |
 | `POST` | `/api/notifications/{notification_id}/read` | notification owner | notification id | `NotificationDetail` | Sets notification read | `notifications` update | Aligned. |
-| `POST` | `/api/notifications/read-all` | authenticated active user | bearer token | `{ updated }` | Marks current user's unread notifications as read | `notifications` update | Drift: target response key is `updated_count`; runtime key is `updated`. |
+| `POST` | `/api/notifications/read-all` | authenticated active user | bearer token | `NotificationsReadAllResponse: { updated_count }` | Marks current user's unread notifications as read | `notifications` update | Aligned (Slice 3): key renamed from `updated` to `updated_count`. |
 
 ## Admin Monitoring
 
@@ -219,7 +219,7 @@ Classification rules:
 | `POST /api/matching/resumes/{resume_id}/run` | No candidate ownership check. | Candidate must own resume (admin bypass). | non-breaking |
 | Disabled users | Needed global guard on protected active actions. | Confirmed: `require_roles` chains through `require_active`; all role-gated endpoints reject disabled. | non-breaking |
 
-### API Contract Drift Cleanup (Slice 3)
+### API Contract Drift Cleanup (Slice 3 — done 2026-05-16)
 
 | Endpoint | Gap | Fix | Impact |
 |---|---|---|---|
@@ -238,7 +238,7 @@ Classification rules:
 | `POST /api/jobs/{id}/publish` `close` | No transition guard. | Enforce draft→published, published→closed. | non-breaking |
 | `POST /api/candidate/resumes/{id}/activate` `archive` | No lifecycle conflict guard. | Add transition guard. | non-breaking |
 
-### Document Upload Foundation (Slice 4)
+### Document Upload Foundation (Slice 4 — done 2026-05-16)
 
 | Endpoint | Gap | Fix | Impact |
 |---|---|---|---|

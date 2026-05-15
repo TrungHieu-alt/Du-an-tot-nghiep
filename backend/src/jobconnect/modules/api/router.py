@@ -11,11 +11,12 @@ from dataclasses import dataclass
 from typing import Any, Literal, Optional
 
 import psycopg
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 
 from jobconnect.core.database import get_connection
 from jobconnect.integrations.pgvector import vector_to_pg_literal
+from jobconnect.integrations.storage import get_storage
 from jobconnect.modules.matching.embedding import embed_text
 from jobconnect.modules.matching.filters import passes_hard_filter
 from jobconnect.modules.matching.models import (
@@ -143,6 +144,21 @@ class ResumeRequest(APIModel):
     is_primary: bool = False
 
 
+class ResumeUpdateRequest(APIModel):
+    """Partial PATCH body for resumes; only included fields are applied."""
+
+    title: Optional[str] = Field(default=None, min_length=1)
+    summary: Optional[str] = None
+    experience: Optional[str] = None
+    skills: Optional[list[str]] = None
+    location: Optional[Location] = None
+    job_type: Optional[JobType] = None
+    seniority: Optional[Seniority] = None
+    education: Optional[Education] = None
+    certifications: Optional[list[str]] = None
+    is_primary: Optional[bool] = None
+
+
 class ResumeSummary(APIModel):
     resume_id: int
     title: str
@@ -172,6 +188,21 @@ class JobRequest(APIModel):
     seniority: Seniority
     education: Education
     required_certifications: list[str] = Field(default_factory=list)
+    expires_at: Optional[str] = None
+
+
+class JobUpdateRequest(APIModel):
+    """Partial PATCH body for jobs; only included fields are applied."""
+
+    organization_id: Optional[int] = None
+    title: Optional[str] = Field(default=None, min_length=1)
+    requirement: Optional[str] = None
+    skills: Optional[list[str]] = None
+    location: Optional[Location] = None
+    job_type: Optional[JobType] = None
+    seniority: Optional[Seniority] = None
+    education: Optional[Education] = None
+    required_certifications: Optional[list[str]] = None
     expires_at: Optional[str] = None
 
 
@@ -241,21 +272,42 @@ class MatchingResponse(APIModel):
     runtime: dict[str, float]
 
 
-class DocumentRequest(APIModel):
-    document_type: Literal["candidate_resume", "job_post"]
-    original_filename: str
-    mime_type: str
-    file_size_bytes: int = Field(gt=0, le=10 * 1024 * 1024)
-    object_key: Optional[str] = None
-    file_url: Optional[str] = None
+class ParseJobDetail(APIModel):
+    parse_job_id: int
+    document_id: int
+    target_entity_type: Literal["candidate_resume", "job_post"]
     resume_id: Optional[int] = None
     job_id: Optional[int] = None
+    status: ParseStatus
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: str
+    updated_at: str
 
 
-class DocumentDetail(DocumentRequest):
+class DocumentDetail(APIModel):
     document_id: int
     owner_user_id: int
+    document_type: Literal["candidate_resume", "job_post"]
+    object_key: Optional[str] = None
+    file_url: Optional[str] = None
+    original_filename: str
+    mime_type: str
+    file_size_bytes: int
+    resume_id: Optional[int] = None
+    job_id: Optional[int] = None
     created_at: str
+    parse_jobs: list[ParseJobDetail] = Field(default_factory=list)
+
+
+class DocumentUploadResponse(APIModel):
+    document: DocumentDetail
+    parse_job: ParseJobDetail
+
+
+class DocumentDownloadUrlResponse(APIModel):
+    download_url: str
+    expires_at: str
 
 
 class ApplicationRequest(APIModel):
@@ -269,12 +321,22 @@ class ApplicationStatusRequest(APIModel):
     note: Optional[str] = None
 
 
+class ApplicationEvent(APIModel):
+    event_id: int
+    from_status: Optional[ApplicationStatus] = None
+    to_status: ApplicationStatus
+    actor_user_id: int
+    note: Optional[str] = None
+    created_at: str
+
+
 class ApplicationDetail(APIModel):
     application_id: int
     job_id: int
     candidate_user_id: int
     resume_id: int
     status: ApplicationStatus
+    events: list[ApplicationEvent] = Field(default_factory=list)
 
 
 class InviteRequest(APIModel):
@@ -287,6 +349,28 @@ class InviteRejectRequest(APIModel):
     note: Optional[str] = None
 
 
+class SemanticResumeItem(ResumeSummary):
+    relevance_score: float = Field(ge=0.0, le=1.0)
+
+
+class SemanticJobItem(JobSummary):
+    relevance_score: float = Field(ge=0.0, le=1.0)
+
+
+class SemanticResumeSearchResponse(APIModel):
+    items: list[SemanticResumeItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class SemanticJobSearchResponse(APIModel):
+    items: list[SemanticJobItem]
+    total: int
+    limit: int
+    offset: int
+
+
 class InviteDetail(APIModel):
     invite_id: int
     job_id: int
@@ -295,6 +379,15 @@ class InviteDetail(APIModel):
     recruiter_user_id: int
     status: InviteStatus
     message: Optional[str] = None
+
+
+class InviteAcceptResponse(APIModel):
+    invite: InviteDetail
+    application: ApplicationDetail
+
+
+class NotificationsReadAllResponse(APIModel):
+    updated_count: int = Field(ge=0)
 
 
 class NotificationDetail(APIModel):
@@ -740,19 +833,28 @@ def put_candidate_profile(
 
 @organizations_router.get("", response_model=Paginated)
 def list_organizations(
+    q: Optional[str] = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     _: CurrentUser = Depends(current_user),
 ):
+    where = ["TRUE"]
+    params: list[Any] = []
+    if q:
+        where.append("(name ILIKE %s OR slug ILIKE %s)")
+        pat = f"%{q}%"
+        params.extend([pat, pat])
+    sql_where = " AND ".join(where)
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute("SELECT COUNT(*) FROM organizations")
+        cur.execute(f"SELECT COUNT(*) FROM organizations WHERE {sql_where}", params)
         total = cur.fetchone()[0]
         cur.execute(
-            """
+            f"""
             SELECT organization_id, name, slug, logo_url, about
-            FROM organizations ORDER BY organization_id ASC LIMIT %s OFFSET %s
+            FROM organizations WHERE {sql_where}
+            ORDER BY organization_id ASC LIMIT %s OFFSET %s
             """,
-            (limit, offset),
+            (*params, limit, offset),
         )
         items = [
             Organization(
@@ -950,7 +1052,9 @@ def search_resumes(
     return Paginated(items=items, total=total, limit=limit, offset=offset)
 
 
-@candidate_router.post("/resumes/semantic-search", response_model=Paginated)
+@candidate_router.post(
+    "/resumes/semantic-search", response_model=SemanticResumeSearchResponse
+)
 def semantic_search_resumes(
     request: SemanticSearchRequest,
     _: CurrentUser = Depends(require_roles("recruiter", "admin")),
@@ -977,10 +1081,15 @@ def semantic_search_resumes(
             (q_vec, *params, request.top_k),
         )
         items = [
-            {**resume_summary(r[:9]).model_dump(), "relevance_score": max(0.0, min(1.0, float(r[9])))}
+            SemanticResumeItem(
+                **resume_summary(r[:9]).model_dump(),
+                relevance_score=max(0.0, min(1.0, float(r[9]))),
+            )
             for r in cur.fetchall()
         ]
-    return Paginated(items=items, total=len(items), limit=request.top_k, offset=0)
+    return SemanticResumeSearchResponse(
+        items=items, total=len(items), limit=request.top_k, offset=0
+    )
 
 
 @candidate_router.get("/resumes/{resume_id}", response_model=ResumeDetail)
@@ -998,7 +1107,7 @@ def get_resume(resume_id: int, user: CurrentUser = Depends(require_active)):
 @candidate_router.patch("/resumes/{resume_id}", response_model=ResumeDetail)
 def update_resume(
     resume_id: int,
-    request: ResumeRequest,
+    request: ResumeUpdateRequest,
     user: CurrentUser = Depends(require_roles("candidate")),
 ):
     row = _get_resume_row(resume_id)
@@ -1006,31 +1115,36 @@ def update_resume(
         raise business_error(404, "not_found", "Resume not found.")
     if row[1] != user.user_id:
         raise business_error(403, "forbidden", "You can update only your own resumes.")
+    patch = request.model_dump(exclude_unset=True)
+    if not patch:
+        return resume_detail(row)
+    set_parts = [f"{col} = %s" for col in patch]
+    params: list[Any] = list(patch.values())
+    set_parts.append("updated_at = now()")
+    params.append(resume_id)
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
-            """
-            UPDATE candidate_resumes SET
-                title = %s, summary = %s, experience = %s, skills = %s, location = %s,
-                job_type = %s, seniority = %s, education = %s, certifications = %s,
-                is_primary = %s, updated_at = now()
-            WHERE resume_id = %s
-            RETURNING """ + RESUME_DETAIL_COLS,
-            (
-                request.title,
-                request.summary,
-                request.experience,
-                request.skills,
-                request.location,
-                request.job_type,
-                request.seniority,
-                request.education,
-                request.certifications,
-                request.is_primary,
-                resume_id,
-            ),
+            f"UPDATE candidate_resumes SET {', '.join(set_parts)} WHERE resume_id = %s RETURNING {RESUME_DETAIL_COLS}",
+            params,
         )
         updated = cur.fetchone()
-        _upsert_resume_embeddings(conn, resume_id, request)
+        # Refresh embeddings using merged state. RESUME_DETAIL_COLS column order:
+        # 0 resume_id, 1 candidate_user_id, 2 title, 3 summary, 4 experience,
+        # 5 skills, 6 location, 7 job_type, 8 seniority, 9 education,
+        # 10 certifications, 11 is_primary, 12 status.
+        merged = ResumeRequest(
+            title=updated[2],
+            summary=updated[3] or "",
+            experience=updated[4] or "",
+            skills=list(updated[5] or []),
+            location=updated[6],
+            job_type=updated[7],
+            seniority=updated[8],
+            education=updated[9],
+            certifications=list(updated[10] or []),
+            is_primary=bool(updated[11]),
+        )
+        _upsert_resume_embeddings(conn, resume_id, merged)
     return resume_detail(updated)
 
 
@@ -1047,11 +1161,18 @@ def archive_resume(resume_id: int, user: CurrentUser = Depends(require_roles("ca
 @jobs_router.get("", response_model=Paginated)
 def list_jobs(
     status: Optional[JobStatus] = None,
+    location: Optional[Location] = None,
+    job_type: Optional[JobType] = None,
+    seniority: Optional[Seniority] = None,
+    q: Optional[str] = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     user: CurrentUser = Depends(require_active),
 ):
-    where, params = _visible_job_list_filter(user, status)
+    # Slice 3: list shares the same filter helper as /jobs/search so all
+    # optional structured filters (`location`, `job_type`, `seniority`, `q`)
+    # behave identically across the two endpoints.
+    where, params = _visible_job_search_filter(user, q, location, job_type, seniority, status)
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(f"SELECT COUNT(*) FROM job_posts WHERE {where}", params)
         total = cur.fetchone()[0]
@@ -1111,7 +1232,16 @@ def search_jobs(
     offset: int = Query(0, ge=0),
     user: CurrentUser = Depends(require_active),
 ):
-    where, params = _visible_job_search_filter(user, q, location, job_type, seniority, status)
+    # Slice 3: `q` matches title, skills, AND organization name. We pass q=None
+    # to the helper and append the extended q clause inline.
+    where, params = _visible_job_search_filter(user, None, location, job_type, seniority, status)
+    if q:
+        pat = f"%{q}%"
+        where = (
+            f"{where} AND (title ILIKE %s OR array_to_string(skills, ' ') ILIKE %s "
+            "OR organization_id IN (SELECT organization_id FROM organizations WHERE name ILIKE %s))"
+        )
+        params.extend([pat, pat, pat])
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(f"SELECT COUNT(*) FROM job_posts WHERE {where}", params)
         total = cur.fetchone()[0]
@@ -1128,7 +1258,7 @@ def search_jobs(
     return Paginated(items=items, total=total, limit=limit, offset=offset)
 
 
-@jobs_router.post("/semantic-search", response_model=Paginated)
+@jobs_router.post("/semantic-search", response_model=SemanticJobSearchResponse)
 def semantic_search_jobs(request: SemanticSearchRequest, user: CurrentUser = Depends(require_active)):
     q_vec = _vec(request.query)
     where, params = _visible_job_search_filter(
@@ -1139,6 +1269,10 @@ def semantic_search_jobs(request: SemanticSearchRequest, user: CurrentUser = Dep
         request.filters.get("seniority"),
         None,
     )
+    # `_visible_job_search_filter` builds clauses without `j.` qualifier; the SQL
+    # below uses `j.` so we need a small re-qualification. Easiest: alias the
+    # job table without prefix in WHERE by relying on column names (Postgres
+    # resolves unprefixed columns to job_posts since only that table has them).
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             f"""
@@ -1154,10 +1288,15 @@ def semantic_search_jobs(request: SemanticSearchRequest, user: CurrentUser = Dep
             (q_vec, *params, request.top_k),
         )
         items = [
-            {**job_summary(r[:10]).model_dump(), "relevance_score": max(0.0, min(1.0, float(r[10])))}
+            SemanticJobItem(
+                **job_summary(r[:10]).model_dump(),
+                relevance_score=max(0.0, min(1.0, float(r[10]))),
+            )
             for r in cur.fetchall()
         ]
-    return Paginated(items=items, total=len(items), limit=request.top_k, offset=0)
+    return SemanticJobSearchResponse(
+        items=items, total=len(items), limit=request.top_k, offset=0
+    )
 
 
 @jobs_router.get("/{job_id}", response_model=JobDetail)
@@ -1173,37 +1312,42 @@ def get_job(job_id: int, user: CurrentUser = Depends(require_active)):
 
 
 @jobs_router.patch("/{job_id}", response_model=JobDetail)
-def update_job(job_id: int, request: JobRequest, user: CurrentUser = Depends(require_roles("recruiter", "admin"))):
+def update_job(job_id: int, request: JobUpdateRequest, user: CurrentUser = Depends(require_roles("recruiter", "admin"))):
     row = _get_job_row(job_id)
     if row is None:
         raise business_error(404, "not_found", "Job not found.")
     if user.role == "recruiter" and row[2] != user.user_id:
         raise business_error(403, "forbidden", "You can update only your own jobs.")
+    patch = request.model_dump(exclude_unset=True)
+    if not patch:
+        return job_detail(row)
+    set_parts = [f"{col} = %s" for col in patch]
+    params: list[Any] = list(patch.values())
+    set_parts.append("updated_at = now()")
+    params.append(job_id)
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
-            """
-            UPDATE job_posts SET
-                organization_id = %s, title = %s, requirement = %s, skills = %s,
-                location = %s, job_type = %s, seniority = %s, education = %s,
-                required_certifications = %s, expires_at = %s, updated_at = now()
-            WHERE job_id = %s
-            RETURNING """ + JOB_DETAIL_COLS,
-            (
-                request.organization_id,
-                request.title,
-                request.requirement,
-                request.skills,
-                request.location,
-                request.job_type,
-                request.seniority,
-                request.education,
-                request.required_certifications,
-                request.expires_at,
-                job_id,
-            ),
+            f"UPDATE job_posts SET {', '.join(set_parts)} WHERE job_id = %s RETURNING {JOB_DETAIL_COLS}",
+            params,
         )
         updated = cur.fetchone()
-        _upsert_job_embeddings(conn, job_id, request)
+        # JOB_DETAIL_COLS order:
+        # 0 job_id, 1 organization_id, 2 recruiter_user_id, 3 title, 4 requirement,
+        # 5 skills, 6 location, 7 job_type, 8 seniority, 9 education,
+        # 10 required_certifications, 11 status, 12 published_at, 13 expires_at.
+        merged = JobRequest(
+            organization_id=updated[1],
+            title=updated[3],
+            requirement=updated[4] or "",
+            skills=list(updated[5] or []),
+            location=updated[6],
+            job_type=updated[7],
+            seniority=updated[8],
+            education=updated[9],
+            required_certifications=list(updated[10] or []),
+            expires_at=_dt(updated[13]),
+        )
+        _upsert_job_embeddings(conn, job_id, merged)
     return job_detail(updated)
 
 
@@ -1251,48 +1395,100 @@ def run_resume_matching(
     return _run_matching("resume", resume_id, request)
 
 
+ALLOWED_DOCUMENT_MIME_TYPES: frozenset[str] = frozenset(
+    {
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }
+)
+
+MAX_DOCUMENT_BYTES: int = 10 * 1024 * 1024  # 10 MiB
+
+
 @documents_router.post(
     "",
-    response_model=DocumentDetail,
+    response_model=DocumentUploadResponse,
     status_code=201,
-    description="Stores document metadata for an already-uploaded file. Accepted MIME types: application/pdf, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document. Max file size: 10 MiB.",
+    description=(
+        "Upload a CV or JD via multipart/form-data. Required form field: `file`. "
+        "Required form field: `document_type` (candidate_resume|job_post). "
+        "Optional form fields: `resume_id`, `job_id`. "
+        "Accepted MIME types: application/pdf, application/msword, "
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document. "
+        "Max file size: 10 MiB."
+    ),
 )
-def create_document(request: DocumentRequest, user: CurrentUser = Depends(require_active)):
-    if request.object_key is None and request.file_url is None:
-        raise business_error(422, "missing_storage_ref", "object_key or file_url is required.")
+def create_document(
+    document_type: Literal["candidate_resume", "job_post"] = Form(...),
+    file: UploadFile = File(...),
+    resume_id: Optional[int] = Form(default=None),
+    job_id: Optional[int] = Form(default=None),
+    user: CurrentUser = Depends(require_active),
+) -> DocumentUploadResponse:
+    # Slice 4: multipart upload writes through the Storage adapter before any DB rows
+    # are persisted, so a failed upload never leaves orphan rows.
+    mime_type = (file.content_type or "").lower()
+    if mime_type not in ALLOWED_DOCUMENT_MIME_TYPES:
+        raise business_error(
+            415,
+            "unsupported_mime_type",
+            f"MIME type {mime_type!r} is not allowed.",
+        )
+    original_filename = file.filename or "upload"
+    try:
+        stored = get_storage().save(
+            file.file,
+            key_hint=original_filename,
+            content_type=mime_type,
+            max_bytes=MAX_DOCUMENT_BYTES,
+        )
+    except ValueError as exc:
+        raise business_error(413, "file_too_large", str(exc)) from exc
+    finally:
+        try:
+            file.file.close()
+        except Exception:  # pragma: no cover - best-effort cleanup
+            pass
+
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO uploaded_documents
                 (owner_user_id, document_type, object_key, file_url, original_filename,
                  mime_type, file_size_bytes, resume_id, job_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, NULL, %s, %s, %s, %s, %s)
             RETURNING document_id, owner_user_id, document_type, object_key, file_url,
                       original_filename, mime_type, file_size_bytes, resume_id, job_id, created_at
             """,
             (
                 user.user_id,
-                request.document_type,
-                request.object_key,
-                request.file_url,
-                request.original_filename,
-                request.mime_type,
-                request.file_size_bytes,
-                request.resume_id,
-                request.job_id,
+                document_type,
+                stored.object_key,
+                original_filename,
+                mime_type,
+                stored.size_bytes,
+                resume_id,
+                job_id,
             ),
         )
-        row = cur.fetchone()
-        target_type = request.document_type
+        document_row = cur.fetchone()
         cur.execute(
             """
             INSERT INTO parse_jobs
                 (document_id, target_entity_type, resume_id, job_id, parser_version, embedding_version_requested)
             VALUES (%s, %s, %s, %s, 'external-parser-v1', 'hash-v1')
+            RETURNING parse_job_id, document_id, target_entity_type, resume_id, job_id, status,
+                      error_code, error_message, created_at, updated_at
             """,
-            (row[0], target_type, request.resume_id, request.job_id),
+            (document_row[0], document_type, resume_id, job_id),
         )
-    return _document_detail(row)
+        parse_row = cur.fetchone()
+        _audit(cur, user.user_id, "document_uploaded", "document", document_row[0])
+    return DocumentUploadResponse(
+        document=_document_detail(document_row),
+        parse_job=_parse_job_detail(parse_row),
+    )
 
 
 @documents_router.get("", response_model=Paginated)
@@ -1333,15 +1529,42 @@ def get_document(document_id: int, user: CurrentUser = Depends(require_active)):
     row = _get_document_row(document_id, user)
     if row is None:
         raise business_error(404, "not_found", "Document not found.")
-    return _document_detail(row)
+    # Slice 4: detail includes linked parse jobs.
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT parse_job_id, document_id, target_entity_type, resume_id, job_id, status,
+                   error_code, error_message, created_at, updated_at
+              FROM parse_jobs
+             WHERE document_id = %s
+             ORDER BY parse_job_id ASC
+            """,
+            (document_id,),
+        )
+        parse_jobs = [_parse_job_detail(r) for r in cur.fetchall()]
+    detail = _document_detail(row)
+    return detail.model_copy(update={"parse_jobs": parse_jobs})
 
 
-@documents_router.get("/{document_id}/download-url")
-def get_download_url(document_id: int, user: CurrentUser = Depends(require_active)):
+@documents_router.get("/{document_id}/download-url", response_model=DocumentDownloadUrlResponse)
+def get_download_url(document_id: int, user: CurrentUser = Depends(require_active)) -> DocumentDownloadUrlResponse:
     row = _get_document_row(document_id, user)
     if row is None:
         raise business_error(404, "not_found", "Document not found.")
-    return {"download_url": row[4] or f"object://{row[3]}", "expires_in_seconds": 900}
+    # Slice 4: hand off URL generation to the storage adapter; rename
+    # `expires_in_seconds` → `expires_at` (ISO timestamp).
+    object_key = row[3]
+    if object_key:
+        link = get_storage().download_url(object_key)
+        return DocumentDownloadUrlResponse(
+            download_url=link.download_url, expires_at=link.expires_at
+        )
+    # Legacy rows pre-Slice 4 may have stored a raw URL.
+    from datetime import datetime, timedelta, timezone
+    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=900)).isoformat()
+    return DocumentDownloadUrlResponse(
+        download_url=row[4] or "", expires_at=expires_at
+    )
 
 
 @documents_router.get("/{document_id}/parse-jobs/{parse_job_id}")
@@ -1364,7 +1587,7 @@ def get_parse_job(document_id: int, parse_job_id: int, user: CurrentUser = Depen
     return _parse_job_detail(parse)
 
 
-@documents_router.post("/{document_id}/parse-jobs", status_code=201)
+@documents_router.post("/{document_id}/parse-jobs", response_model=ParseJobDetail, status_code=201)
 def create_parse_job(document_id: int, user: CurrentUser = Depends(require_active)):
     row = _get_document_row(document_id, user)
     if row is None:
@@ -1381,6 +1604,8 @@ def create_parse_job(document_id: int, user: CurrentUser = Depends(require_activ
             (document_id, row[2], row[8], row[9]),
         )
         parse = cur.fetchone()
+        # Slice 4: retry is auditable so admins can trace re-parses.
+        _audit(cur, user.user_id, "parse_job_retried", "parse_job", parse[0])
     return _parse_job_detail(parse)
 
 
@@ -1421,7 +1646,30 @@ def get_application(application_id: int, user: CurrentUser = Depends(require_act
     row = _get_application_row(application_id, user)
     if row is None:
         raise business_error(404, "not_found", "Application not found.")
-    return _application_detail(row)
+    # Slice 3: include event history on detail (not on list).
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT event_id, from_status, to_status, actor_user_id, note, created_at
+              FROM application_events
+             WHERE application_id = %s
+             ORDER BY event_id ASC
+            """,
+            (application_id,),
+        )
+        events = [
+            ApplicationEvent(
+                event_id=r[0],
+                from_status=r[1],
+                to_status=r[2],
+                actor_user_id=r[3],
+                note=r[4],
+                created_at=_dt(r[5]),
+            )
+            for r in cur.fetchall()
+        ]
+    detail = _application_detail(row)
+    return detail.model_copy(update={"events": events})
 
 
 @applications_router.post("/{application_id}/status", response_model=ApplicationDetail)
@@ -1490,6 +1738,20 @@ def create_invite(request: InviteRequest, user: CurrentUser = Depends(require_ro
     if job[2] != user.user_id:
         raise business_error(403, "forbidden", "Recruiters can invite only for their own jobs.")
     with get_connection() as conn, conn.cursor() as cur:
+        # Slice 3: reject duplicate pending invite for the same job/resume pair.
+        cur.execute(
+            """
+            SELECT 1 FROM recruiter_invites
+             WHERE job_id = %s AND resume_id = %s AND status = 'pending'
+            """,
+            (request.job_id, request.resume_id),
+        )
+        if cur.fetchone() is not None:
+            raise business_error(
+                409,
+                "duplicate_invite",
+                "A pending invite already exists for this job and resume.",
+            )
         cur.execute(
             """
             INSERT INTO recruiter_invites
@@ -1513,7 +1775,7 @@ def get_invite(invite_id: int, user: CurrentUser = Depends(require_active)):
     return _invite_detail(row)
 
 
-@invites_router.post("/{invite_id}/accept")
+@invites_router.post("/{invite_id}/accept", response_model=InviteAcceptResponse)
 def accept_invite(invite_id: int, user: CurrentUser = Depends(require_roles("candidate"))):
     row = _get_invite_row(invite_id, user)
     if row is None:
@@ -1529,7 +1791,10 @@ def accept_invite(invite_id: int, user: CurrentUser = Depends(require_roles("can
         _notify(cur, updated[4], "invite_accepted", "Invite accepted", "Candidate accepted your invite.", "invite", invite_id)
         _audit(cur, user.user_id, "invite_accepted", "invite", invite_id)
     app = _create_application(updated[1], updated[2], updated[3], user.user_id, "Accepted invite", allow_existing=True)
-    return {"invite": _invite_detail(updated), "application": _application_detail(app)}
+    return InviteAcceptResponse(
+        invite=_invite_detail(updated),
+        application=_application_detail(app),
+    )
 
 
 @invites_router.post("/{invite_id}/reject", response_model=InviteDetail)
@@ -1599,7 +1864,7 @@ def mark_notification_read(notification_id: int, user: CurrentUser = Depends(req
     return _notification_detail(row)
 
 
-@notifications_router.post("/read-all")
+@notifications_router.post("/read-all", response_model=NotificationsReadAllResponse)
 def mark_all_notifications_read(user: CurrentUser = Depends(require_active)):
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
@@ -1607,7 +1872,7 @@ def mark_all_notifications_read(user: CurrentUser = Depends(require_active)):
             (user.user_id,),
         )
         count = cur.rowcount
-    return {"updated": count}
+    return NotificationsReadAllResponse(updated_count=max(0, count))
 
 
 @admin_router.get("/users", response_model=Paginated)
@@ -1837,6 +2102,18 @@ def _visible_job_search_filter(user: CurrentUser, q: Optional[str], location: An
     return " AND ".join(parts), params
 
 
+# Slice 3: explicit lifecycle transition graphs (target state -> allowed sources).
+JOB_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    "published": {"draft"},
+    "closed": {"draft", "published"},
+}
+
+RESUME_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    "active": {"draft", "archived"},
+    "archived": {"draft", "active"},
+}
+
+
 def _recruiter_in_organization(user_id: int, organization_id: int) -> bool:
     """True if `user_id` has a recruiter_profile bound to `organization_id`."""
     with get_connection() as conn, conn.cursor() as cur:
@@ -1865,6 +2142,14 @@ def _set_resume_status(resume_id: int, status: str, user: CurrentUser) -> Resume
         raise business_error(404, "not_found", "Resume not found.")
     if row[1] != user.user_id:
         raise business_error(403, "forbidden", "You can update only your own resumes.")
+    current = row[12]
+    allowed_from = RESUME_STATUS_TRANSITIONS.get(status, set())
+    if current not in allowed_from:
+        raise business_error(
+            409,
+            "invalid_transition",
+            f"Resume cannot transition from {current} to {status}.",
+        )
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             f"UPDATE candidate_resumes SET status = %s, updated_at = now() WHERE resume_id = %s RETURNING {RESUME_DETAIL_COLS}",
@@ -1881,6 +2166,14 @@ def _set_job_status(job_id: int, status: str, user: CurrentUser) -> JobDetail:
         raise business_error(404, "not_found", "Job not found.")
     if user.role == "recruiter" and row[2] != user.user_id:
         raise business_error(403, "forbidden", "You can update only your own jobs.")
+    current = row[11]
+    allowed_from = JOB_STATUS_TRANSITIONS.get(status, set())
+    if current not in allowed_from:
+        raise business_error(
+            409,
+            "invalid_transition",
+            f"Job cannot transition from {current} to {status}.",
+        )
     published_set = ", published_at = COALESCE(published_at, now())" if status == "published" else ""
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
@@ -2113,19 +2406,19 @@ def _get_document_row(document_id: int, user: CurrentUser) -> Optional[tuple]:
         return cur.fetchone()
 
 
-def _parse_job_detail(row: tuple) -> dict[str, Any]:
-    return {
-        "parse_job_id": row[0],
-        "document_id": row[1],
-        "target_entity_type": row[2],
-        "resume_id": row[3],
-        "job_id": row[4],
-        "status": row[5],
-        "error_code": row[6],
-        "error_message": row[7],
-        "created_at": _dt(row[8]),
-        "updated_at": _dt(row[9]),
-    }
+def _parse_job_detail(row: tuple) -> ParseJobDetail:
+    return ParseJobDetail(
+        parse_job_id=row[0],
+        document_id=row[1],
+        target_entity_type=row[2],
+        resume_id=row[3],
+        job_id=row[4],
+        status=row[5],
+        error_code=row[6],
+        error_message=row[7],
+        created_at=_dt(row[8]),
+        updated_at=_dt(row[9]),
+    )
 
 
 def _application_detail(row: tuple) -> ApplicationDetail:
