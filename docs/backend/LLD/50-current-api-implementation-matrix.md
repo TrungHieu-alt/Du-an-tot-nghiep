@@ -42,7 +42,7 @@ not treat it as the final architecture contract.
 
 | Area | Current implementation | Contract/design note |
 |---|---|---|
-| Auth | Custom HMAC JWT with `sub`, `role`, `iat`; no visible `exp` or token revocation. | Target only says JWT sessions; production policy still needs expiry/revocation decision. |
+| Auth | Custom HMAC JWT with `sub`, `role`, `iat`, `exp` (TTL via `JWT_TTL_SECONDS`, default 86400s). Expired tokens rejected with `expired_token`; tokens missing `exp` also rejected. | Aligned with target JWT session policy (Slice 1). Revocation list still future work. |
 | Error envelope | `HTTPException` and validation errors are normalized into `{ "error": ... }`. | Broadly aligned with target error envelope. |
 | Request validation | Pydantic models use `extra="forbid"`; PATCH endpoints mostly use full request models. | Target describes partial PATCH semantics for resumes/jobs; implementation currently behaves like replace/update with full body. |
 | Pagination | Offset pagination with `limit` and `offset` on list endpoints. | Aligned. |
@@ -64,23 +64,23 @@ not treat it as the final architecture contract.
 
 | Method | Path | Roles | Main input | Response | Side effects | DB touchpoints | Contract status |
 |---|---|---|---|---|---|---|---|
-| `POST` | `/api/auth/register` | Public | `RegisterRequest`: email, password, role | `AuthResponse`: access token and user | Creates user; hashes password | `users` insert | Partial: target response includes `expires_in`; runtime does not. |
-| `POST` | `/api/auth/login` | Public | `LoginRequest`: email, password | `AuthResponse`: access token and user | Verifies password; blocks disabled user | `users` read | Partial: target response includes `expires_in`; runtime does not. |
+| `POST` | `/api/auth/register` | Public | `RegisterRequest`: email, password, role | `AuthResponse`: access token, `expires_in`, user | Creates user; hashes password; issues JWT with `exp` | `users` insert | Aligned (Slice 1). |
+| `POST` | `/api/auth/login` | Public | `LoginRequest`: email, password | `AuthResponse`: access token, `expires_in`, user | Verifies password; blocks disabled user; issues JWT with `exp` | `users` read | Aligned (Slice 1). |
 | `POST` | `/api/auth/logout` | Authenticated | bearer token | `204 No Content` | none; client discards token | `users` read through auth dependency | Aligned for stateless token behavior. |
-| `GET` | `/api/me` | Authenticated | bearer token | `UserSummary` | none | `users` read | Drift: target says account plus role-specific profile bootstrap; runtime returns user only. |
+| `GET` | `/api/me` | Authenticated | bearer token | `MeResponse`: user + optional candidate_profile / recruiter_profile + organization | none | `users` read; `candidate_profiles` or `recruiter_profiles` + `organizations` read by role | Aligned (Slice 1). |
 
 ## Profiles And Organizations
 
 | Method | Path | Roles | Main input | Response | Side effects | DB touchpoints | Contract status |
 |---|---|---|---|---|---|---|---|
-| `GET` | `/api/candidate/profile` | candidate, admin | bearer token | `CandidateProfile` | none | `candidate_profiles` read | Partial: admin dependency exists but reads profile by current admin user id, not arbitrary candidate. |
+| `GET` | `/api/candidate/profile` | candidate | bearer token | `CandidateProfile` | none | `candidate_profiles` read | Aligned (Slice 2): admin role removed; admin must use `/api/admin/users/{user_id}`. |
 | `PUT` | `/api/candidate/profile` | candidate | `CandidateProfileRequest` | `CandidateProfile` | Upserts current candidate profile | `candidate_profiles` insert/update | Aligned. |
-| `GET` | `/api/recruiter/profile` | recruiter, admin | bearer token | `RecruiterProfile` | none | `recruiter_profiles` read | Partial: admin dependency exists but reads profile by current admin user id, not arbitrary recruiter. |
+| `GET` | `/api/recruiter/profile` | recruiter | bearer token | `RecruiterProfile` | none | `recruiter_profiles` read | Aligned (Slice 2): admin role removed; admin must use `/api/admin/users/{user_id}`. |
 | `PUT` | `/api/recruiter/profile` | recruiter | `RecruiterProfileRequest` | `RecruiterProfile` | Upserts current recruiter profile after organization check | `organizations` read; `recruiter_profiles` insert/update | Aligned. |
 | `GET` | `/api/organizations` | authenticated | `limit`, `offset` | paginated `Organization` | none | `organizations` read | Partial: target includes `q?`; runtime has no `q`. |
 | `POST` | `/api/organizations` | recruiter, admin | `OrganizationRequest` | `Organization` | Creates organization; writes audit event | `organizations` insert; `audit_logs` insert | Partial: target says recruiter; runtime also allows admin. |
 | `GET` | `/api/organizations/{organization_id}` | authenticated | organization id | `Organization` | none | `organizations` read | Aligned. |
-| `PATCH` | `/api/organizations/{organization_id}` | recruiter, admin | full `OrganizationRequest` | `Organization` | Updates organization; writes audit event | `organizations` update; `audit_logs` insert | Partial: target implies recruiter updates own organization; runtime does not check recruiter profile ownership. |
+| `PATCH` | `/api/organizations/{organization_id}` | recruiter (member), admin | full `OrganizationRequest` | `Organization` | Updates organization; writes audit event | `recruiter_profiles` read (recruiter only); `organizations` update; `audit_logs` insert | Aligned (Slice 2): recruiter must belong to the target organization (`recruiter_profiles.organization_id`); admin bypasses. Non-member recruiter → 404. |
 
 ## Candidate Resumes And Resume Search
 
@@ -112,8 +112,8 @@ not treat it as the final architecture contract.
 
 | Method | Path | Roles | Main input | Response | Side effects | DB touchpoints | Contract status |
 |---|---|---|---|---|---|---|---|
-| `POST` | `/api/matching/jobs/{job_id}/run` | recruiter, admin | `MatchingRequest`: `top_k`, `min_score`, `rerank` | `MatchingResponse` with ranked resumes | Computes hard filters, scores, reasoning; no application/invite creation | `job_posts` read; `candidate_resumes` read; `job_post_embeddings` read; `candidate_resume_embeddings` read | Partial: no recruiter ownership check for job anchor; `rerank` is accepted but not executed. |
-| `POST` | `/api/matching/resumes/{resume_id}/run` | candidate, admin | `MatchingRequest`: `top_k`, `min_score`, `rerank` | `MatchingResponse` with ranked jobs | Computes hard filters, scores, reasoning; no application/invite creation | `candidate_resumes` read; `job_posts` read; `candidate_resume_embeddings` read; `job_post_embeddings` read | Partial: no candidate ownership check for resume anchor; `rerank` is accepted but not executed. |
+| `POST` | `/api/matching/jobs/{job_id}/run` | recruiter (owner), admin | `MatchingRequest`: `top_k`, `min_score`, `rerank` | `MatchingResponse` with ranked resumes | Computes hard filters, scores, reasoning; no application/invite creation | `job_posts` read; `candidate_resumes` read; `job_post_embeddings` read; `candidate_resume_embeddings` read | Partial (Slice 2 closed ownership): recruiter must own the job anchor; admin bypasses. `rerank` still accepted but not executed (Slice 8). |
+| `POST` | `/api/matching/resumes/{resume_id}/run` | candidate (owner), admin | `MatchingRequest`: `top_k`, `min_score`, `rerank` | `MatchingResponse` with ranked jobs | Computes hard filters, scores, reasoning; no application/invite creation | `candidate_resumes` read; `job_posts` read; `candidate_resume_embeddings` read; `job_post_embeddings` read | Partial (Slice 2 closed ownership): candidate must own the resume anchor; admin bypasses. `rerank` still accepted but not executed (Slice 8). |
 
 ## Documents And Parse Jobs
 
@@ -208,16 +208,16 @@ Classification rules:
 | `GET /api/me` | Returns `UserSummary` only. | Return user + role-specific bootstrap (candidate profile / recruiter profile + organization). | breaking |
 | `POST /api/auth/logout` | Aligned for stateless behavior. | none. | none |
 
-### Ownership And Authorization (Slice 2)
+### Ownership And Authorization (Slice 2 — done 2026-05-16)
 
 | Endpoint | Gap | Fix | Impact |
 |---|---|---|---|
-| `GET /api/candidate/profile` | Admin path reads own admin id, not arbitrary candidate. | Restrict admin access to dedicated admin route; candidate path = own only. | non-breaking |
-| `GET /api/recruiter/profile` | Same admin id leakage. | Same fix. | non-breaking |
-| `PATCH /api/organizations/{id}` | No recruiter ownership check. | Enforce recruiter belongs to organization. | non-breaking |
-| `POST /api/matching/jobs/{job_id}/run` | No recruiter ownership check on job. | Enforce recruiter owns job or admin. | non-breaking |
-| `POST /api/matching/resumes/{resume_id}/run` | No candidate ownership check. | Enforce candidate owns resume or admin. | non-breaking |
-| Disabled users | No global guard on publish/activate/apply/invite/match. | Reject disabled users on protected active actions. | non-breaking |
+| `GET /api/candidate/profile` | Admin allowed but reads own admin id. | Restrict to `candidate` only; admin uses `/api/admin/users/{user_id}`. | non-breaking |
+| `GET /api/recruiter/profile` | Same admin id leakage. | Restrict to `recruiter` only. | non-breaking |
+| `PATCH /api/organizations/{id}` | No recruiter ownership check. | Enforce recruiter is member of organization via `recruiter_profiles`; non-member → 404. | non-breaking |
+| `POST /api/matching/jobs/{job_id}/run` | No recruiter ownership check on job. | Recruiter must own job (admin bypass). | non-breaking |
+| `POST /api/matching/resumes/{resume_id}/run` | No candidate ownership check. | Candidate must own resume (admin bypass). | non-breaking |
+| Disabled users | Needed global guard on protected active actions. | Confirmed: `require_roles` chains through `require_active`; all role-gated endpoints reject disabled. | non-breaking |
 
 ### API Contract Drift Cleanup (Slice 3)
 

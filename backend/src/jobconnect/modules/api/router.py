@@ -74,6 +74,7 @@ class UserSummary(APIModel):
 class AuthResponse(APIModel):
     access_token: str
     token_type: str = "bearer"
+    expires_in: int
     user: UserSummary
 
 
@@ -120,6 +121,13 @@ class RecruiterProfileRequest(APIModel):
 
 class RecruiterProfile(RecruiterProfileRequest):
     user_id: int
+
+
+class MeResponse(APIModel):
+    user: UserSummary
+    candidate_profile: Optional[CandidateProfile] = None
+    recruiter_profile: Optional[RecruiterProfile] = None
+    organization: Optional[Organization] = None
 
 
 class ResumeRequest(APIModel):
@@ -335,6 +343,13 @@ def _jwt_secret() -> bytes:
     return os.getenv("JWT_SECRET", "dev-only-change-me").encode("utf-8")
 
 
+def _jwt_ttl_seconds() -> int:
+    try:
+        return max(1, int(os.getenv("JWT_TTL_SECONDS", "86400")))
+    except ValueError:
+        return 86400
+
+
 def hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
     rounds = 200_000
@@ -355,12 +370,15 @@ def verify_password(password: str, stored: str) -> bool:
         return False
 
 
-def create_access_token(user_id: int, role: str) -> str:
+def create_access_token(user_id: int, role: str) -> tuple[str, int]:
+    """Build a signed JWT with explicit `exp`. Returns (token, expires_in_seconds)."""
+    ttl = _jwt_ttl_seconds()
+    now = int(time.time())
     header = _b64_json({"alg": "HS256", "typ": "JWT"})
-    payload = _b64_json({"sub": user_id, "role": role, "iat": int(time.time())})
+    payload = _b64_json({"sub": user_id, "role": role, "iat": now, "exp": now + ttl})
     signed = f"{header}.{payload}".encode("ascii")
     sig = _b64(hmac.new(_jwt_secret(), signed, hashlib.sha256).digest())
-    return f"{header}.{payload}.{sig}"
+    return f"{header}.{payload}.{sig}", ttl
 
 
 def parse_token(token: str) -> dict[str, Any]:
@@ -370,9 +388,13 @@ def parse_token(token: str) -> dict[str, Any]:
         expected = _b64(hmac.new(_jwt_secret(), signed, hashlib.sha256).digest())
         if not hmac.compare_digest(sig, expected):
             raise ValueError("bad signature")
-        return _unb64_json(payload)
+        claims = _unb64_json(payload)
     except Exception as exc:
         raise business_error(401, "invalid_token", "Missing or invalid JWT.") from exc
+    exp = claims.get("exp")
+    if not isinstance(exp, int) or exp <= int(time.time()):
+        raise business_error(401, "expired_token", "Token has expired.")
+    return claims
 
 
 def current_user(authorization: Optional[str] = Header(default=None)) -> CurrentUser:
@@ -562,7 +584,8 @@ def register(request: RegisterRequest) -> AuthResponse:
         except psycopg.errors.UniqueViolation as exc:
             raise business_error(409, "duplicate_email", "Email already exists.") from exc
     user = user_summary(row)
-    return AuthResponse(access_token=create_access_token(user.user_id, user.role), user=user)
+    token, expires_in = create_access_token(user.user_id, user.role)
+    return AuthResponse(access_token=token, expires_in=expires_in, user=user)
 
 
 @auth_router.post("/login", response_model=AuthResponse)
@@ -578,7 +601,8 @@ def login(request: LoginRequest) -> AuthResponse:
     if row[3] == "disabled":
         raise business_error(403, "disabled_user", "Disabled users cannot login.")
     user = user_summary(row[:5])
-    return AuthResponse(access_token=create_access_token(user.user_id, user.role), user=user)
+    token, expires_in = create_access_token(user.user_id, user.role)
+    return AuthResponse(access_token=token, expires_in=expires_in, user=user)
 
 
 @auth_router.post("/logout", status_code=204)
@@ -586,18 +610,73 @@ def logout(_: CurrentUser = Depends(current_user)) -> Response:
     return Response(status_code=204)
 
 
-@me_router.get("/me", response_model=UserSummary)
-def me(user: CurrentUser = Depends(current_user)) -> UserSummary:
+@me_router.get("/me", response_model=MeResponse)
+def me(user: CurrentUser = Depends(current_user)) -> MeResponse:
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             "SELECT user_id, email, role, status, created_at FROM users WHERE user_id = %s",
             (user.user_id,),
         )
-        return user_summary(cur.fetchone())
+        summary = user_summary(cur.fetchone())
+        candidate_profile: Optional[CandidateProfile] = None
+        recruiter_profile: Optional[RecruiterProfile] = None
+        organization: Optional[Organization] = None
+        if summary.role == "candidate":
+            cur.execute(
+                """
+                SELECT user_id, full_name, phone, current_location,
+                       total_experience_years, headline
+                  FROM candidate_profiles WHERE user_id = %s
+                """,
+                (summary.user_id,),
+            )
+            crow = cur.fetchone()
+            if crow is not None:
+                candidate_profile = CandidateProfile(
+                    user_id=crow[0],
+                    full_name=crow[1],
+                    phone=crow[2],
+                    current_location=crow[3],
+                    total_experience_years=crow[4],
+                    headline=crow[5],
+                )
+        elif summary.role == "recruiter":
+            cur.execute(
+                """
+                SELECT rp.user_id, rp.organization_id, rp.full_name, rp.title, rp.phone,
+                       o.organization_id, o.name, o.slug, o.logo_url, o.about
+                  FROM recruiter_profiles rp
+                  JOIN organizations o ON o.organization_id = rp.organization_id
+                 WHERE rp.user_id = %s
+                """,
+                (summary.user_id,),
+            )
+            rrow = cur.fetchone()
+            if rrow is not None:
+                recruiter_profile = RecruiterProfile(
+                    user_id=rrow[0],
+                    organization_id=rrow[1],
+                    full_name=rrow[2],
+                    title=rrow[3],
+                    phone=rrow[4],
+                )
+                organization = Organization(
+                    organization_id=rrow[5],
+                    name=rrow[6],
+                    slug=rrow[7],
+                    logo_url=rrow[8],
+                    about=rrow[9],
+                )
+        return MeResponse(
+            user=summary,
+            candidate_profile=candidate_profile,
+            recruiter_profile=recruiter_profile,
+            organization=organization,
+        )
 
 
 @candidate_router.get("/profile", response_model=CandidateProfile)
-def get_candidate_profile(user: CurrentUser = Depends(require_roles("candidate", "admin"))):
+def get_candidate_profile(user: CurrentUser = Depends(require_roles("candidate"))):
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -722,6 +801,10 @@ def update_organization(
     request: OrganizationRequest,
     user: CurrentUser = Depends(require_roles("recruiter", "admin")),
 ):
+    # Slice 2: recruiters may only update an organization they belong to.
+    if user.role == "recruiter" and not _recruiter_in_organization(user.user_id, organization_id):
+        # Hide existence from non-member recruiters: 404 instead of 403.
+        raise business_error(404, "not_found", "Organization not found.")
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -740,7 +823,7 @@ def update_organization(
 
 
 @recruiter_router.get("/profile", response_model=RecruiterProfile)
-def get_recruiter_profile(user: CurrentUser = Depends(require_roles("recruiter", "admin"))):
+def get_recruiter_profile(user: CurrentUser = Depends(require_roles("recruiter"))):
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -1138,11 +1221,14 @@ def close_job(job_id: int, user: CurrentUser = Depends(require_roles("recruiter"
 def run_job_matching(
     job_id: int,
     request: MatchingRequest = Body(default_factory=MatchingRequest),
-    _: CurrentUser = Depends(require_roles("recruiter", "admin")),
+    user: CurrentUser = Depends(require_roles("recruiter", "admin")),
 ):
     job = _load_job(job_id)
     if job is None:
         raise business_error(404, "not_found", "Job not found.")
+    # Slice 2: recruiters may only match against jobs they own.
+    if user.role == "recruiter" and job["row"][2] != user.user_id:
+        raise business_error(403, "forbidden", "You can match only against your own jobs.")
     if job["status"] != "published":
         raise business_error(400, "invalid_anchor", "Job anchor must be published.")
     return _run_matching("job", job_id, request)
@@ -1152,11 +1238,14 @@ def run_job_matching(
 def run_resume_matching(
     resume_id: int,
     request: MatchingRequest = Body(default_factory=MatchingRequest),
-    _: CurrentUser = Depends(require_roles("candidate", "admin")),
+    user: CurrentUser = Depends(require_roles("candidate", "admin")),
 ):
     resume = _load_resume(resume_id)
     if resume is None:
         raise business_error(404, "not_found", "Resume not found.")
+    # Slice 2: candidates may only match against resumes they own.
+    if user.role == "candidate" and resume["row"][1] != user.user_id:
+        raise business_error(403, "forbidden", "You can match only against your own resumes.")
     if resume["status"] != "active":
         raise business_error(400, "invalid_anchor", "Resume anchor must be active.")
     return _run_matching("resume", resume_id, request)
@@ -1746,6 +1835,16 @@ def _visible_job_search_filter(user: CurrentUser, q: Optional[str], location: An
         parts.append("seniority = %s")
         params.append(seniority)
     return " AND ".join(parts), params
+
+
+def _recruiter_in_organization(user_id: int, organization_id: int) -> bool:
+    """True if `user_id` has a recruiter_profile bound to `organization_id`."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT 1 FROM recruiter_profiles WHERE user_id = %s AND organization_id = %s",
+            (user_id, organization_id),
+        )
+        return cur.fetchone() is not None
 
 
 def _get_resume_row(resume_id: int) -> Optional[tuple]:
