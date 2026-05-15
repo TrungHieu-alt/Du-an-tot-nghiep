@@ -19,10 +19,10 @@ const sample: CVV2Detail = {
   skills: ['python', 'aws'],
   summary: 'Tóm tắt cá nhân.',
   experience: '5 năm làm backend.',
-  location: 'ha_noi',
+  location: 'Hà Nội',
   job_type: 'remote',
   seniority: 'senior',
-  education: 'dai_hoc',
+  education: 'bachelor',
   certifications: ['aws_ccp'],
 };
 

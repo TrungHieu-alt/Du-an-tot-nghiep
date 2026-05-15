@@ -27,7 +27,7 @@ const buildJobs = (offset: number, count: number) =>
   Array.from({ length: count }, (_, i) => ({
     job_id: 4000 + offset + i,
     title: `Job ${offset + i}`,
-    location: 'ha_noi' as const,
+    location: 'Hà Nội' as const,
     job_type: 'fulltime' as const,
     seniority: 'junior' as const,
     skills: ['python', 'sql'],
@@ -37,7 +37,7 @@ const buildCvs = (offset: number, count: number) =>
   Array.from({ length: count }, (_, i) => ({
     cv_id: 3000 + offset + i,
     title: `CV ${offset + i}`,
-    location: 'tp_hcm' as const,
+    location: 'TP. Hồ Chí Minh' as const,
     job_type: 'remote' as const,
     seniority: 'mid' as const,
     skills: ['react'],
@@ -177,7 +177,7 @@ describe('V2AnchorList', () => {
           {
             job_id: 4001,
             title: 'Senior Backend',
-            location: 'ha_noi',
+            location: 'Hà Nội',
             job_type: 'remote',
             seniority: 'senior',
             skills: ['python'],

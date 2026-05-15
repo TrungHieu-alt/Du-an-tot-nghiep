@@ -100,10 +100,10 @@ class TestDbV2Orm(unittest.TestCase):
             title="ORM Test Job",
             skills=["python", "sqlalchemy"],
             requirement="Test requirement text.",
-            location="ha_noi",
+            location="Hà Nội",
             job_type="fulltime",
             seniority="mid",
-            education="dai_hoc",
+            education="bachelor",
             required_certifications=[],
         )
         self.session.add(job)
@@ -115,10 +115,10 @@ class TestDbV2Orm(unittest.TestCase):
         self.assertEqual(read_back.title, "ORM Test Job")
         self.assertEqual(read_back.skills, ["python", "sqlalchemy"])
         self.assertEqual(read_back.requirement, "Test requirement text.")
-        self.assertEqual(read_back.location, "ha_noi")
+        self.assertEqual(read_back.location, "Hà Nội")
         self.assertEqual(read_back.job_type, "fulltime")
         self.assertEqual(read_back.seniority, "mid")
-        self.assertEqual(read_back.education, "dai_hoc")
+        self.assertEqual(read_back.education, "bachelor")
         self.assertEqual(read_back.required_certifications, [])
 
     def test_job_post_check_constraint_location(self) -> None:
@@ -134,7 +134,7 @@ class TestDbV2Orm(unittest.TestCase):
             location="invalid_city",
             job_type="fulltime",
             seniority="mid",
-            education="dai_hoc",
+            education="bachelor",
             required_certifications=[],
         )
         self.session.add(bad)
@@ -154,10 +154,10 @@ class TestDbV2Orm(unittest.TestCase):
             skills=["python", "postgres"],
             summary="Integration test candidate summary.",
             experience="3 years of ORM testing.",
-            location="tp_hcm",
+            location="TP. Hồ Chí Minh",
             job_type="remote",
             seniority="junior",
-            education="dai_hoc",
+            education="bachelor",
             certifications=["aws_saa"],
         )
         self.session.add(cv)
@@ -170,10 +170,10 @@ class TestDbV2Orm(unittest.TestCase):
         self.assertEqual(read_back.skills, ["python", "postgres"])
         self.assertEqual(read_back.summary, "Integration test candidate summary.")
         self.assertEqual(read_back.experience, "3 years of ORM testing.")
-        self.assertEqual(read_back.location, "tp_hcm")
+        self.assertEqual(read_back.location, "TP. Hồ Chí Minh")
         self.assertEqual(read_back.job_type, "remote")
         self.assertEqual(read_back.seniority, "junior")
-        self.assertEqual(read_back.education, "dai_hoc")
+        self.assertEqual(read_back.education, "bachelor")
         self.assertEqual(read_back.certifications, ["aws_saa"])
 
     def test_candidate_profile_check_constraint_education(self) -> None:
@@ -187,7 +187,7 @@ class TestDbV2Orm(unittest.TestCase):
             skills=[],
             summary="",
             experience="",
-            location="ha_noi",
+            location="Hà Nội",
             job_type="fulltime",
             seniority="mid",
             education="phd_invalid",
@@ -210,10 +210,10 @@ class TestDbV2Orm(unittest.TestCase):
                 title="Job for embedding test",
                 skills=[],
                 requirement="",
-                location="ha_noi",
+                location="Hà Nội",
                 job_type="fulltime",
                 seniority="mid",
-                education="dai_hoc",
+                education="bachelor",
                 required_certifications=[],
             )
         )
@@ -229,10 +229,10 @@ class TestDbV2Orm(unittest.TestCase):
                 skills=[],
                 summary="",
                 experience="",
-                location="ha_noi",
+                location="Hà Nội",
                 job_type="fulltime",
                 seniority="mid",
-                education="dai_hoc",
+                education="bachelor",
                 certifications=[],
             )
         )

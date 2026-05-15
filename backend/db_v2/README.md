@@ -15,6 +15,8 @@ backend/db_v2/
 ├── migrations/005_google_auth.sql # Google auth columns/default role compatibility
 ├── migrations/006_normal_multi_industry_fields.sql # normalized multi-industry Job/CV fields
 ├── migrations/007_normal_applications.sql # normal application submissions
+├── migrations/008_remove_normal_embeddings_translation.sql # normal Job/CV cleanup
+├── migrations/009_v2_normal_sync_links.sql # normal UUID links + prepared V2 text metadata
 ├── seeds/001_seed.sql        # deterministic JD/CV rows + 384-dim embeddings
 ├── seeds/002_extra_test_data.sql
 ├── seeds/003_broad_ranking_test_data.sql
@@ -35,6 +37,12 @@ and `auth_provider` on the same PostgreSQL row. Normal public search data lives
 in `jobs` and `cvs`, seeded by `004_normal_jobs_cvs_seed.sql`; normal candidate
 submissions live in `applications`. There is **no** `match_results_v2` table —
 the matching prototype is run-only.
+
+Normal Job/CV API writes also run an additive preparation sync into the V2
+tables. Synced V2 rows keep `normal_job_id` / `normal_cv_id`, prepared text,
+preprocess warnings, translation warnings, and text quality metadata on
+`job_posts_v2` / `candidate_profiles_v2`. Embeddings remain separate in
+`job_embeddings_v2` / `candidate_embeddings_v2`.
 
 ## Start the database
 
@@ -153,9 +161,9 @@ Normal Search reads these rows through:
 ```bash
 curl "http://localhost:8000/api/job/search"
 curl "http://localhost:8000/api/job/search?company_industry=Marketing"
-curl "http://localhost:8000/api/job/search?keyword=accountant"
+curl "http://localhost:8000/api/job/search?keyword=ke+toan"
 curl "http://localhost:8000/api/job/search?skills=React"
-curl "http://localhost:8000/api/job/search?location.city=Hanoi"
+curl "http://localhost:8000/api/job/search?location.city=Hà%20Nội"
 curl "http://localhost:8000/api/job/search?employment_type=fulltime"
 ```
 

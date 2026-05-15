@@ -25,7 +25,7 @@ const V2SearchResultCard: React.FC<V2SearchResultCardProps> = ({
   const visibleSkills = item.skills.slice(0, MAX_VISIBLE_SKILLS);
   const hiddenCount = item.skills.length - visibleSkills.length;
   const formatLocation = (value: string) => {
-    if (value === 'ha_noi' || value === 'tp_hcm' || value === 'da_nang') {
+    if (value === 'Hà Nội' || value === 'TP. Hồ Chí Minh' || value === 'Đà Nẵng') {
       return formatLocationV2(value);
     }
     return value;

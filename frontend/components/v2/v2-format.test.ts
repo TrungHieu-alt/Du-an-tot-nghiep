@@ -11,15 +11,15 @@ import {
 
 describe('v2-format', () => {
   describe('formatLocationV2', () => {
-    it('maps each enum slug to a Vietnamese label', () => {
-      expect(formatLocationV2('ha_noi')).toBe('Hà Nội');
-      expect(formatLocationV2('tp_hcm')).toBe('TP. Hồ Chí Minh');
-      expect(formatLocationV2('da_nang')).toBe('Đà Nẵng');
+    it('maps each location value to a Vietnamese label', () => {
+      expect(formatLocationV2('Hà Nội')).toBe('Hà Nội');
+      expect(formatLocationV2('TP. Hồ Chí Minh')).toBe('TP. Hồ Chí Minh');
+      expect(formatLocationV2('Đà Nẵng')).toBe('Đà Nẵng');
     });
   });
 
   describe('formatJobTypeV2', () => {
-    it('maps each enum slug to a label', () => {
+    it('maps each job type value to a label', () => {
       expect(formatJobTypeV2('remote')).toBe('Remote');
       expect(formatJobTypeV2('fulltime')).toBe('Full-time');
       expect(formatJobTypeV2('parttime')).toBe('Part-time');
@@ -38,12 +38,11 @@ describe('v2-format', () => {
   });
 
   describe('formatEducationV2', () => {
-    it('maps the five education levels', () => {
-      expect(formatEducationV2('lop_9')).toBe('Lớp 9');
-      expect(formatEducationV2('lop_12')).toBe('Lớp 12 / THPT');
-      expect(formatEducationV2('dai_hoc')).toBe('Đại học');
-      expect(formatEducationV2('thac_si')).toBe('Thạc sĩ');
-      expect(formatEducationV2('tien_si')).toBe('Tiến sĩ');
+    it('maps the four education levels', () => {
+      expect(formatEducationV2('high_school')).toBe('THPT');
+      expect(formatEducationV2('bachelor')).toBe('Đại học');
+      expect(formatEducationV2('master')).toBe('Thạc sĩ');
+      expect(formatEducationV2('phd')).toBe('Tiến sĩ');
     });
   });
 

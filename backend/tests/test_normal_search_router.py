@@ -137,7 +137,6 @@ def _job_row(**overrides):
         "approved_by": None,
         "archived": False,
         "version": 1,
-        "embedding": {},
         "created_at": NOW,
         "updated_at": NOW,
     }
@@ -181,7 +180,6 @@ def _cv_row(**overrides):
         "version": 1,
         "file": {},
         "archived": False,
-        "embedding": {},
         "created_at": NOW,
         "updated_at": NOW,
     }
@@ -228,7 +226,9 @@ class NormalJobCvRouterTests(unittest.TestCase):
                 },
             )
             self.assertEqual(res.status_code, 201)
-            self.assertEqual(res.json()["created_by"], USER_ID)
+            body = res.json()
+            self.assertEqual(body["created_by"], USER_ID)
+            self.assertNotIn("embedding", body)
 
         insert_params = cur.executed[0][1]
         self.assertEqual(insert_params[0], USER_ID)
@@ -254,6 +254,7 @@ class NormalJobCvRouterTests(unittest.TestCase):
         body = res.json()
         self.assertEqual(body["createdBy"], USER_ID)
         self.assertEqual(body["companyName"], "Acme")
+        self.assertNotIn("embedding", body)
         insert_params = cur.executed[0][1]
         self.assertEqual(insert_params[0], USER_ID)
         self.assertEqual(
@@ -362,7 +363,9 @@ class NormalJobCvRouterTests(unittest.TestCase):
                 },
             )
             self.assertEqual(res.status_code, 201)
-            self.assertEqual(res.json()["created_by"], USER_ID)
+            body = res.json()
+            self.assertEqual(body["created_by"], USER_ID)
+            self.assertNotIn("embedding", body)
 
         insert_params = cur.executed[0][1]
         self.assertEqual(insert_params[0], USER_ID)
@@ -396,6 +399,7 @@ class NormalJobCvRouterTests(unittest.TestCase):
         body = res.json()
         self.assertEqual(body["createdBy"], USER_ID)
         self.assertEqual(body["targetRole"], "Sales Manager")
+        self.assertNotIn("embedding", body)
         insert_params = cur.executed[0][1]
         self.assertEqual(insert_params[0], USER_ID)
         self.assertEqual(
@@ -467,10 +471,10 @@ class NormalJobCvRouterTests(unittest.TestCase):
         cv_router._extract_pdf_text = lambda content: (
             "\n".join(
                 [
-                    "Nguyen Van A",
+                    "Nguyen\x00 Van\ufffd A",
                     "Frontend Developer",
                     "a@example.com",
-                    "Skills",
+                    "Skills\r\n\r\n\r\n",
                     "React, TypeScript",
                     "Experience",
                     "Frontend Intern at Demo Co",
@@ -496,6 +500,18 @@ class NormalJobCvRouterTests(unittest.TestCase):
         self.assertEqual(body["cv"]["status"], "draft")
         self.assertEqual(body["cv"]["careerLevel"], "intern")
         self.assertEqual(body["cv"]["file"]["mimetype"], "application/pdf")
+        self.assertIn("rawTextLength", body)
+        self.assertIn("cleanTextLength", body)
+        self.assertIn("preprocessWarnings", body)
+        self.assertIn("textQuality", body)
+        self.assertIn("cleanedText", body)
+        self.assertNotIn("translated", body)
+        self.assertNotIn("translationWarnings", body)
+        self.assertNotIn("translatedText", body)
+        self.assertNotIn("embedding", body["cv"])
+        self.assertNotIn("\x00", body["extractedText"])
+        self.assertNotIn("\ufffd", body["extractedText"])
+        self.assertLess(body["cleanTextLength"], body["rawTextLength"])
         self.assertIn("warnings", body)
 
     def test_extract_pdf_preview_rejects_non_pdf(self):
@@ -531,6 +547,39 @@ class NormalJobCvRouterTests(unittest.TestCase):
         self.assertEqual(job["educationLevel"], "bachelor")
         self.assertEqual(job["skills"][0]["normalizedName"], "react")
         self.assertEqual(job["skills"][0]["level"], "intermediate")
+        body = res.json()
+        self.assertIn("rawTextLength", body)
+        self.assertIn("cleanTextLength", body)
+        self.assertIn("preprocessWarnings", body)
+        self.assertIn("textQuality", body)
+        self.assertIn("cleanedText", body)
+        self.assertNotIn("translated", body)
+        self.assertNotIn("translationWarnings", body)
+        self.assertNotIn("translatedText", body)
+        self.assertNotIn("embedding", job)
+
+    def test_extract_job_text_preprocesses_dirty_text_before_parsing(self):
+        conn, _ = _make_conn([])
+        self._override_conn(conn)
+
+        res = self.client.post(
+            "/api/job/extract",
+            json={
+                "text": (
+                    "Senior React Developer\x00\ufffd\x00\ufffd\r\n\r\n\r\n"
+                    "• Good knowledge of React\t\tand Python.\r"
+                    "— Graduated from university."
+                )
+            },
+        )
+
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertNotIn("\x00", body["extractedText"])
+        self.assertNotIn("\ufffd", body["extractedText"])
+        self.assertIn("- Good knowledge", body["cleanedText"])
+        self.assertLess(body["cleanTextLength"], body["rawTextLength"])
+        self.assertIn("too_many_bad_encoding_characters", body["preprocessWarnings"])
 
     def test_created_by_from_client_body_is_rejected(self):
         conn, _ = _make_conn([])

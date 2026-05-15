@@ -31,10 +31,16 @@ Purpose: concise system reality snapshot for V2 target documentation.
 - Normal Job/CV APIs are under `/api/job/*` and `/api/cv/*`.
 - Public normal job search is `GET /api/job/search`; compatibility aliases
   `/api/jobs`, `/api/cvs`, and `/api/candidates` route to normal tables and do
-  not read V2 data.
+  not read V2 data or embedding fields.
 - PDF CV upload is `POST /api/cv/upload`; it stores file metadata in
   `cvs.file`. Preview extraction is `POST /api/cvs/extract-pdf` and uses
-  local/offline parsers only when available.
+  local/offline parsers only when available. Extracted normal CV/JD text is
+  preprocessed locally before rule-based parsing.
+- Normal Job/CV create/update now also runs an additive V2 preparation sync:
+  `cvs -> candidate_profiles_v2` and `jobs -> job_posts_v2`. The sync stores
+  normal UUID links and prepared text on V2 rows, uses `backend/core/preprocess.py`,
+  and may translate prepared V2 text through `deep-translator` only when
+  `V2_TRANSLATION_ENABLED=true`. Normal extraction remains translation-free.
 
 ## Current Constraints
 - The original matcher keeps exact-match seniority and lowercase/trim/unique skill behavior from `docs/REQUIREMENTS.md`.

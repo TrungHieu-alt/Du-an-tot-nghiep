@@ -81,7 +81,7 @@
   },
   "$defs": {
     "location": {
-      "enum": ["ha_noi", "tp_hcm", "da_nang"]
+      "enum": ["Hà Nội", "TP. Hồ Chí Minh", "Đà Nẵng"]
     },
     "job_type": {
       "enum": ["remote", "fulltime", "parttime"]
@@ -90,7 +90,7 @@
       "enum": ["intern", "fresher", "junior", "mid", "senior", "lead"]
     },
     "education": {
-      "enum": ["lop_9", "lop_12", "dai_hoc", "thac_si", "tien_si"]
+      "enum": ["high_school", "bachelor", "master", "phd"]
     },
     "string_array": {
       "type": "array",

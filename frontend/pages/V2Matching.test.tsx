@@ -35,7 +35,7 @@ const sampleJobs = [
   {
     job_id: 4001,
     title: 'Senior Backend',
-    location: 'ha_noi' as const,
+    location: 'Hà Nội' as const,
     job_type: 'remote' as const,
     seniority: 'senior' as const,
     skills: ['python'],
@@ -43,7 +43,7 @@ const sampleJobs = [
   {
     job_id: 4002,
     title: 'Lead Frontend',
-    location: 'ha_noi' as const,
+    location: 'Hà Nội' as const,
     job_type: 'fulltime' as const,
     seniority: 'lead' as const,
     skills: ['react'],
@@ -55,10 +55,10 @@ const jobDetail: JobV2Detail = {
   title: 'Senior Backend',
   skills: ['python', 'docker'],
   requirement: '3+ năm',
-  location: 'ha_noi',
+  location: 'Hà Nội',
   job_type: 'remote',
   seniority: 'senior',
-  education: 'dai_hoc',
+  education: 'bachelor',
   required_certifications: [],
 };
 
@@ -98,10 +98,10 @@ const cvDetail: CVV2Detail = {
   skills: ['python'],
   summary: '',
   experience: '',
-  location: 'ha_noi',
+  location: 'Hà Nội',
   job_type: 'remote',
   seniority: 'senior',
-  education: 'dai_hoc',
+  education: 'bachelor',
   certifications: [],
 };
 

@@ -12,6 +12,8 @@ vi.mock('../../lib/api', () => ({
 
 import api from '../../lib/api';
 import {
+  createCv,
+  createJob,
   createApplication,
   extractCvPdf,
   getJob,
@@ -106,6 +108,112 @@ describe('normal API client', () => {
     expect(mockedApi.get).toHaveBeenCalledWith(
       '/cv/search?q=Python+FastAPI&desiredIndustry=information_technology&occupationGroup=software_engineering&careerLevel=junior%2Cmiddle&skills=python%2Cfastapi&educationLevel=bachelor&languageLevel=intermediate&sort=yearsOfExperience_desc'
     );
+  });
+
+  it('creates CVs without sending createdBy or embedding and maps response system fields', async () => {
+    mockedApi.post.mockResolvedValueOnce({
+      data: {
+        id: 'cv-1',
+        createdBy: 'user-1',
+        fullname: 'Nguyễn Văn An',
+        location: {},
+        employmentType: [],
+        skills: [],
+        experiences: [],
+        education: [],
+        certifications: [],
+        status: 'draft',
+        visibility: 'private',
+        tags: [],
+        version: 1,
+        file: {},
+        archived: false,
+        createdAt: '2026-05-15T00:00:00Z',
+        updatedAt: '2026-05-15T00:00:00Z',
+      },
+    });
+
+    const result = await createCv('token', {
+      fullname: 'Nguyễn Văn An',
+      visibility: 'private',
+      archived: false,
+    });
+
+    expect(mockedApi.post).toHaveBeenCalledWith(
+      '/cvs',
+      {
+        fullname: 'Nguyễn Văn An',
+        visibility: 'private',
+        archived: false,
+      },
+      {
+        headers: { Authorization: 'Bearer token' },
+      }
+    );
+    expect(mockedApi.post.mock.calls[0][1]).not.toHaveProperty('createdBy');
+    expect(mockedApi.post.mock.calls[0][1]).not.toHaveProperty('embedding');
+    expect(result.created_by).toBe('user-1');
+    expect(result.created_at).toBe('2026-05-15T00:00:00Z');
+    expect(result.updated_at).toBe('2026-05-15T00:00:00Z');
+    expect(result.visibility).toBe('private');
+    expect(result.archived).toBe(false);
+    expect(result.version).toBe(1);
+  });
+
+  it('creates jobs without sending createdBy or embedding and maps response system fields', async () => {
+    mockedApi.post.mockResolvedValueOnce({
+      data: {
+        id: 'job-1',
+        createdBy: 'recruiter-1',
+        title: 'Lập trình viên Backend Python',
+        status: 'draft',
+        visibility: 'private',
+        location: {},
+        employmentType: ['fulltime'],
+        responsibilities: [],
+        requirements: [],
+        skills: [],
+        salary: {},
+        tags: [],
+        categories: [],
+        remote: false,
+        archived: false,
+        applicationsCount: 0,
+        publishedBy: null,
+        approvedAt: null,
+        approvedBy: null,
+        version: 1,
+        createdAt: '2026-05-15T00:00:00Z',
+        updatedAt: '2026-05-15T00:00:00Z',
+      },
+    });
+
+    const result = await createJob('token', {
+      title: 'Lập trình viên Backend Python',
+      visibility: 'private',
+      archived: false,
+    });
+
+    expect(mockedApi.post).toHaveBeenCalledWith(
+      '/employer/requests',
+      {
+        title: 'Lập trình viên Backend Python',
+        visibility: 'private',
+        archived: false,
+      },
+      {
+        headers: { Authorization: 'Bearer token' },
+      }
+    );
+    expect(mockedApi.post.mock.calls[0][1]).not.toHaveProperty('createdBy');
+    expect(mockedApi.post.mock.calls[0][1]).not.toHaveProperty('embedding');
+    expect(result.created_by).toBe('recruiter-1');
+    expect(result.applications_count).toBe(0);
+    expect(result.published_by).toBeNull();
+    expect(result.approved_at).toBeNull();
+    expect(result.approved_by).toBeNull();
+    expect(result.created_at).toBe('2026-05-15T00:00:00Z');
+    expect(result.updated_at).toBe('2026-05-15T00:00:00Z');
   });
 
   it('gets public CV detail without an auth header', async () => {

@@ -12,26 +12,26 @@ Validation: `python -m db_v2.scenario.validate` (15 checks)
 |-------|-------|
 | job_type | remote |
 | seniority | senior |
-| education | dai_hoc |
-| location | ha_noi |
+| education | bachelor |
+| location | Hà Nội |
 | required_certifications | cka, aws_saa |
 
 ### Hard-filter rules
 - `job_type == "remote"` → location bypass (any location allowed)
 - `seniority == "senior"` (exact)
-- `education >= dai_hoc`
+- `education >= bachelor`
 - certifications ⊇ {cka, aws_saa}
 
 ### CV roster
 
 | cv_id | role | job_type | seniority | education | location | certifications | filter result | notes |
 |-------|------|----------|-----------|-----------|----------|---------------|---------------|-------|
-| 3001 | perfect_match | remote | senior | dai_hoc | ha_noi | cka, aws_saa | **PASS** | rank 1 |
-| 3002 | above_seniority | remote | lead | thac_si | ha_noi | cka, aws_saa | **FAIL** | seniority lead ≠ senior (exact match required) |
-| 3003 | missing_one_cert | remote | senior | dai_hoc | ha_noi | aws_saa | **FAIL** | missing cka → cert filter |
-| 3004 | below_seniority | remote | mid | dai_hoc | ha_noi | aws_saa | **FAIL** | seniority mismatch |
-| 3005 | wrong_job_type | fulltime | senior | dai_hoc | ha_noi | cka, aws_saa | **FAIL** | job_type fulltime ≠ remote |
-| 3006 | wrong_location_non_remote | fulltime | senior | dai_hoc | tp_hcm | cka, aws_saa | **FAIL** | job_type fulltime + wrong location |
+| 3001 | perfect_match | remote | senior | bachelor | Hà Nội | cka, aws_saa | **PASS** | rank 1 |
+| 3002 | above_seniority | remote | lead | master | Hà Nội | cka, aws_saa | **FAIL** | seniority lead ≠ senior (exact match required) |
+| 3003 | missing_one_cert | remote | senior | bachelor | Hà Nội | aws_saa | **FAIL** | missing cka → cert filter |
+| 3004 | below_seniority | remote | mid | bachelor | Hà Nội | aws_saa | **FAIL** | seniority mismatch |
+| 3005 | wrong_job_type | fulltime | senior | bachelor | Hà Nội | cka, aws_saa | **FAIL** | job_type fulltime ≠ remote |
+| 3006 | wrong_location_non_remote | fulltime | senior | bachelor | TP. Hồ Chí Minh | cka, aws_saa | **FAIL** | job_type fulltime + wrong location |
 
 **Test cases covered:** T01 (perfect match), T02 (above seniority filtered), T03 (cert subset fail), T07 (job_type mismatch), T09 (location bypass for remote JD)
 
@@ -43,20 +43,20 @@ Validation: `python -m db_v2.scenario.validate` (15 checks)
 |-------|-------|
 | job_type | fulltime |
 | seniority | lead |
-| education | dai_hoc |
-| location | ha_noi |
+| education | bachelor |
+| location | Hà Nội |
 | required_certifications | (none) |
 
 ### CV roster
 
 | cv_id | role | job_type | seniority | education | location | filter result | notes |
 |-------|------|----------|-----------|-----------|----------|---------------|-------|
-| 3007 | perfect_match | fulltime | lead | dai_hoc | ha_noi | **PASS** | rank 1 |
-| 3008 | higher_education | fulltime | lead | thac_si | ha_noi | **PASS** | higher edu; ranks by score |
-| 3009 | lower_education_filtered | fulltime | lead | lop_12 | ha_noi | **FAIL** | education < dai_hoc |
-| 3010 | senior_not_lead_filtered | fulltime | senior | dai_hoc | ha_noi | **FAIL** | seniority mismatch |
-| 3011 | wrong_location_filtered | fulltime | lead | dai_hoc | da_nang | **FAIL** | location mismatch |
-| 3012 | remote_type_filtered | remote | lead | dai_hoc | ha_noi | **FAIL** | job_type mismatch |
+| 3007 | perfect_match | fulltime | lead | bachelor | Hà Nội | **PASS** | rank 1 |
+| 3008 | higher_education | fulltime | lead | master | Hà Nội | **PASS** | higher edu; ranks by score |
+| 3009 | lower_education_filtered | fulltime | lead | high_school | Hà Nội | **FAIL** | education < bachelor |
+| 3010 | senior_not_lead_filtered | fulltime | senior | bachelor | Hà Nội | **FAIL** | seniority mismatch |
+| 3011 | wrong_location_filtered | fulltime | lead | bachelor | Đà Nẵng | **FAIL** | location mismatch |
+| 3012 | remote_type_filtered | remote | lead | bachelor | Hà Nội | **FAIL** | job_type mismatch |
 
 **Test cases covered:** T04 (education threshold), T05 (seniority exact), T06 (location filter), T07 (job_type filter)
 
@@ -68,20 +68,20 @@ Validation: `python -m db_v2.scenario.validate` (15 checks)
 |-------|-------|
 | job_type | fulltime |
 | seniority | mid |
-| education | dai_hoc |
-| location | tp_hcm |
+| education | bachelor |
+| location | TP. Hồ Chí Minh |
 | required_certifications | (none) |
 
 ### CV roster
 
 | cv_id | role | job_type | seniority | education | location | filter result | notes |
 |-------|------|----------|-----------|-----------|----------|---------------|-------|
-| 3013 | perfect_match | fulltime | mid | dai_hoc | tp_hcm | **PASS** | rank 1 |
-| 3014 | higher_education | fulltime | mid | thac_si | tp_hcm | **PASS** | higher edu passes |
-| 3015 | partial_skills | fulltime | mid | dai_hoc | tp_hcm | **PASS** | lower score than 3013/3014 |
-| 3016 | below_seniority_filtered | fulltime | junior | dai_hoc | tp_hcm | **FAIL** | seniority mismatch |
-| 3017 | wrong_location_filtered | fulltime | mid | dai_hoc | ha_noi | **FAIL** | location mismatch |
-| 3018 | missing_embedding | fulltime | mid | thac_si | tp_hcm | **PASS** (profile only) | no embedding row → all semantic scores=0; reasoning notes missing emb |
+| 3013 | perfect_match | fulltime | mid | bachelor | TP. Hồ Chí Minh | **PASS** | rank 1 |
+| 3014 | higher_education | fulltime | mid | master | TP. Hồ Chí Minh | **PASS** | higher edu passes |
+| 3015 | partial_skills | fulltime | mid | bachelor | TP. Hồ Chí Minh | **PASS** | lower score than 3013/3014 |
+| 3016 | below_seniority_filtered | fulltime | junior | bachelor | TP. Hồ Chí Minh | **FAIL** | seniority mismatch |
+| 3017 | wrong_location_filtered | fulltime | mid | bachelor | Hà Nội | **FAIL** | location mismatch |
+| 3018 | missing_embedding | fulltime | mid | master | TP. Hồ Chí Minh | **PASS** (profile only) | no embedding row → all semantic scores=0; reasoning notes missing emb |
 
 **Test cases covered:** T08 (missing embedding graceful handling), T10 (semantic scoring with partial skills), T05 (seniority filter), T06 (location filter)
 
@@ -93,20 +93,20 @@ Validation: `python -m db_v2.scenario.validate` (15 checks)
 |-------|-------|
 | job_type | fulltime |
 | seniority | mid |
-| education | dai_hoc |
-| location | da_nang |
+| education | bachelor |
+| location | Đà Nẵng |
 | required_certifications | (none) |
 
 ### CV roster
 
 | cv_id | role | job_type | seniority | education | location | certifications | filter result | notes |
 |-------|------|----------|-----------|-----------|----------|---------------|---------------|-------|
-| 3019 | perfect_match | fulltime | mid | dai_hoc | da_nang | — | **PASS** | rank 1 |
-| 3020 | extra_certifications | fulltime | mid | dai_hoc | da_nang | cbap | **PASS** | extra certs don't hurt |
-| 3021 | partial_skills_lower_score | fulltime | mid | dai_hoc | da_nang | — | **PASS** | lower semantic score |
-| 3022 | wrong_seniority_filtered | fulltime | junior | dai_hoc | da_nang | — | **FAIL** | seniority mismatch |
-| 3023 | wrong_location_filtered | fulltime | mid | dai_hoc | tp_hcm | — | **FAIL** | location mismatch |
-| 3024 | wrong_job_type_filtered | remote | mid | dai_hoc | da_nang | — | **FAIL** | job_type mismatch |
+| 3019 | perfect_match | fulltime | mid | bachelor | Đà Nẵng | — | **PASS** | rank 1 |
+| 3020 | extra_certifications | fulltime | mid | bachelor | Đà Nẵng | cbap | **PASS** | extra certs don't hurt |
+| 3021 | partial_skills_lower_score | fulltime | mid | bachelor | Đà Nẵng | — | **PASS** | lower semantic score |
+| 3022 | wrong_seniority_filtered | fulltime | junior | bachelor | Đà Nẵng | — | **FAIL** | seniority mismatch |
+| 3023 | wrong_location_filtered | fulltime | mid | bachelor | TP. Hồ Chí Minh | — | **FAIL** | location mismatch |
+| 3024 | wrong_job_type_filtered | remote | mid | bachelor | Đà Nẵng | — | **FAIL** | job_type mismatch |
 
 **Test cases covered:** T11 (extra certifications still pass), T12 (partial skills → lower rank), T05 (seniority filter), T06 (location filter), T07 (job_type filter)
 
@@ -118,22 +118,22 @@ Validation: `python -m db_v2.scenario.validate` (15 checks)
 |-------|-------|
 | job_type | parttime |
 | seniority | junior |
-| education | lop_12 |
-| location | ha_noi |
+| education | high_school |
+| location | Hà Nội |
 | required_certifications | (none) |
 
 ### CV roster
 
 | cv_id | role | job_type | seniority | education | location | filter result | notes |
 |-------|------|----------|-----------|-----------|----------|---------------|-------|
-| 3025 | perfect_match | parttime | junior | lop_12 | ha_noi | **PASS** | rank 1 |
-| 3026 | university_degree_higher_edu | parttime | junior | dai_hoc | ha_noi | **PASS** | education > lop_12 passes |
-| 3027 | partial_skills | parttime | junior | lop_12 | ha_noi | **PASS** | fewer skills → lower score |
-| 3028 | below_education_filtered | parttime | junior | lop_9 | ha_noi | **FAIL** | education < lop_12 |
-| 3029 | wrong_seniority_filtered | parttime | mid | dai_hoc | ha_noi | **FAIL** | seniority mismatch |
-| 3030 | normalization_case | parttime | junior | lop_12 | ha_noi | **PASS** | raw skills have mixed case/spaces/dups; normalized on insert |
+| 3025 | perfect_match | parttime | junior | high_school | Hà Nội | **PASS** | rank 1 |
+| 3026 | university_degree_higher_edu | parttime | junior | bachelor | Hà Nội | **PASS** | education > high_school passes |
+| 3027 | partial_skills | parttime | junior | high_school | Hà Nội | **PASS** | fewer skills → lower score |
+| 3028 | minimum_education_equalized | parttime | junior | high_school | Hà Nội | **PASS** | old lower-school values collapse to high_school |
+| 3029 | wrong_seniority_filtered | parttime | mid | bachelor | Hà Nội | **FAIL** | seniority mismatch |
+| 3030 | normalization_case | parttime | junior | high_school | Hà Nội | **PASS** | raw skills have mixed case/spaces/dups; normalized on insert |
 
-**Test cases covered:** T13 (education hierarchy lop_9 fail), T14 (normalization: skills deduplicated/lowercased), T04 (education threshold), T05 (seniority filter)
+**Test cases covered:** T14 (normalization: skills deduplicated/lowercased), T04 (education threshold), T05 (seniority filter)
 
 ---
 
@@ -143,20 +143,20 @@ Validation: `python -m db_v2.scenario.validate` (15 checks)
 |-------|-------|
 | job_type | fulltime |
 | seniority | mid |
-| education | dai_hoc |
-| location | tp_hcm |
+| education | bachelor |
+| location | TP. Hồ Chí Minh |
 | required_certifications | (none) |
 
 ### CV roster
 
 | cv_id | role | job_type | seniority | education | location | certifications | filter result | notes |
 |-------|------|----------|-----------|-----------|----------|---------------|---------------|-------|
-| 3031 | perfect_match | fulltime | mid | dai_hoc | tp_hcm | — | **PASS** | rank 1; exact title + full skills match |
-| 3032 | tie_pair_a | fulltime | mid | dai_hoc | tp_hcm | — | **PASS** | tie with 3033 on final_score; cv_id 3032 < 3033 → rank 2 |
-| 3033 | tie_pair_b | fulltime | mid | thac_si | tp_hcm | hrci | **PASS** | same title tokens as 3032 → identical title embedding → tie; rank 3 |
-| 3034 | partial_skills | fulltime | mid | dai_hoc | tp_hcm | — | **PASS** | lower score (HR generalist, no finance/payroll) |
-| 3035 | wrong_seniority_filtered | fulltime | junior | dai_hoc | tp_hcm | — | **FAIL** | seniority mismatch |
-| 3036 | total_after_filter_zero | fulltime | mid | dai_hoc | ha_noi | — | **FAIL** | ha_noi ≠ tp_hcm; also fails all other 5 JDs → total_after_filter=0 |
+| 3031 | perfect_match | fulltime | mid | bachelor | TP. Hồ Chí Minh | — | **PASS** | rank 1; exact title + full skills match |
+| 3032 | tie_pair_a | fulltime | mid | bachelor | TP. Hồ Chí Minh | — | **PASS** | tie with 3033 on final_score; cv_id 3032 < 3033 → rank 2 |
+| 3033 | tie_pair_b | fulltime | mid | master | TP. Hồ Chí Minh | hrci | **PASS** | same title tokens as 3032 → identical title embedding → tie; rank 3 |
+| 3034 | partial_skills | fulltime | mid | bachelor | TP. Hồ Chí Minh | — | **PASS** | lower score (HR generalist, no finance/payroll) |
+| 3035 | wrong_seniority_filtered | fulltime | junior | bachelor | TP. Hồ Chí Minh | — | **FAIL** | seniority mismatch |
+| 3036 | total_after_filter_zero | fulltime | mid | bachelor | Hà Nội | — | **FAIL** | Hà Nội ≠ TP. Hồ Chí Minh; also fails all other 5 JDs → total_after_filter=0 |
 
 **Test cases covered:** T15 (tie-pair: same embedding → identical score → sort by cv_id), T16 (total_after_filter=0), T17 (extra certs/edu don't block pass), T18 (partial skills lower rank)
 
@@ -169,7 +169,7 @@ Validation: `python -m db_v2.scenario.validate` (15 checks)
 | T01 | Perfect match ranks first | 3001 | 4001 |
 | T02 | Above-seniority candidate filtered (seniority is exact match) | 3002 | 4001 |
 | T03 | Missing required cert → hard filtered | 3003 | 4001 |
-| T04 | Education below threshold → hard filtered | 3009, 3028 | 4002, 4005 |
+| T04 | Education below threshold → hard filtered | 3009, 3016 | 4002, 4003 |
 | T05 | Seniority mismatch → hard filtered | 3004, 3010, 3016, 3022, 3029, 3035 | multiple |
 | T06 | Location mismatch → hard filtered (non-remote) | 3011, 3017, 3023 | multiple |
 | T07 | job_type mismatch → hard filtered | 3005, 3012, 3024 | multiple |
@@ -178,7 +178,7 @@ Validation: `python -m db_v2.scenario.validate` (15 checks)
 | T10 | Partial skill overlap → lower semantic score | 3015 | 4003 |
 | T11 | Extra certifications do not block filter pass | 3020 | 4004 |
 | T12 | Partial skills lower rank vs full-match | 3021 vs 3019 | 4004 |
-| T13 | Education hierarchy: lop_9 < lop_12 boundary | 3028 | 4005 |
+| T13 | Minimum education normalization: old lower-school values collapse to high_school | 3028 | 4005 |
 | T14 | Skills normalization (case/spaces/dedup) | 3030 | 4005 |
 | T15 | Tie-pair: identical embedding → sort by cv_id asc | 3032, 3033 | 4006 |
 | T16 | total_after_filter=0 for unmatched CV | 3036 | all |

@@ -7,6 +7,7 @@ recruiter job/recruitment-requirement CRUD and public multi-industry search.
 from __future__ import annotations
 
 import math
+import logging
 import re
 import unicodedata
 from collections.abc import Iterable
@@ -35,6 +36,7 @@ from core.normalizers import (
     normalize_status,
     normalize_visibility,
 )
+from core.preprocess import analyze_text_quality, preprocess_text
 from routers.auth import (
     AuthUser,
     get_current_user,
@@ -53,6 +55,7 @@ from schemas.normal_job_schema import (
     JobSearchListResponse,
     JobUpdateRequest,
 )
+from services.v2_sync_service import sync_job_post_v2
 
 
 router = APIRouter(prefix="/job", tags=["normal-job"])
@@ -60,6 +63,7 @@ employer_requests_router = APIRouter(
     prefix="/employer/requests",
     tags=["normal-employer-request-management"],
 )
+logger = logging.getLogger(__name__)
 
 DbConnection = Annotated[psycopg.Connection, Depends(get_db_connection)]
 CurrentUser = Annotated[AuthUser, Depends(get_current_user)]
@@ -119,7 +123,6 @@ JOB_COLUMNS = [
     "approved_by",
     "archived",
     "version",
-    "embedding",
     "created_at",
     "updated_at",
 ]
@@ -176,7 +179,6 @@ INSERTABLE_JOB_COLUMNS = [
     "approved_by",
     "archived",
     "version",
-    "embedding",
 ]
 
 JSON_COLUMNS = {
@@ -188,7 +190,6 @@ JSON_COLUMNS = {
     "salary",
     "recruiter",
     "pre_screen_questions",
-    "embedding",
 }
 
 
@@ -238,7 +239,7 @@ def _json_array_value(value: Any) -> Any:
 
 def _dump_payload(payload: JobCreateRequest | JobUpdateRequest, *, partial: bool) -> dict[str, Any]:
     data = payload.model_dump(mode="json", exclude_unset=partial)
-    for field in ("location", "required_education", "salary", "recruiter", "embedding"):
+    for field in ("location", "required_education", "salary", "recruiter"):
         if field in data and data[field] is None:
             data[field] = {}
     for field in ("skills", "must_have_skills", "nice_to_have_skills", "pre_screen_questions"):
@@ -254,7 +255,7 @@ def _apply_create_defaults(data: dict[str, Any]) -> None:
 
 
 def _encode_column_value(column: str, value: Any) -> Any:
-    if column in {"location", "required_education", "salary", "recruiter", "embedding"}:
+    if column in {"location", "required_education", "salary", "recruiter"}:
         return _json_value(value)
     if column in {"skills", "must_have_skills", "nice_to_have_skills", "pre_screen_questions"}:
         return _json_array_value(value)
@@ -284,7 +285,6 @@ def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
     data["salary"] = data.get("salary") or {}
     data["recruiter"] = data.get("recruiter") or {}
     data["pre_screen_questions"] = data.get("pre_screen_questions") or []
-    data["embedding"] = data.get("embedding") or {}
     data["industry"] = data.get("industry") or "unknown"
     data["occupation_group"] = data.get("occupation_group") or "unknown"
     data["seniority"] = data.get("seniority") or "unknown"
@@ -352,6 +352,14 @@ def _snakeize(value: Any) -> Any:
 def _job_to_camel(job: JobResponse | dict[str, Any]) -> dict[str, Any]:
     raw = job.model_dump(mode="json") if isinstance(job, JobResponse) else job
     return _camelize(jsonable_encoder(raw))
+
+
+def _sync_job_v2_after_write(conn: psycopg.Connection, job: JobResponse) -> None:
+    if not isinstance(conn, psycopg.Connection):
+        return
+    result = sync_job_post_v2(job.model_dump(mode="json"), conn)
+    if not result.get("synced"):
+        logger.warning("Normal job %s saved but V2 job sync failed: %s", job.id, result.get("warnings"))
 
 
 def _select_sql() -> str:
@@ -1018,12 +1026,21 @@ def _rule_based_job_extract(text: str) -> tuple[dict[str, Any], list[str]]:
 
 @router.post("/extract", response_model=JobExtractResponse)
 def extract_job_text(payload: JobExtractRequest, user: CurrentUser) -> JobExtractResponse:
-    job_data, warnings = _rule_based_job_extract(payload.text)
+    raw_text = payload.text
+    cleaned_text = preprocess_text(raw_text)
+    text_quality = analyze_text_quality(raw_text)
+    preprocess_warnings = list(text_quality.get("warnings", []))
+    job_data, parser_warnings = _rule_based_job_extract(cleaned_text)
     job_data["created_by"] = user.id
     return JobExtractResponse(
-        extractedText=payload.text,
+        extractedText=cleaned_text,
         job=_camelize(jsonable_encoder(job_data)),
-        warnings=warnings,
+        warnings=preprocess_warnings + parser_warnings,
+        rawTextLength=len(raw_text),
+        cleanTextLength=len(cleaned_text),
+        preprocessWarnings=preprocess_warnings,
+        textQuality=text_quality,
+        cleanedText=cleaned_text,
     )
 
 
@@ -1051,7 +1068,9 @@ def create_job(payload: JobCreateRequest, conn: DbConnection, user: CurrentUser)
     except psycopg.Error as exc:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return JobResponse(**_row_to_dict(row))
+    job = JobResponse(**_row_to_dict(row))
+    _sync_job_v2_after_write(conn, job)
+    return job
 
 
 @router.get("/my", response_model=list[JobResponse])
@@ -1252,7 +1271,9 @@ def update_job(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
-    return JobResponse(**_row_to_dict(row))
+    job = JobResponse(**_row_to_dict(row))
+    _sync_job_v2_after_write(conn, job)
+    return job
 
 
 @router.delete(

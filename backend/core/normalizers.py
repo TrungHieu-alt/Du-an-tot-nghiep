@@ -30,7 +30,6 @@ from core.enums import (
 )
 
 REFERENCE_DIR = Path(__file__).resolve().parents[1] / "reference_data"
-LOCAL_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
 
 def normalize_lookup_text(value: Any) -> str:
@@ -497,17 +496,6 @@ def _text_from_values(data: dict[str, Any], keys: tuple[str, ...], source_text: 
     return " ".join(parts)
 
 
-def _normalize_embedding(data: dict[str, Any], entity_type: str) -> dict[str, Any]:
-    embedding = data.get("embedding") if isinstance(data.get("embedding"), dict) else {}
-    text_keys = ("headline", "summary", "target_role") if entity_type == "cv" else ("title", "description", "requirements")
-    return {
-        "text": embedding.get("text") or _text_from_values(data, text_keys),
-        "vector": embedding.get("vector") if isinstance(embedding.get("vector"), list) else [],
-        "model": embedding.get("model") or LOCAL_EMBEDDING_MODEL,
-        "updated_at": embedding.get("updated_at"),
-    }
-
-
 def normalize_cv_payload(data: dict[str, Any], *, for_create: bool = False, include_missing: bool = False, source_text: str = "") -> dict[str, Any]:
     result = deepcopy(data)
     text = _text_from_values(result, ("headline", "summary", "target_role", "availability"), source_text)
@@ -589,8 +577,6 @@ def normalize_cv_payload(data: dict[str, Any], *, for_create: bool = False, incl
     for key in ("certifications", "references"):
         if include_missing and key not in result:
             result[key] = []
-    if include_missing or "embedding" in result:
-        result["embedding"] = _normalize_embedding(result, "cv")
     return result
 
 
@@ -670,6 +656,4 @@ def normalize_job_payload(data: dict[str, Any], *, for_create: bool = False, inc
         result["experience_years"] = _to_float(result.get("experience_years"), extract_years_of_experience(text))
     if include_missing or "team_size" in result:
         result["team_size"] = _to_int(result.get("team_size"), 0)
-    if include_missing or "embedding" in result:
-        result["embedding"] = _normalize_embedding(result, "job")
     return result

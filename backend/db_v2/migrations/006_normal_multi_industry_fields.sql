@@ -9,7 +9,6 @@ ALTER TABLE jobs ADD COLUMN IF NOT EXISTS tools_and_technologies TEXT[] NOT NULL
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS domain_knowledge TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS required_education JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS required_certifications TEXT[] NOT NULL DEFAULT '{}';
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS embedding JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 ALTER TABLE jobs ALTER COLUMN status SET DEFAULT 'draft';
 ALTER TABLE jobs ALTER COLUMN visibility SET DEFAULT 'private';
@@ -92,7 +91,6 @@ CREATE INDEX IF NOT EXISTS jobs_tools_and_technologies_gin_idx ON jobs USING GIN
 CREATE INDEX IF NOT EXISTS jobs_domain_knowledge_gin_idx ON jobs USING GIN (domain_knowledge);
 CREATE INDEX IF NOT EXISTS jobs_required_education_gin_idx ON jobs USING GIN (required_education);
 CREATE INDEX IF NOT EXISTS jobs_required_certifications_gin_idx ON jobs USING GIN (required_certifications);
-CREATE INDEX IF NOT EXISTS jobs_embedding_gin_idx ON jobs USING GIN (embedding);
 
 ALTER TABLE cvs ADD COLUMN IF NOT EXISTS industry TEXT NOT NULL DEFAULT 'unknown';
 ALTER TABLE cvs ADD COLUMN IF NOT EXISTS occupation_group TEXT NOT NULL DEFAULT 'unknown';
@@ -100,7 +98,6 @@ ALTER TABLE cvs ADD COLUMN IF NOT EXISTS career_level TEXT NOT NULL DEFAULT 'unk
 ALTER TABLE cvs ADD COLUMN IF NOT EXISTS years_of_experience NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE cvs ADD COLUMN IF NOT EXISTS tools_and_technologies TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE cvs ADD COLUMN IF NOT EXISTS domain_knowledge TEXT[] NOT NULL DEFAULT '{}';
-ALTER TABLE cvs ADD COLUMN IF NOT EXISTS embedding JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 ALTER TABLE cvs ALTER COLUMN status SET DEFAULT 'draft';
 ALTER TABLE cvs ALTER COLUMN visibility SET DEFAULT 'private';
@@ -187,4 +184,3 @@ CREATE INDEX IF NOT EXISTS cvs_career_level_idx ON cvs (career_level);
 CREATE INDEX IF NOT EXISTS cvs_years_of_experience_idx ON cvs (years_of_experience);
 CREATE INDEX IF NOT EXISTS cvs_tools_and_technologies_gin_idx ON cvs USING GIN (tools_and_technologies);
 CREATE INDEX IF NOT EXISTS cvs_domain_knowledge_gin_idx ON cvs USING GIN (domain_knowledge);
-CREATE INDEX IF NOT EXISTS cvs_embedding_gin_idx ON cvs USING GIN (embedding);

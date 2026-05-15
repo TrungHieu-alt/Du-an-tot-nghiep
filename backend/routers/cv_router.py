@@ -8,6 +8,7 @@ column. This router does not parse PDFs unless a parser is added later.
 from __future__ import annotations
 
 import math
+import logging
 import re
 import shutil
 import tempfile
@@ -34,6 +35,7 @@ from core.normalizers import (
     normalize_skill_name,
     normalize_status,
 )
+from core.preprocess import analyze_text_quality, preprocess_text
 from routers.auth import (
     AuthUser,
     get_current_user,
@@ -52,10 +54,12 @@ from schemas.normal_cv_schema import (
     CvUpdateRequest,
 )
 from schemas.normal_job_schema import LocationPayload
+from services.v2_sync_service import sync_candidate_profile_v2
 
 
 router = APIRouter(prefix="/cv", tags=["normal-cv"])
 cvs_router = APIRouter(prefix="/cvs", tags=["normal-cv-management"])
+logger = logging.getLogger(__name__)
 
 DbConnection = Annotated[psycopg.Connection, Depends(get_db_connection)]
 CurrentUser = Annotated[AuthUser, Depends(get_current_user)]
@@ -95,7 +99,6 @@ CV_COLUMNS = [
     "version",
     "file",
     "archived",
-    "embedding",
     "created_at",
     "updated_at",
 ]
@@ -134,7 +137,6 @@ INSERTABLE_CV_COLUMNS = [
     "version",
     "file",
     "archived",
-    "embedding",
 ]
 
 JSON_COLUMNS = {
@@ -148,7 +150,6 @@ JSON_COLUMNS = {
     "portfolio",
     "references",
     "file",
-    "embedding",
 }
 
 JSON_ARRAY_COLUMNS = {
@@ -217,8 +218,6 @@ def _dump_payload(payload: CvCreateRequest | CvUpdateRequest, *, partial: bool) 
             data[field] = []
     if "location" in data and data["location"] is None:
         data["location"] = {}
-    if "embedding" in data and data["embedding"] is None:
-        data["embedding"] = {}
     return data
 
 
@@ -248,7 +247,6 @@ def _row_to_dict(row: tuple[Any, ...]) -> dict[str, Any]:
     data["portfolio"] = data.get("portfolio") or []
     data["references"] = data.get("references") or []
     data["file"] = data.get("file") or {}
-    data["embedding"] = data.get("embedding") or {}
     data["industry"] = data.get("industry") or "unknown"
     data["occupation_group"] = data.get("occupation_group") or "unknown"
     data["career_level"] = data.get("career_level") or "unknown"
@@ -310,6 +308,14 @@ def _snakeize(value: Any) -> Any:
 def _cv_to_camel(cv: CvResponse | dict[str, Any]) -> dict[str, Any]:
     raw = cv.model_dump(mode="json") if isinstance(cv, CvResponse) else cv
     return _camelize(jsonable_encoder(raw))
+
+
+def _sync_cv_v2_after_write(conn: psycopg.Connection, cv: CvResponse) -> None:
+    if not isinstance(conn, psycopg.Connection):
+        return
+    result = sync_candidate_profile_v2(cv.model_dump(mode="json"), conn)
+    if not result.get("synced"):
+        logger.warning("Normal CV %s saved but V2 candidate sync failed: %s", cv.id, result.get("warnings"))
 
 
 SECTION_ALIASES = {
@@ -1126,7 +1132,9 @@ def create_cv(payload: CvCreateRequest, conn: DbConnection, user: CurrentUser) -
     data = normalize_cv_payload(data, for_create=True, include_missing=True)
     data["created_by"] = user.id
     data["file"] = {}
-    return _insert_cv(conn, data)
+    cv = _insert_cv(conn, data)
+    _sync_cv_v2_after_write(conn, cv)
+    return cv
 
 
 @router.post("/upload", response_model=CvResponse, status_code=status.HTTP_201_CREATED)
@@ -1207,7 +1215,9 @@ def upload_cv_pdf(
     except psycopg.Error as exc:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return CvResponse(**_row_to_dict(row))
+    cv = CvResponse(**_row_to_dict(row))
+    _sync_cv_v2_after_write(conn, cv)
+    return cv
 
 
 @router.get("/my", response_model=list[CvResponse])
@@ -1355,7 +1365,9 @@ def update_cv(cv_id: str, payload: CvUpdateRequest, conn: DbConnection, user: Cu
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CV not found")
-    return CvResponse(**_row_to_dict(row))
+    cv = CvResponse(**_row_to_dict(row))
+    _sync_cv_v2_after_write(conn, cv)
+    return cv
 
 
 @router.delete(
@@ -1403,15 +1415,22 @@ async def extract_cv_pdf_preview(
     content = await file.read()
     _validate_pdf_upload(file, content)
     extracted_text, extraction_warnings = _extract_pdf_text(content)
-    if not extracted_text.strip():
+    cleaned_text = preprocess_text(extracted_text)
+    text_quality = analyze_text_quality(extracted_text)
+    preprocess_warnings = list(text_quality.get("warnings", []))
+    if not cleaned_text.strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "message": "Could not extract text from this PDF with local extractors.",
-                "warnings": extraction_warnings,
+                "warnings": extraction_warnings + preprocess_warnings,
+                "rawTextLength": len(extracted_text),
+                "cleanTextLength": len(cleaned_text),
+                "preprocessWarnings": preprocess_warnings,
+                "textQuality": text_quality,
             },
         )
-    cv_data, parser_warnings = _rule_based_cv_extract(extracted_text)
+    cv_data, parser_warnings = _rule_based_cv_extract(cleaned_text)
     cv_data["created_by"] = user.id
     cv_data["file"] = {
         "filename": file.filename or "",
@@ -1421,12 +1440,17 @@ async def extract_cv_pdf_preview(
         "size": len(content),
         "uploaded_at": None,
     }
-    cv_data = normalize_cv_payload(cv_data, include_missing=True, source_text=extracted_text)
+    cv_data = normalize_cv_payload(cv_data, include_missing=True, source_text=cleaned_text)
     preview = CvExtractPreview.model_validate(cv_data)
     return CvExtractResponse(
-        extractedText=extracted_text,
+        extractedText=cleaned_text,
         cv=_camelize(preview.model_dump(mode="json")),
-        warnings=extraction_warnings + parser_warnings,
+        warnings=extraction_warnings + preprocess_warnings + parser_warnings,
+        rawTextLength=len(extracted_text),
+        cleanTextLength=len(cleaned_text),
+        preprocessWarnings=preprocess_warnings,
+        textQuality=text_quality,
+        cleanedText=cleaned_text,
     )
 
 

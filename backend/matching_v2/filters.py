@@ -13,11 +13,11 @@ from .models import CandidateProfileV2, JobPostV2
 # Education hierarchy: lower index = lower level.
 # Pass condition: CV education rank >= JD education rank.
 EDUCATION_RANK: dict[str, int] = {
-    "lop_9": 0,
-    "lop_12": 1,
-    "dai_hoc": 2,
-    "thac_si": 3,
-    "tien_si": 4,
+    "unknown": 0,
+    "high_school": 1,
+    "bachelor": 2,
+    "master": 3,
+    "phd": 4,
 }
 
 

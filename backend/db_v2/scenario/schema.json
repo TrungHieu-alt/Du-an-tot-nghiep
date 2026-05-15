@@ -17,7 +17,7 @@
   "definitions": {
     "location_enum": {
       "type": "string",
-      "enum": ["ha_noi", "tp_hcm", "da_nang"]
+      "enum": ["Hà Nội", "TP. Hồ Chí Minh", "Đà Nẵng"]
     },
     "job_type_enum": {
       "type": "string",
@@ -29,7 +29,7 @@
     },
     "education_enum": {
       "type": "string",
-      "enum": ["lop_9", "lop_12", "dai_hoc", "thac_si", "tien_si"]
+      "enum": ["high_school", "bachelor", "master", "phd"]
     },
     "job": {
       "type": "object",

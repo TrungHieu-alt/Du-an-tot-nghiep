@@ -37,11 +37,11 @@ from db_v2.scenario_embeddings import (  # noqa: E402
 
 
 EDUCATION_RANK = {
-    "lop_9": 0,
-    "lop_12": 1,
-    "dai_hoc": 2,
-    "thac_si": 3,
-    "tien_si": 4,
+    "unknown": 0,
+    "high_school": 1,
+    "bachelor": 2,
+    "master": 3,
+    "phd": 4,
 }
 
 

@@ -115,33 +115,33 @@ CV rows added by `002_extra_test_data.sql`:
 
 | cv_id | title | location | job_type | seniority | education | certifications | purpose |
 |---:|---|---|---|---|---|---|---|
-| 1006 | Senior DevOps Engineer | ha_noi | remote | senior | dai_hoc | cka, aws_saa | main match for JD 2006 |
-| 1007 | Mid ML Engineer | tp_hcm | fulltime | mid | thac_si | none | main match for JD 2007 |
-| 1008 | Frontend Lead | ha_noi | fulltime | lead | dai_hoc | none | main match for JD 2008 |
-| 1009 | Intern Backend Developer | ha_noi | fulltime | intern | lop_12 | none | main match for JD 2009 |
-| 1010 | Mid Data Scientist | da_nang | parttime | mid | tien_si | google_ml | no embedding row by design |
+| 1006 | Senior DevOps Engineer | Hà Nội | remote | senior | bachelor | cka, aws_saa | main match for JD 2006 |
+| 1007 | Mid ML Engineer | TP. Hồ Chí Minh | fulltime | mid | master | none | main match for JD 2007 |
+| 1008 | Frontend Lead | Hà Nội | fulltime | lead | bachelor | none | main match for JD 2008 |
+| 1009 | Intern Backend Developer | Hà Nội | fulltime | intern | high_school | none | main match for JD 2009 |
+| 1010 | Mid Data Scientist | Đà Nẵng | parttime | mid | phd | google_ml | no embedding row by design |
 
 JD rows added by `002_extra_test_data.sql`:
 
 | job_id | title | location | job_type | seniority | education | required_certifications | purpose |
 |---:|---|---|---|---|---|---|---|
-| 2006 | Senior DevOps Engineer | ha_noi | remote | senior | dai_hoc | cka | cert filter + skills ranking |
-| 2007 | Mid ML Engineer | tp_hcm | fulltime | mid | dai_hoc | none | location + education hierarchy |
-| 2008 | Frontend Lead | ha_noi | fulltime | lead | dai_hoc | none | seniority filter |
-| 2009 | Intern Backend Developer | ha_noi | fulltime | intern | lop_9 | none | strict intern seniority |
-| 2010 | Mid Data Scientist | da_nang | parttime | mid | thac_si | google_ml | missing embeddings path |
+| 2006 | Senior DevOps Engineer | Hà Nội | remote | senior | bachelor | cka | cert filter + skills ranking |
+| 2007 | Mid ML Engineer | TP. Hồ Chí Minh | fulltime | mid | bachelor | none | location + education hierarchy |
+| 2008 | Frontend Lead | Hà Nội | fulltime | lead | bachelor | none | seniority filter |
+| 2009 | Intern Backend Developer | Hà Nội | fulltime | intern | high_school | none | strict intern seniority |
+| 2010 | Mid Data Scientist | Đà Nẵng | parttime | mid | master | google_ml | missing embeddings path |
 
 ### Baseline Covered Cases
 
 | Kịch bản | Filter | Kết quả | Trạng thái |
 |---|---|---|---|
 | 1. JD 2006 cert filter + skills ranking | `job_type=remote`, `cka` required | 2 pass, rank by exact skill overlap | Covered |
-| 2. JD 2007 location + education hierarchy | `tp_hcm`, `fulltime`, `mid`, `thac_si>=dai_hoc` | 1 pass | Covered |
+| 2. JD 2007 location + education hierarchy | `TP. Hồ Chí Minh`, `fulltime`, `mid`, `master>=bachelor` | 1 pass | Covered |
 | 3. JD 2008 seniority exact | `lead`; junior excluded | 2 pass, CV 1008 rank 1 | Covered |
 | 4. JD 2009 intern strict seniority | `intern` only | 1 pass | Covered |
 | 5a. JD 2010 missing embeddings default threshold | hard filter pass, score below `0.7` | 0 returned | Covered |
 | 5b. JD 2010 missing embeddings with `min_score=0` | hard filter pass | CV 1010 returned with low score and missing-embedding reasoning | Covered |
-| 6. CV 1006 -> JD reverse match | `remote`, `senior`, `dai_hoc`, cert compatible | JD 2006 rank 1, JD 2003 rank 2 | Covered |
+| 6. CV 1006 -> JD reverse match | `remote`, `senior`, `bachelor`, cert compatible | JD 2006 rank 1, JD 2003 rank 2 | Covered |
 
 #### Baseline Case 1: JD 2006 required certification + skills ranking
 
@@ -211,7 +211,7 @@ Expected hard-filter exclusions:
 | 1009 | location |
 | 1010 | job_type |
 
-Education check: CV `1007` has `thac_si`, which passes JD `dai_hoc` because `lop_9 < lop_12 < dai_hoc < thac_si < tien_si`.
+Education check: CV `1007` has `master`, which passes JD `bachelor` because `unknown < high_school < bachelor < master < phd`.
 
 #### Baseline Case 3: JD 2008 seniority exact
 
@@ -269,7 +269,7 @@ Expected matches:
 
 Expected reasoning:
 - Only `intern` seniority passes.
-- CV `1009` education `lop_12` passes JD requirement `lop_9`.
+- CV `1009` education `high_school` passes JD requirement `high_school`.
 
 #### Baseline Case 5: JD 2010 missing embeddings
 
@@ -303,7 +303,7 @@ Expected low-threshold match:
 | 1 | 1010 | 0.140 | 0.400 | title, requirement/experience, and requirement/summary semantic scores are `0` |
 
 Expected reasoning:
-- CV `1010` passes hard filters: `parttime`, `da_nang`, `mid`, `tien_si >= thac_si`, has `google_ml`.
+- CV `1010` passes hard filters: `parttime`, `Đà Nẵng`, `mid`, `phd >= master`, has `google_ml`.
 - CV `1010` has no row in `candidate_embeddings_v2`, so semantic components are `0`.
 - Exact skills match `python`, `ml`, `statistics`, so `skills_score=0.4` from exact overlap only.
 - Final score is `0.14`, below the default `min_score=0.7`.
@@ -327,7 +327,7 @@ Expected matches:
 
 Expected reasoning:
 - JD `2006` is the best match for CV `1006`.
-- JD `2003` passes hard filters because it is `remote`, `senior`, requires `dai_hoc`, and has no missing required certification.
+- JD `2003` passes hard filters because it is `remote`, `senior`, requires `bachelor`, and has no missing required certification.
 - JD `2003` has 0 exact skill overlap with CV `1006`; its score is inflated by constant semantic vectors.
 
 Baseline unit test evidence:
@@ -378,36 +378,36 @@ Use deterministic IDs when implementing, for example JD `4001..4006` and CV `300
 | 1d. Multi-cert subset fail | JD-1 -> CV-4 | all hard-filter fields pass, but CV has `cka` and misses `aws_saa` | CV-4 is absent from matches; expected reason `missing_required_certification` | Planned |
 | 1e. Title trap | JD-1 -> CV-5 | title resembles DevOps, but skills/domain are wrong | If hard filter passes, CV-5 must not rank above CV-2/CV-3 | Planned |
 | 1f. Skill trap fail | JD-1 -> CV-6 | DevOps-like skills, but seniority or job type is wrong | CV-6 is absent by hard filter, not by `min_score` | Planned |
-| 2. Frontend lead seniority exact | JD-2 Frontend fulltime ha_noi lead | `job_type=fulltime`, `location=ha_noi`, `seniority=lead` | seniority mismatch excluded; strong > good > noisy | Planned |
-| 2a. Strong Frontend pass | JD-2 -> CV-7 | lead, fulltime, ha_noi, frontend skills full overlap | CV-7 rank 1 | Planned |
-| 2b. Good Frontend pass | JD-2 -> CV-8 | lead, fulltime, ha_noi, good frontend overlap | CV-8 ranks below CV-7 | Planned |
-| 2c. Noisy Frontend pass | JD-2 -> CV-9 | lead, fulltime, ha_noi, adjacent UI/web profile | CV-9 passes but ranks lower | Planned |
+| 2. Frontend lead seniority exact | JD-2 Frontend fulltime Hà Nội lead | `job_type=fulltime`, `location=Hà Nội`, `seniority=lead` | seniority mismatch excluded; strong > good > noisy | Planned |
+| 2a. Strong Frontend pass | JD-2 -> CV-7 | lead, fulltime, Hà Nội, frontend skills full overlap | CV-7 rank 1 | Planned |
+| 2b. Good Frontend pass | JD-2 -> CV-8 | lead, fulltime, Hà Nội, good frontend overlap | CV-8 ranks below CV-7 | Planned |
+| 2c. Noisy Frontend pass | JD-2 -> CV-9 | lead, fulltime, Hà Nội, adjacent UI/web profile | CV-9 passes but ranks lower | Planned |
 | 2d. Seniority isolated fail | JD-2 -> CV-10 | same location/job_type/skills, but `seniority=senior` instead of `lead` | CV-10 excluded by seniority only | Planned |
-| 2e. Location isolated fail | JD-2 -> CV-11 | same seniority/job_type/skills, but `location=da_nang` while JD-2 is non-remote `ha_noi` | CV-11 excluded by location only | Planned |
+| 2e. Location isolated fail | JD-2 -> CV-11 | same seniority/job_type/skills, but `location=Đà Nẵng` while JD-2 is non-remote `Hà Nội` | CV-11 excluded by location only | Planned |
 | 2f. Frontend title trap | JD-2 -> CV-12 | frontend-like title, mostly backend/data skills | If hard filter passes, score stays below CV-7/CV-8 | Planned |
-| 3. AI/Data education hierarchy + partial embedding | JD-3 AI/Data fulltime tp_hcm mid | `job_type=fulltime`, `location=tp_hcm`, `seniority=mid`, `education>=dai_hoc` | higher education passes, lower education fails, partial embedding safe | Planned |
-| 3a. Strong AI/Data pass | JD-3 -> CV-13 | mid, fulltime, tp_hcm, `thac_si`, strong ML/data fit | CV-13 rank 1; higher education passes | Planned |
-| 3b. Good AI/Data pass | JD-3 -> CV-14 | mid, fulltime, tp_hcm, `dai_hoc`, good skill fit | CV-14 passes and ranks below CV-13 | Planned |
-| 3c. Noisy analytics pass | JD-3 -> CV-15 | mid, fulltime, tp_hcm, `thac_si`, adjacent analytics profile | CV-15 passes but ranks below CV-13/CV-14 | Planned |
-| 3d. Education lower fail | JD-3 -> CV-16 | all hard-filter fields match, but `education=lop_12` | CV-16 excluded by education only | Planned |
+| 3. AI/Data education hierarchy + partial embedding | JD-3 AI/Data fulltime TP. Hồ Chí Minh mid | `job_type=fulltime`, `location=TP. Hồ Chí Minh`, `seniority=mid`, `education>=bachelor` | higher education passes, lower education fails, partial embedding safe | Planned |
+| 3a. Strong AI/Data pass | JD-3 -> CV-13 | mid, fulltime, TP. Hồ Chí Minh, `master`, strong ML/data fit | CV-13 rank 1; higher education passes | Planned |
+| 3b. Good AI/Data pass | JD-3 -> CV-14 | mid, fulltime, TP. Hồ Chí Minh, `bachelor`, good skill fit | CV-14 passes and ranks below CV-13 | Planned |
+| 3c. Noisy analytics pass | JD-3 -> CV-15 | mid, fulltime, TP. Hồ Chí Minh, `master`, adjacent analytics profile | CV-15 passes but ranks below CV-13/CV-14 | Planned |
+| 3d. Education lower fail | JD-3 -> CV-16 | all hard-filter fields match, but `education=high_school` | CV-16 excluded by education only | Planned |
 | 3e. Low skill overlap pass | JD-3 -> CV-17 | hard filters pass, very low skill overlap | With `min_score=0`, visible low score; otherwise may be thresholded out | Planned |
 | 3f. Missing embedding row | JD-3 -> CV-18 | hard filters pass, CV has no embedding row | No crash; semantic score components are `0`; reasoning mentions missing embedding | Planned |
-| 4. Product/BA non-remote strict location/job type | JD-4 Product/BA fulltime da_nang mid | `job_type=fulltime`, `location=da_nang`, `seniority=mid` | isolated location and job type failures are distinguishable | Planned |
-| 4a. Strong Product/BA pass | JD-4 -> CV-19 | fulltime, da_nang, mid, strong BA/product skills | CV-19 rank 1 | Planned |
-| 4b. Good Product/BA pass | JD-4 -> CV-20 | fulltime, da_nang, mid, good product analyst profile | CV-20 ranks below CV-19 | Planned |
-| 4c. Noisy Product/BA pass | JD-4 -> CV-21 | fulltime, da_nang, mid, adjacent project/ops analyst | CV-21 passes but ranks below good | Planned |
-| 4d. Location isolated fail | JD-4 -> CV-22 | same as strong but `location=ha_noi` | CV-22 excluded by location only | Planned |
+| 4. Product/BA non-remote strict location/job type | JD-4 Product/BA fulltime Đà Nẵng mid | `job_type=fulltime`, `location=Đà Nẵng`, `seniority=mid` | isolated location and job type failures are distinguishable | Planned |
+| 4a. Strong Product/BA pass | JD-4 -> CV-19 | fulltime, Đà Nẵng, mid, strong BA/product skills | CV-19 rank 1 | Planned |
+| 4b. Good Product/BA pass | JD-4 -> CV-20 | fulltime, Đà Nẵng, mid, good product analyst profile | CV-20 ranks below CV-19 | Planned |
+| 4c. Noisy Product/BA pass | JD-4 -> CV-21 | fulltime, Đà Nẵng, mid, adjacent project/ops analyst | CV-21 passes but ranks below good | Planned |
+| 4d. Location isolated fail | JD-4 -> CV-22 | same as strong but `location=Hà Nội` | CV-22 excluded by location only | Planned |
 | 4e. Job type isolated fail | JD-4 -> CV-23 | same as strong but wrong `job_type` | CV-23 excluded by job type only | Planned |
 | 4f. Business title trap | JD-4 -> CV-24 | BA/Product-like title, sales/marketing skills | If hard filter passes, score lower than noisy; not top result | Planned |
-| 5. Sales/Marketing parttime + normalization | JD-5 Sales/Marketing parttime ha_noi junior | `job_type=parttime`, `location=ha_noi`, `seniority=junior` | parttime strict; low overlap ranks low; normalization verified | Planned |
-| 5a. Strong Sales/Marketing pass | JD-5 -> CV-25 | parttime, ha_noi, junior, strong matching skills | CV-25 rank 1 | Planned |
-| 5b. Good Growth pass | JD-5 -> CV-26 | parttime, ha_noi, junior, good growth/marketing overlap | CV-26 ranks below CV-25 | Planned |
-| 5c. Noisy CS pass | JD-5 -> CV-27 | parttime, ha_noi, junior, customer-success adjacent profile | CV-27 passes but ranks lower | Planned |
+| 5. Sales/Marketing parttime + normalization | JD-5 Sales/Marketing parttime Hà Nội junior | `job_type=parttime`, `location=Hà Nội`, `seniority=junior` | parttime strict; low overlap ranks low; normalization verified | Planned |
+| 5a. Strong Sales/Marketing pass | JD-5 -> CV-25 | parttime, Hà Nội, junior, strong matching skills | CV-25 rank 1 | Planned |
+| 5b. Good Growth pass | JD-5 -> CV-26 | parttime, Hà Nội, junior, good growth/marketing overlap | CV-26 ranks below CV-25 | Planned |
+| 5c. Noisy CS pass | JD-5 -> CV-27 | parttime, Hà Nội, junior, customer-success adjacent profile | CV-27 passes but ranks lower | Planned |
 | 5d. Parttime strict fail | JD-5 -> CV-28 | same fields but `job_type=fulltime` | CV-28 excluded by job type only | Planned |
 | 5e. Low overlap pass | JD-5 -> CV-29 | hard filters pass, low sales/marketing skill overlap | Visible with low threshold or ranks last | Planned |
 | 5f. Normalization case | JD-5 -> CV-30 | source JSON contains duplicated/spaced/mixed-case skills or certs before validation | inserted/validated skills and certs are lowercase, trimmed, unique | Planned |
-| 6. Finance/HR/Admin top_k + tie-break + reverse | JD-6 Finance/HR/Admin fulltime tp_hcm mid | many candidates pass filter; a pair has identical expected score | `top_k` truncates; tie-break by ID; reverse CV -> JD expected ranking | Planned |
-| 6a. Strong Finance/Admin pass | JD-6 -> CV-31 | fulltime, tp_hcm, mid, strong finance/admin skills | CV-31 rank 1 | Planned |
+| 6. Finance/HR/Admin top_k + tie-break + reverse | JD-6 Finance/HR/Admin fulltime TP. Hồ Chí Minh mid | many candidates pass filter; a pair has identical expected score | `top_k` truncates; tie-break by ID; reverse CV -> JD expected ranking | Planned |
+| 6a. Strong Finance/Admin pass | JD-6 -> CV-31 | fulltime, TP. Hồ Chí Minh, mid, strong finance/admin skills | CV-31 rank 1 | Planned |
 | 6b. Tie candidate A | JD-6 -> CV-32 | hard filters pass, designed score equal to CV-33, lower `cv_id` | CV-32 ranks above CV-33 by `cv_id asc` | Planned |
 | 6c. Tie candidate B | JD-6 -> CV-33 | hard filters pass, designed score equal to CV-32, higher `cv_id` | CV-33 ranks below CV-32 | Planned |
 | 6d. Noisy pass | JD-6 -> CV-34 | hard filters pass, low but valid score | With `top_k=3`, CV-34 is not returned if ranked 4+ | Planned |

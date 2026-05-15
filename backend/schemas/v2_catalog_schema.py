@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 # Enum literal types (mirror CHECK constraints in db_v2/orm_models.py)
 # ---------------------------------------------------------------------------
 
-LocationV2 = Literal["ha_noi", "tp_hcm", "da_nang"]
+LocationV2 = Literal["Hà Nội", "TP. Hồ Chí Minh", "Đà Nẵng"]
 JobTypeV2 = Literal["remote", "fulltime", "parttime"]
 SeniorityV2 = Literal["intern", "fresher", "junior", "mid", "senior", "lead"]
 

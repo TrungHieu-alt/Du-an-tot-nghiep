@@ -11,6 +11,7 @@ email-validator==2.2.0
 bcrypt==4.0.1
 python-multipart==0.0.20
 google-auth==2.36.0
+deep-translator==1.11.4
 
 # V2 seed/reset tooling
 sqlalchemy==2.0.36

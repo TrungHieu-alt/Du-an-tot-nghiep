@@ -11,7 +11,7 @@ describe('V2LocationSelect', () => {
   });
 
   it('renders the Vietnamese label for the selected enum slug', () => {
-    render(<V2LocationSelect value="ha_noi" onChange={() => {}} />);
+    render(<V2LocationSelect value="Hà Nội" onChange={() => {}} />);
     expect(screen.getByText('Hà Nội')).toBeInTheDocument();
   });
 
@@ -38,12 +38,12 @@ describe('V2LocationSelect', () => {
     render(<V2LocationSelect value="" onChange={onChange} />);
     await userEvent.click(screen.getByRole('button', { name: /Tỉnh\/Thành phố/i }));
     await userEvent.click(screen.getByText('Đà Nẵng'));
-    expect(onChange).toHaveBeenCalledWith('da_nang');
+    expect(onChange).toHaveBeenCalledWith('Đà Nẵng');
   });
 
   it('calls onChange with empty string when clear row is clicked', async () => {
     const onChange = vi.fn();
-    render(<V2LocationSelect value="ha_noi" onChange={onChange} />);
+    render(<V2LocationSelect value="Hà Nội" onChange={onChange} />);
     // Trigger button has fixed aria-label regardless of value.
     await userEvent.click(screen.getByLabelText('Chọn Tỉnh/Thành phố'));
     await userEvent.click(screen.getByText('Tất cả khu vực'));
@@ -51,7 +51,7 @@ describe('V2LocationSelect', () => {
   });
 
   it('marks the active option with aria-selected', async () => {
-    render(<V2LocationSelect value="tp_hcm" onChange={() => {}} />);
+    render(<V2LocationSelect value="TP. Hồ Chí Minh" onChange={() => {}} />);
     await userEvent.click(screen.getByLabelText('Chọn Tỉnh/Thành phố'));
     const options = await screen.findAllByRole('option');
     const active = options.find((o) => o.getAttribute('aria-selected') === 'true');

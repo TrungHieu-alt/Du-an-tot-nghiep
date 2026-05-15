@@ -102,8 +102,18 @@ Runtime boundary:
   `visibility='public'`, and `archived=false`.
 - Normal search is text/rule search over normal tables. It must not call
   Matching V2, pgvector semantic search, MiniLM, or return match percentages.
-- PDF CV upload stores metadata in `cvs.file`; PDF parsing is outside current
-  implementation unless explicitly added later.
+- Normal `jobs` and `cvs` do not expose or persist an `embedding` field.
+- PDF CV upload stores metadata in `cvs.file`; preview extraction is a separate
+  local/offline text extraction and rule parser path.
+- Normal CV/JD extraction preprocesses local extracted text through
+  `backend/core/preprocess.py` before rule-based parsing.
+- Normal Job/CV writes run additive V2 preparation sync through
+  `backend/services/v2_sync_service.py`. The sync links normal UUID rows to
+  V2 bigint rows, stores prepared text/quality metadata on V2 tables, and keeps
+  embeddings only in `candidate_embeddings_v2` / `job_embeddings_v2`.
+- V2 translation is isolated to the preparation sync. It uses
+  `backend/core/v2_translation.py` with `deep-translator` only when
+  `V2_TRANSLATION_ENABLED=true`; normal extraction/search must not call it.
 
 Expected code areas:
 
@@ -111,6 +121,10 @@ Expected code areas:
 - `backend/routers/job_router.py`
 - `backend/routers/cv_router.py`
 - `backend/routers/normal_search_router.py`
+- `backend/core/preprocess.py`
+- `backend/core/v2_text_builder.py`
+- `backend/core/v2_translation.py`
+- `backend/services/v2_sync_service.py`
 - `backend/schemas/normal_job_schema.py`
 - `backend/schemas/normal_cv_schema.py`
 - `backend/tests/test_normal_search_router.py`

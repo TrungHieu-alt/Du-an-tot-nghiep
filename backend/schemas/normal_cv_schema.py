@@ -138,7 +138,6 @@ class CvCreateRequest(BaseModel):
     tags: list[str] = Field(default_factory=list)
     version: int = Field(default=1, ge=1)
     archived: bool = False
-    embedding: dict[str, Any] = Field(default_factory=dict)
 
 
 class CvUpdateRequest(BaseModel):
@@ -175,7 +174,6 @@ class CvUpdateRequest(BaseModel):
     tags: list[str] | None = None
     version: int | None = Field(default=None, ge=1)
     archived: bool | None = None
-    embedding: dict[str, Any] | None = None
 
 
 class CvResponse(BaseModel):
@@ -213,7 +211,6 @@ class CvResponse(BaseModel):
     version: int = 1
     file: dict[str, Any] = Field(default_factory=dict)
     archived: bool = False
-    embedding: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 
@@ -252,13 +249,17 @@ class CvExtractPreview(BaseModel):
     tags: list[str] = Field(default_factory=list)
     version: int = 1
     file: dict[str, Any] | None = None
-    embedding: dict[str, Any] = Field(default_factory=dict)
 
 
 class CvExtractResponse(BaseModel):
     extractedText: str
     cv: dict[str, Any]
     warnings: list[str] = Field(default_factory=list)
+    rawTextLength: int = 0
+    cleanTextLength: int = 0
+    preprocessWarnings: list[str] = Field(default_factory=list)
+    textQuality: dict[str, Any] = Field(default_factory=dict)
+    cleanedText: str = ""
 
 
 class CVSearchListItem(BaseModel):

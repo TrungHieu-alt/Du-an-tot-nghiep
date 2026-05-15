@@ -1,5 +1,5 @@
 /**
- * Display-label helpers for V2 enum slugs.
+ * Display-label helpers for V2 contract values.
  *
  * Source of truth for the underlying enum values: backend CHECK constraints
  * in backend/db_v2/orm_models.py. Keep these maps in sync if a new enum
@@ -14,9 +14,9 @@ import type {
 } from '../../types';
 
 const LOCATION_LABELS: Record<LocationV2, string> = {
-  ha_noi: 'Hà Nội',
-  tp_hcm: 'TP. Hồ Chí Minh',
-  da_nang: 'Đà Nẵng',
+  'Hà Nội': 'Hà Nội',
+  'TP. Hồ Chí Minh': 'TP. Hồ Chí Minh',
+  'Đà Nẵng': 'Đà Nẵng',
 };
 
 const JOB_TYPE_LABELS: Record<JobTypeV2, string> = {
@@ -35,11 +35,10 @@ const SENIORITY_LABELS: Record<SeniorityV2, string> = {
 };
 
 const EDUCATION_LABELS: Record<EducationV2, string> = {
-  lop_9: 'Lớp 9',
-  lop_12: 'Lớp 12 / THPT',
-  dai_hoc: 'Đại học',
-  thac_si: 'Thạc sĩ',
-  tien_si: 'Tiến sĩ',
+  high_school: 'THPT',
+  bachelor: 'Đại học',
+  master: 'Thạc sĩ',
+  phd: 'Tiến sĩ',
 };
 
 export const formatLocationV2 = (loc: LocationV2): string =>
@@ -55,9 +54,9 @@ export const formatEducationV2 = (e: EducationV2): string =>
   EDUCATION_LABELS[e] ?? String(e);
 
 export const LOCATION_OPTIONS: Array<{ value: LocationV2; label: string }> = [
-  { value: 'ha_noi', label: LOCATION_LABELS.ha_noi },
-  { value: 'tp_hcm', label: LOCATION_LABELS.tp_hcm },
-  { value: 'da_nang', label: LOCATION_LABELS.da_nang },
+  { value: 'Hà Nội', label: LOCATION_LABELS['Hà Nội'] },
+  { value: 'TP. Hồ Chí Minh', label: LOCATION_LABELS['TP. Hồ Chí Minh'] },
+  { value: 'Đà Nẵng', label: LOCATION_LABELS['Đà Nẵng'] },
 ];
 
 export const JOB_TYPE_OPTIONS: Array<{ value: JobTypeV2; label: string }> = [

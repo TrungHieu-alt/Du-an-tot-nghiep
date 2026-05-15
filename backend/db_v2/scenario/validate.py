@@ -144,10 +144,10 @@ def run_all() -> int:
             # ----------------------------------------------------------------
             # Check 9: Enum constraint — no invalid location/job_type/seniority/education
             # ----------------------------------------------------------------
-            valid_locations = {"ha_noi", "tp_hcm", "da_nang"}
+            valid_locations = {"Hà Nội", "TP. Hồ Chí Minh", "Đà Nẵng"}
             valid_job_types = {"remote", "fulltime", "parttime"}
             valid_seniorities = {"intern", "fresher", "junior", "mid", "senior", "lead"}
-            valid_educations = {"lop_9", "lop_12", "dai_hoc", "thac_si", "tien_si"}
+            valid_educations = {"high_school", "bachelor", "master", "phd"}
 
             cur.execute("""
                 SELECT cv_id, location, job_type, seniority, education
@@ -168,16 +168,16 @@ def run_all() -> int:
 
             # ----------------------------------------------------------------
             # Check 10: JD-1 (4001) — remote job: location filter bypassed
-            #           CV 3006 (tp_hcm, fulltime) must NOT pass filter
-            #           CV 3005 (ha_noi, fulltime) must NOT pass filter (wrong job_type)
-            #           CV 3001 (ha_noi, remote) MUST pass filter
+            #           CV 3006 (TP. Hồ Chí Minh, fulltime) must NOT pass filter
+            #           CV 3005 (Hà Nội, fulltime) must NOT pass filter (wrong job_type)
+            #           CV 3001 (Hà Nội, remote) MUST pass filter
             # ----------------------------------------------------------------
             # Simulate hard filter for JD-1
             cur.execute("""
                 SELECT cv_id FROM candidate_profiles_v2
                 WHERE job_type = 'remote'
                   AND seniority = 'senior'
-                  AND education IN ('dai_hoc', 'thac_si', 'tien_si')
+                  AND education IN ('bachelor', 'master', 'phd')
                   AND cv_id BETWEEN 3001 AND 3036
                 ORDER BY cv_id
             """)
@@ -198,12 +198,12 @@ def run_all() -> int:
             )
 
             # ----------------------------------------------------------------
-            # Check 11: JD-5 (4005) — parttime junior lop_12+
-            #           CV 3028 (lop_9) must be filtered (below_education)
+            # Check 11: JD-5 (4005) — parttime junior high_school+
+            #           CV 3028 (high_school) must be filtered (below_education)
             #           CV 3029 (mid) must be filtered (wrong seniority)
             #           CV 3025, 3026, 3027, 3030 must pass
             # ----------------------------------------------------------------
-            edu_rank = {"lop_9": 0, "lop_12": 1, "dai_hoc": 2, "thac_si": 3, "tien_si": 4}
+            edu_rank = {"unknown": 0, "high_school": 1, "bachelor": 2, "master": 3, "phd": 4}
             cur.execute("""
                 SELECT cv_id, education, seniority, job_type, location
                 FROM candidate_profiles_v2
@@ -214,11 +214,11 @@ def run_all() -> int:
             for cv_id, edu, sen, jt, loc in all_cvs:
                 if (jt == "parttime" and
                         sen == "junior" and
-                        edu_rank.get(edu, -1) >= edu_rank["lop_12"] and
-                        loc == "ha_noi"):
+                        edu_rank.get(edu, -1) >= edu_rank["high_school"] and
+                        loc == "Hà Nội"):
                     passing_jd5.add(cv_id)
             check(
-                "C11 JD-5 filter: CV 3025-3027,3030 pass; 3028(lop_9) and 3029(mid) filtered",
+                "C11 JD-5 filter: CV 3025-3027,3030 pass; 3028(high_school) and 3029(mid) filtered",
                 {3025, 3026, 3027, 3030}.issubset(passing_jd5)
                     and 3028 not in passing_jd5
                     and 3029 not in passing_jd5,
@@ -231,11 +231,11 @@ def run_all() -> int:
             jd_filter_rules = [
                 # (job_id, job_type, seniority, min_edu_rank, location, required_certs)
                 (4001, "remote", "senior", 2, None, {"cka", "aws_saa"}),
-                (4002, "fulltime", "lead", 2, "ha_noi", set()),
-                (4003, "fulltime", "mid", 2, "tp_hcm", set()),
-                (4004, "fulltime", "mid", 2, "da_nang", set()),
-                (4005, "parttime", "junior", 1, "ha_noi", set()),
-                (4006, "fulltime", "mid", 2, "tp_hcm", set()),
+                (4002, "fulltime", "lead", 2, "Hà Nội", set()),
+                (4003, "fulltime", "mid", 2, "TP. Hồ Chí Minh", set()),
+                (4004, "fulltime", "mid", 2, "Đà Nẵng", set()),
+                (4005, "parttime", "junior", 1, "Hà Nội", set()),
+                (4006, "fulltime", "mid", 2, "TP. Hồ Chí Minh", set()),
             ]
             cur.execute("""
                 SELECT cv_id, education, seniority, job_type, location, certifications
@@ -312,7 +312,7 @@ def run_all() -> int:
             check("C14 all embeddings are 384-dimensional", len(wrong_dims) == 0, "; ".join(wrong_dims[:5]))
 
             # ----------------------------------------------------------------
-            # Check 15: JD-2 (4002) — education filter: CV 3009 (lop_12) filtered
+            # Check 15: JD-2 (4002) — education filter: CV 3009 (high_school) filtered
             # ----------------------------------------------------------------
             cur.execute("""
                 SELECT cv_id, education, seniority, job_type, location
@@ -324,11 +324,11 @@ def run_all() -> int:
             for cv_id, edu, sen, jt, loc in all_cvs_data:
                 if (jt == "fulltime" and
                         sen == "lead" and
-                        edu_rank.get(edu, -1) >= edu_rank["dai_hoc"] and
-                        loc == "ha_noi"):
+                        edu_rank.get(edu, -1) >= edu_rank["bachelor"] and
+                        loc == "Hà Nội"):
                     passing_jd2.add(cv_id)
             check(
-                "C15 JD-2 filter: CV 3007,3008 pass; CV 3009(lop_12),3010(senior),3011(da_nang),3012(remote) filtered",
+                "C15 JD-2 filter: CV 3007,3008 pass; CV 3009(high_school),3010(senior),3011(Đà Nẵng),3012(remote) filtered",
                 {3007, 3008}.issubset(passing_jd2)
                     and 3009 not in passing_jd2
                     and 3010 not in passing_jd2

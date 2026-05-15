@@ -52,10 +52,10 @@ describe('v2Api', () => {
             id: '4001',
             job_id: '4001',
             title: 'Marketing Executive',
-            location: 'tp_hcm',
+            location: 'TP. Hồ Chí Minh',
             job_type: 'fulltime',
             seniority: 'junior',
-            education: 'dai_hoc',
+            education: 'bachelor',
             skills: ['content'],
             requirement: 'Run campaigns',
             employment_type: ['fulltime'],
@@ -72,13 +72,13 @@ describe('v2Api', () => {
       const result = await searchJobs({
         q: 'marketing',
         industry: 'marketing',
-        location: 'tp_hcm',
+        location: 'TP. Hồ Chí Minh',
         page: 1,
         limit: 10,
       });
 
       expect(mockedApi.get).toHaveBeenCalledWith(
-        '/job/search?q=marketing&industry=marketing&location=tp_hcm&page=1&limit=10'
+        '/job/search?q=marketing&industry=marketing&location=TP.+H%E1%BB%93+Ch%C3%AD+Minh&page=1&limit=10'
       );
       expect(result).toEqual(payload);
     });
@@ -108,7 +108,7 @@ describe('v2Api', () => {
           {
             job_id: 4001,
             title: 'Senior Backend',
-            location: 'ha_noi',
+            location: 'Hà Nội',
             job_type: 'remote',
             seniority: 'senior',
             skills: ['python'],
@@ -142,10 +142,10 @@ describe('v2Api', () => {
         title: 'Senior Backend',
         skills: ['python'],
         requirement: '3+ năm',
-        location: 'ha_noi',
+        location: 'Hà Nội',
         job_type: 'remote',
         seniority: 'senior',
-        education: 'dai_hoc',
+        education: 'bachelor',
         required_certifications: [],
       };
       mockedApi.get.mockResolvedValueOnce({ data: detail });
@@ -164,7 +164,7 @@ describe('v2Api', () => {
           {
             cv_id: 3001,
             title: 'Junior Backend',
-            location: 'ha_noi',
+            location: 'Hà Nội',
             job_type: 'fulltime',
             seniority: 'junior',
             skills: [],
@@ -191,10 +191,10 @@ describe('v2Api', () => {
         skills: ['python'],
         summary: '',
         experience: '',
-        location: 'ha_noi',
+        location: 'Hà Nội',
         job_type: 'fulltime',
         seniority: 'junior',
-        education: 'dai_hoc',
+        education: 'bachelor',
         certifications: [],
       };
       mockedApi.get.mockResolvedValueOnce({ data: detail });
@@ -276,7 +276,7 @@ describe('v2Api', () => {
           {
             job_id: 4001,
             title: 'Senior Backend',
-            location: 'ha_noi',
+            location: 'Hà Nội',
             job_type: 'remote',
             seniority: 'senior',
             skills: ['python'],
@@ -305,7 +305,7 @@ describe('v2Api', () => {
         q: 'backend',
         top_k: 5,
         blend_skills: 0.4,
-        location: 'ha_noi' as const,
+        location: 'Hà Nội' as const,
         job_type: 'remote' as const,
         seniority: 'senior' as const,
       };
@@ -325,7 +325,7 @@ describe('v2Api', () => {
           {
             cv_id: 3001,
             title: 'Senior Backend',
-            location: 'ha_noi',
+            location: 'Hà Nội',
             job_type: 'remote',
             seniority: 'senior',
             skills: [],

@@ -24,6 +24,7 @@ const authHeaders = (token: string) => ({
 });
 
 const keyMapToCamel: Record<string, string> = {
+  created_by: 'createdBy',
   avatar_url: 'avatarUrl',
   preferred_name: 'preferredName',
   target_role: 'targetRole',
@@ -55,8 +56,14 @@ const keyMapToCamel: Record<string, string> = {
   apply_email: 'applyEmail',
   how_to_apply: 'howToApply',
   application_deadline: 'applicationDeadline',
+  applications_count: 'applicationsCount',
   pre_screen_questions: 'preScreenQuestions',
   required_docs: 'requiredDocs',
+  published_by: 'publishedBy',
+  approved_at: 'approvedAt',
+  approved_by: 'approvedBy',
+  created_at: 'createdAt',
+  updated_at: 'updatedAt',
   is_current: 'isCurrent',
   skills_used: 'skillsUsed',
   tools_used: 'toolsUsed',

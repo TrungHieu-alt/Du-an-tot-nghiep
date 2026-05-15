@@ -57,15 +57,10 @@ SENIORITY_RANK: dict[str, int] = {
 }
 
 EDUCATION_RANK: dict[str, int] = {
-    "lop_9": 0,
-    "high_school": 0,
-    "lop_12": 1,
-    "college": 1,
-    "dai_hoc": 2,
+    "unknown": 0,
+    "high_school": 1,
     "bachelor": 2,
-    "thac_si": 3,
     "master": 3,
-    "tien_si": 4,
     "phd": 4,
 }
 

@@ -26,10 +26,10 @@ class MatchingV2CoreTests(unittest.TestCase):
             "title": "Backend Engineer",
             "skills": ("python", "sql", "aws"),
             "requirement": "Build APIs and operate cloud services",
-            "location": "ha_noi",
+            "location": "Hà Nội",
             "job_type": "fulltime",
             "seniority": "senior",
-            "education": "dai_hoc",
+            "education": "bachelor",
             "required_certifications": ("aws",),
         }
         data.update(overrides)
@@ -42,10 +42,10 @@ class MatchingV2CoreTests(unittest.TestCase):
             "skills": ("python", "sql", "aws"),
             "summary": "Senior backend engineer",
             "experience": "Built APIs and cloud services",
-            "location": "ha_noi",
+            "location": "Hà Nội",
             "job_type": "fulltime",
             "seniority": "senior",
-            "education": "thac_si",
+            "education": "master",
             "certifications": ("aws", "cka"),
         }
         data.update(overrides)
@@ -77,26 +77,26 @@ class MatchingV2CoreTests(unittest.TestCase):
         self.assertFalse(passes_job_type(self._job(job_type="fulltime"), self._cv(job_type="parttime")))
 
     def test_remote_jd_bypasses_location(self):
-        job = self._job(job_type="remote", location="ha_noi")
-        cv = self._cv(job_type="remote", location="tp_hcm")
+        job = self._job(job_type="remote", location="Hà Nội")
+        cv = self._cv(job_type="remote", location="TP. Hồ Chí Minh")
         self.assertTrue(passes_location(job, cv))
         self.assertTrue(passes_hard_filter(job, cv))
 
     def test_non_remote_jd_requires_exact_location(self):
-        job = self._job(job_type="fulltime", location="ha_noi")
-        self.assertTrue(passes_location(job, self._cv(job_type="fulltime", location="ha_noi")))
-        self.assertFalse(passes_location(job, self._cv(job_type="fulltime", location="tp_hcm")))
-        self.assertFalse(passes_hard_filter(job, self._cv(job_type="fulltime", location="tp_hcm")))
+        job = self._job(job_type="fulltime", location="Hà Nội")
+        self.assertTrue(passes_location(job, self._cv(job_type="fulltime", location="Hà Nội")))
+        self.assertFalse(passes_location(job, self._cv(job_type="fulltime", location="TP. Hồ Chí Minh")))
+        self.assertFalse(passes_hard_filter(job, self._cv(job_type="fulltime", location="TP. Hồ Chí Minh")))
 
     def test_seniority_exact_match(self):
         self.assertTrue(passes_seniority(self._job(seniority="senior"), self._cv(seniority="senior")))
         self.assertFalse(passes_seniority(self._job(seniority="senior"), self._cv(seniority="mid")))
 
     def test_education_hierarchy_pass_and_fail(self):
-        job = self._job(education="dai_hoc")
-        self.assertTrue(passes_education(job, self._cv(education="dai_hoc")))
-        self.assertTrue(passes_education(job, self._cv(education="thac_si")))
-        self.assertFalse(passes_education(job, self._cv(education="lop_12")))
+        job = self._job(education="bachelor")
+        self.assertTrue(passes_education(job, self._cv(education="bachelor")))
+        self.assertTrue(passes_education(job, self._cv(education="master")))
+        self.assertFalse(passes_education(job, self._cv(education="high_school")))
 
     def test_required_certifications_subset_pass_and_fail(self):
         job = self._job(required_certifications=("aws", "cka"))
@@ -288,7 +288,7 @@ class MatchingV2CoreTests(unittest.TestCase):
 
         with patch("matching_v2.runner.load_job", return_value=job), \
              patch("matching_v2.runner.load_job_embeddings", return_value=self._job_emb(job_id=99)), \
-             patch("matching_v2.runner.load_all_candidates", return_value=[self._cv(location="tp_hcm")]), \
+             patch("matching_v2.runner.load_all_candidates", return_value=[self._cv(location="TP. Hồ Chí Minh")]), \
              patch("matching_v2.runner.load_all_candidate_embeddings", return_value={20: self._cv_emb()}):
             all_filtered = run_for_job(conn=object(), job_id=99, top_k=10, min_score=0.0)
 

@@ -18,10 +18,10 @@ const sample: JobV2Detail = {
   title: 'Senior Backend DevOps Engineer',
   skills: ['python', 'docker', 'kubernetes'],
   requirement: '3+ năm kinh nghiệm backend.',
-  location: 'ha_noi',
+  location: 'Hà Nội',
   job_type: 'remote',
   seniority: 'senior',
-  education: 'dai_hoc',
+  education: 'bachelor',
   required_certifications: ['aws_saa'],
 };
 

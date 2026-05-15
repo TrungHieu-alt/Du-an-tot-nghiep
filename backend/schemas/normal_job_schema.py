@@ -125,7 +125,6 @@ class JobCreateRequest(BaseModel):
     approved_by: str | None = None
     archived: bool = False
     version: int = Field(default=1, ge=1)
-    embedding: dict[str, Any] = Field(default_factory=dict)
 
 
 class JobUpdateRequest(BaseModel):
@@ -181,7 +180,6 @@ class JobUpdateRequest(BaseModel):
     approved_by: str | None = None
     archived: bool | None = None
     version: int | None = Field(default=None, ge=1)
-    embedding: dict[str, Any] | None = None
 
 
 class JobResponse(BaseModel):
@@ -239,7 +237,6 @@ class JobResponse(BaseModel):
     approved_by: str | None = None
     archived: bool = False
     version: int = 1
-    embedding: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 
@@ -254,6 +251,11 @@ class JobExtractResponse(BaseModel):
     extractedText: str
     job: dict[str, Any]
     warnings: list[str] = Field(default_factory=list)
+    rawTextLength: int = 0
+    cleanTextLength: int = 0
+    preprocessWarnings: list[str] = Field(default_factory=list)
+    textQuality: dict[str, Any] = Field(default_factory=dict)
+    cleanedText: str = ""
 
 
 class JobSearchListItem(BaseModel):

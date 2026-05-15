@@ -24,6 +24,9 @@ FastAPI backend for the Matching V2 prototype.
 - `v2_search/` contains local MiniLM query embedding helpers for catalog
   semantic search. It uses `sentence-transformers/all-MiniLM-L6-v2` from local
   model files only.
+- `core/v2_text_builder.py`, `core/v2_translation.py`, and
+  `services/v2_sync_service.py` prepare normal Job/CV rows for V2 tables after
+  normal create/update writes.
 - `db_v2/` contains migrations, seed/reset tooling, ORM mappings for seed
   scripts, and scenario validation.
 
@@ -52,7 +55,16 @@ the current prototype surface. Hybrid matching is run-only and does not write
 match results. Normal search endpoints read the normal `jobs`/`cvs` tables and
 do not call matching, pgvector search, or embedding code. Normal applications
 write only submission/status rows and do not calculate match output. PDF CV
-upload stores file metadata only; PDF parsing is not implemented yet.
+upload stores file metadata only; preview extraction preprocesses local text
+before rule-based parsing.
+
+Normal Job/CV writes are additionally synced into V2 preparation rows:
+`jobs.normal id -> job_posts_v2.normal_job_id` and
+`cvs.normal id -> candidate_profiles_v2.normal_cv_id`. The sync builds
+structured text from allowed public/profile fields, preprocesses it, optionally
+translates only the V2 prepared text with `deep-translator` when
+`V2_TRANSLATION_ENABLED=true`, and refreshes V2 embedding rows when local MiniLM
+is available. Normal extraction remains translation-free.
 
 Registration does not accept client-selected roles; new users default to
 `role='user'`. Google login is available at `POST /api/auth/google` and verifies

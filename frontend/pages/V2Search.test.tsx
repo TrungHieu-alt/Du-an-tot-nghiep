@@ -37,10 +37,10 @@ const buildJobs = (count: number): NormalJobSearchItem[] =>
     job_id: String(4001 + i),
     id: String(4001 + i),
     title: `Job ${i + 1}`,
-    location: 'ha_noi',
+    location: 'Hà Nội',
     job_type: 'remote',
     seniority: 'senior',
-    education: 'dai_hoc',
+    education: 'bachelor',
     skills: ['python'],
     requirement: 'General job requirement',
     employment_type: ['fulltime'],
@@ -53,10 +53,10 @@ const buildCvs = (count: number): NormalCVSearchItem[] =>
     id: String(5001 + i),
     title: `Candidate ${i + 1}`,
     fullname: `Candidate ${i + 1}`,
-    location: 'tp_hcm',
+    location: 'TP. Hồ Chí Minh',
     job_type: 'fulltime',
     seniority: 'junior',
-    education: 'dai_hoc',
+    education: 'bachelor',
     skills: ['react'],
     summary: 'Public candidate summary',
     experience: 'Built normal frontend apps',
@@ -202,13 +202,13 @@ describe('V2Search page', () => {
       totalPages: 0,
     });
     renderAt(
-      '/v2/search?q=x&type=job&location=ha_noi&industry=marketing&employmentType=fulltime&experienceLevel=junior&educationLevel=bachelor&workingModel=onsite&skills=excel&sort=createdAt_desc'
+      '/v2/search?q=x&type=job&location=Hà Nội&industry=marketing&employmentType=fulltime&experienceLevel=junior&educationLevel=bachelor&workingModel=onsite&skills=excel&sort=createdAt_desc'
     );
 
     await waitFor(() => {
       expect(mockedSearchJobs).toHaveBeenCalledWith(expect.objectContaining({
         q: 'x',
-        location: 'ha_noi',
+        location: 'Hà Nội',
         industry: 'marketing',
         employmentType: 'fulltime',
         experienceLevel: 'junior',
@@ -238,10 +238,10 @@ describe('V2Search page', () => {
           cv_id: '3001',
           id: '3001',
           title: 'Marketing Candidate',
-          location: 'tp_hcm',
+          location: 'TP. Hồ Chí Minh',
           job_type: 'fulltime',
           seniority: 'middle',
-          education: 'dai_hoc',
+          education: 'bachelor',
           skills: ['content'],
           summary: 'Marketing summary',
           experience: '3 years',

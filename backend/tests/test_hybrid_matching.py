@@ -28,10 +28,10 @@ class HybridMatchingTests(unittest.TestCase):
             "title": "Backend Engineer",
             "skills": ("python", "node.js", "postgresql"),
             "requirement": "Build backend APIs and operate PostgreSQL services",
-            "location": "ha_noi",
+            "location": "Hà Nội",
             "job_type": "fulltime",
             "seniority": "senior",
-            "education": "dai_hoc",
+            "education": "bachelor",
             "required_certifications": (),
         }
         data.update(overrides)
@@ -44,10 +44,10 @@ class HybridMatchingTests(unittest.TestCase):
             "skills": ("python", "nodejs", "postgres"),
             "summary": "Backend engineer working with APIs",
             "experience": "Built backend APIs with PostgreSQL",
-            "location": "ha_noi",
+            "location": "Hà Nội",
             "job_type": "fulltime",
             "seniority": "senior",
-            "education": "thac_si",
+            "education": "master",
             "certifications": (),
         }
         data.update(overrides)
@@ -106,9 +106,9 @@ class HybridMatchingTests(unittest.TestCase):
 
     def test_remote_location_passes_and_explains(self):
         result = evaluate_pair_hybrid(
-            self._job(job_type="remote", location="ha_noi"),
+            self._job(job_type="remote", location="Hà Nội"),
             self._job_emb(),
-            self._cv(job_type="remote", location="tp_hcm"),
+            self._cv(job_type="remote", location="TP. Hồ Chí Minh"),
             self._cv_emb(),
         )
 
@@ -117,9 +117,9 @@ class HybridMatchingTests(unittest.TestCase):
 
     def test_non_remote_location_mismatch_fails_when_strict(self):
         result = evaluate_pair_hybrid(
-            self._job(job_type="fulltime", location="ha_noi"),
+            self._job(job_type="fulltime", location="Hà Nội"),
             self._job_emb(),
-            self._cv(job_type="fulltime", location="tp_hcm"),
+            self._cv(job_type="fulltime", location="TP. Hồ Chí Minh"),
             self._cv_emb(),
             strict_filters=True,
         )
@@ -139,8 +139,8 @@ class HybridMatchingTests(unittest.TestCase):
         self.assertIn("Candidate may be overqualified.", higher.warnings)
 
     def test_education_rank_pass_and_fail(self):
-        passing = evaluate_pair_hybrid(self._job(education="dai_hoc"), self._job_emb(), self._cv(education="thac_si"), self._cv_emb())
-        failing = evaluate_pair_hybrid(self._job(education="dai_hoc"), self._job_emb(), self._cv(education="lop_12"), self._cv_emb())
+        passing = evaluate_pair_hybrid(self._job(education="bachelor"), self._job_emb(), self._cv(education="master"), self._cv_emb())
+        failing = evaluate_pair_hybrid(self._job(education="bachelor"), self._job_emb(), self._cv(education="high_school"), self._cv_emb())
 
         self.assertEqual(passing.breakdown.education_score, 100.0)
         self.assertEqual(failing.breakdown.education_score, 0.0)

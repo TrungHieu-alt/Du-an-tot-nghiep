@@ -9,7 +9,7 @@
 // match the CHECK constraints in backend/db_v2/orm_models.py.
 // ---------------------------------------------------------------------------
 
-export type LocationV2 = 'ha_noi' | 'tp_hcm' | 'da_nang';
+export type LocationV2 = 'Hà Nội' | 'TP. Hồ Chí Minh' | 'Đà Nẵng';
 export type JobTypeV2 = 'remote' | 'fulltime' | 'parttime';
 export type SeniorityV2 =
   | 'intern'
@@ -18,7 +18,7 @@ export type SeniorityV2 =
   | 'mid'
   | 'senior'
   | 'lead';
-export type EducationV2 = 'lop_9' | 'lop_12' | 'dai_hoc' | 'thac_si' | 'tien_si';
+export type EducationV2 = 'high_school' | 'bachelor' | 'master' | 'phd';
 
 export type AnchorTypeV2 = 'job' | 'cv';
 
@@ -391,6 +391,9 @@ export interface NormalJob {
   applications_count?: number;
   pre_screen_questions?: Array<Record<string, unknown>>;
   required_docs?: string[];
+  published_by?: string | null;
+  approved_at?: string | null;
+  approved_by?: string | null;
   version?: number;
   created_at: string;
   updated_at: string;
@@ -428,6 +431,7 @@ export interface NormalCv {
   status: string;
   visibility: 'public' | 'private' | 'unlisted' | 'unknown';
   tags: string[];
+  version?: number;
   file: Record<string, unknown>;
   archived: boolean;
   created_at: string;
@@ -521,10 +525,23 @@ export interface NormalCvCreatePayload {
 
 export type NormalCvUpdatePayload = Partial<NormalCvCreatePayload>;
 
+export interface TextQuality {
+  is_usable: boolean;
+  length: number;
+  letter_ratio: number;
+  bad_char_ratio: number;
+  warnings: string[];
+}
+
 export interface CvExtractResponse {
   extractedText: string;
   cv: Partial<NormalCvCreatePayload> & {
     file?: Record<string, unknown> | null;
   };
   warnings: string[];
+  rawTextLength?: number;
+  cleanTextLength?: number;
+  preprocessWarnings?: string[];
+  textQuality?: TextQuality;
+  cleanedText?: string;
 }

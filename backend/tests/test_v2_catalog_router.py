@@ -82,8 +82,8 @@ class V2CatalogRouterTests(unittest.TestCase):
 
     def test_list_jobs_returns_items_and_total(self):
         rows = [
-            (101, "Backend Engineer", "ha_noi", "fulltime", "junior", ["python", "sql"]),
-            (102, "Data Engineer", "tp_hcm", "remote", "mid", ["python", "spark"]),
+            (101, "Backend Engineer", "Hà Nội", "fulltime", "junior", ["python", "sql"]),
+            (102, "Data Engineer", "TP. Hồ Chí Minh", "remote", "mid", ["python", "spark"]),
         ]
         conn, cur = _make_conn(responses=[(2,), rows])
 
@@ -106,7 +106,7 @@ class V2CatalogRouterTests(unittest.TestCase):
         self.assertEqual(list_params, (50, 0))
 
     def test_list_jobs_respects_pagination(self):
-        rows = [(201, "QA", "da_nang", "parttime", "fresher", [])]
+        rows = [(201, "QA", "Đà Nẵng", "parttime", "fresher", [])]
         conn, cur = _make_conn(responses=[(99,), rows])
 
         with patch("routers.v2_catalog_router.get_connection", return_value=conn):
@@ -146,10 +146,10 @@ class V2CatalogRouterTests(unittest.TestCase):
             "Backend Engineer",
             ["python", "sql"],
             "3+ năm kinh nghiệm",
-            "ha_noi",
+            "Hà Nội",
             "fulltime",
             "junior",
-            "dai_hoc",
+            "bachelor",
             ["aws_saa"],
         )
         conn, _ = _make_conn(responses=[row])
@@ -163,10 +163,10 @@ class V2CatalogRouterTests(unittest.TestCase):
         self.assertEqual(body["title"], "Backend Engineer")
         self.assertEqual(body["skills"], ["python", "sql"])
         self.assertEqual(body["requirement"], "3+ năm kinh nghiệm")
-        self.assertEqual(body["location"], "ha_noi")
+        self.assertEqual(body["location"], "Hà Nội")
         self.assertEqual(body["job_type"], "fulltime")
         self.assertEqual(body["seniority"], "junior")
-        self.assertEqual(body["education"], "dai_hoc")
+        self.assertEqual(body["education"], "bachelor")
         self.assertEqual(body["required_certifications"], ["aws_saa"])
         self.assertTrue(conn.closed)
 
@@ -184,8 +184,8 @@ class V2CatalogRouterTests(unittest.TestCase):
 
     def test_list_cvs_returns_items_and_total(self):
         rows = [
-            (1001, "Junior Backend", "ha_noi", "fulltime", "junior", ["python"]),
-            (1002, "Data Analyst", "tp_hcm", "remote", "mid", ["sql", "python"]),
+            (1001, "Junior Backend", "Hà Nội", "fulltime", "junior", ["python"]),
+            (1002, "Data Analyst", "TP. Hồ Chí Minh", "remote", "mid", ["sql", "python"]),
         ]
         conn, cur = _make_conn(responses=[(2,), rows])
 
@@ -203,7 +203,7 @@ class V2CatalogRouterTests(unittest.TestCase):
         self.assertEqual(list_params, (50, 0))
 
     def test_list_cvs_respects_pagination(self):
-        rows = [(1500, "DevOps", "ha_noi", "fulltime", "senior", ["k8s"])]
+        rows = [(1500, "DevOps", "Hà Nội", "fulltime", "senior", ["k8s"])]
         conn, cur = _make_conn(responses=[(42,), rows])
 
         with patch("routers.v2_catalog_router.get_connection", return_value=conn):
@@ -228,10 +228,10 @@ class V2CatalogRouterTests(unittest.TestCase):
             ["python", "fastapi"],
             "Tóm tắt ngắn",
             "2 năm làm backend",
-            "ha_noi",
+            "Hà Nội",
             "fulltime",
             "junior",
-            "dai_hoc",
+            "bachelor",
             ["aws_ccp"],
         )
         conn, _ = _make_conn(responses=[row])
@@ -271,7 +271,7 @@ class V2CatalogRouterTests(unittest.TestCase):
     def test_list_cvs_handles_null_skills_array(self):
         # Defensive: psycopg returns None for SQL NULL on array columns.
         # Router should normalize to [].
-        rows = [(2001, "Edge Case", "ha_noi", "fulltime", "junior", None)]
+        rows = [(2001, "Edge Case", "Hà Nội", "fulltime", "junior", None)]
         conn, _ = _make_conn(responses=[(1,), rows])
 
         with patch("routers.v2_catalog_router.get_connection", return_value=conn):

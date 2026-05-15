@@ -95,8 +95,8 @@ class CatalogSearchTests(unittest.TestCase):
 
     def test_valid_query_executes_search_sql_with_bound_params(self):
         rows = [
-            (4001, "Senior Backend", "ha_noi", "remote", "senior", ["python"], 0.93),
-            (4002, "Lead Frontend", "ha_noi", "fulltime", "lead", ["react"], 0.71),
+            (4001, "Senior Backend", "Hà Nội", "remote", "senior", ["python"], 0.93),
+            (4002, "Lead Frontend", "Hà Nội", "fulltime", "lead", ["react"], 0.71),
         ]
         conn, cur = _make_conn(responses=[rows])
 
@@ -130,7 +130,7 @@ class CatalogSearchTests(unittest.TestCase):
 
     def test_negative_score_is_clamped_to_zero(self):
         rows = [
-            (4001, "X", "ha_noi", "remote", "junior", [], -0.05),
+            (4001, "X", "Hà Nội", "remote", "junior", [], -0.05),
         ]
         conn, _ = _make_conn(responses=[rows])
         with patch("routers.v2_catalog_router.get_connection", return_value=conn):
@@ -143,7 +143,7 @@ class CatalogSearchTests(unittest.TestCase):
 
     def test_score_above_one_is_clamped_to_one(self):
         rows = [
-            (4001, "X", "ha_noi", "remote", "junior", [], 1.2),
+            (4001, "X", "Hà Nội", "remote", "junior", [], 1.2),
         ]
         conn, _ = _make_conn(responses=[rows])
         with patch("routers.v2_catalog_router.get_connection", return_value=conn):
@@ -168,7 +168,7 @@ class CatalogSearchTests(unittest.TestCase):
 
     def test_handles_null_skills_array_in_row(self):
         rows = [
-            (4001, "X", "ha_noi", "remote", "junior", None, 0.5),
+            (4001, "X", "Hà Nội", "remote", "junior", None, 0.5),
         ]
         conn, _ = _make_conn(responses=[rows])
         with patch("routers.v2_catalog_router.get_connection", return_value=conn):
@@ -235,7 +235,7 @@ class CatalogSearchTests(unittest.TestCase):
 
     def test_cvs_search_executes_with_correct_table(self):
         rows = [
-            (3001, "Senior Backend", "ha_noi", "remote", "senior", ["python"], 0.88),
+            (3001, "Senior Backend", "Hà Nội", "remote", "senior", ["python"], 0.88),
         ]
         conn, cur = _make_conn(responses=[rows])
         with patch("routers.v2_catalog_router.get_connection", return_value=conn):
@@ -269,15 +269,15 @@ class CatalogSearchTests(unittest.TestCase):
         with patch("routers.v2_catalog_router.get_connection", return_value=conn):
             res = self.client.post(
                 "/api/v2/prototype/catalog/jobs/search",
-                json={"q": "backend", "location": "ha_noi"},
+                json={"q": "backend", "location": "Hà Nội"},
             )
         self.assertEqual(res.status_code, 200)
         sql, params = cur.executed[0]
         # SQL must contain alias-prefixed condition
         self.assertIn("AND j.location = %s", sql)
-        # Params: (q_vec, q_vec, 'ha_noi', blend, blend, top_k)
+        # Params: (q_vec, q_vec, 'Hà Nội', blend, blend, top_k)
         self.assertEqual(len(params), 6)
-        self.assertEqual(params[2], "ha_noi")
+        self.assertEqual(params[2], "Hà Nội")
         self.assertAlmostEqual(params[3], 0.3, places=6)  # default blend
         self.assertEqual(params[5], 20)                   # default top_k
 
@@ -288,7 +288,7 @@ class CatalogSearchTests(unittest.TestCase):
                 "/api/v2/prototype/catalog/jobs/search",
                 json={
                     "q": "backend",
-                    "location": "ha_noi",
+                    "location": "Hà Nội",
                     "job_type": "remote",
                     "seniority": "senior",
                     "blend_skills": 0.4,
@@ -302,7 +302,7 @@ class CatalogSearchTests(unittest.TestCase):
         self.assertIn("AND j.seniority = %s", sql)
         # Params order: q_vec, q_vec, location, job_type, seniority, blend, blend, top_k
         self.assertEqual(len(params), 8)
-        self.assertEqual(params[2], "ha_noi")
+        self.assertEqual(params[2], "Hà Nội")
         self.assertEqual(params[3], "remote")
         self.assertEqual(params[4], "senior")
         self.assertAlmostEqual(params[5], 0.4, places=6)

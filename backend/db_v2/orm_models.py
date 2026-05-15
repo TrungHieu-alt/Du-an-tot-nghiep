@@ -34,7 +34,7 @@ class JobPostV2Orm(Base):
     __tablename__ = "job_posts_v2"
     __table_args__ = (
         CheckConstraint(
-            "location IN ('ha_noi','tp_hcm','da_nang')",
+            "location IN ('Hà Nội','TP. Hồ Chí Minh','Đà Nẵng')",
             name="job_posts_v2_location_chk",
         ),
         CheckConstraint(
@@ -46,7 +46,7 @@ class JobPostV2Orm(Base):
             name="job_posts_v2_seniority_chk",
         ),
         CheckConstraint(
-            "education IN ('lop_9','lop_12','dai_hoc','thac_si','tien_si')",
+            "education IN ('high_school','bachelor','master','phd')",
             name="job_posts_v2_education_chk",
         ),
     )
@@ -72,7 +72,7 @@ class CandidateProfileV2Orm(Base):
     __tablename__ = "candidate_profiles_v2"
     __table_args__ = (
         CheckConstraint(
-            "location IN ('ha_noi','tp_hcm','da_nang')",
+            "location IN ('Hà Nội','TP. Hồ Chí Minh','Đà Nẵng')",
             name="candidate_profiles_v2_location_chk",
         ),
         CheckConstraint(
@@ -84,7 +84,7 @@ class CandidateProfileV2Orm(Base):
             name="candidate_profiles_v2_seniority_chk",
         ),
         CheckConstraint(
-            "education IN ('lop_9','lop_12','dai_hoc','thac_si','tien_si')",
+            "education IN ('high_school','bachelor','master','phd')",
             name="candidate_profiles_v2_education_chk",
         ),
     )

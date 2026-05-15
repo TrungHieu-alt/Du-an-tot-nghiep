@@ -79,8 +79,8 @@ Job ID: `4001`. Remote JD, senior, requires `cka` and `aws_saa`.
 
 | CV | Role | Expected |
 |---:|---|---|
-| 3001 | Strong pass | Passes hard filter despite `tp_hcm` location; expected top. |
-| 3002 | Good pass | Passes despite `da_nang`; ranks below 3001 and above 3003. |
+| 3001 | Strong pass | Passes hard filter despite `TP. Hồ Chí Minh` location; expected top. |
+| 3002 | Good pass | Passes despite `Đà Nẵng`; ranks below 3001 and above 3003. |
 | 3003 | Noisy pass | Passes with partial cloud overlap; ranks below 3002. |
 | 3004 | Hard fail | Fails only required certification subset: missing `aws_saa`. |
 | 3005 | Semantic trap | Passes hard filter, similar title shape, wrong sales/marketing domain; ranks below 3003. |
@@ -90,7 +90,7 @@ Expected JD run: `3001 > 3002 > 3003 > 3005`; exclude `3004`, `3006`.
 
 ### JD-2: Frontend Fulltime Ha Noi Lead
 
-Job ID: `4002`. Fulltime, `ha_noi`, lead.
+Job ID: `4002`. Fulltime, `Hà Nội`, lead.
 
 | CV | Role | Expected |
 |---:|---|---|
@@ -98,21 +98,21 @@ Job ID: `4002`. Fulltime, `ha_noi`, lead.
 | 3008 | Good pass | Lead frontend with partial skill fit; ranks below 3007. |
 | 3009 | Noisy pass | Lead UI/web adjacent profile; ranks below 3008. |
 | 3010 | Hard fail | Same location/job_type/skills but `seniority=senior`; fails seniority only. |
-| 3011 | Hard fail | Same title/seniority/job_type/skills but `location=da_nang`; fails location only. |
+| 3011 | Hard fail | Same title/seniority/job_type/skills but `location=Đà Nẵng`; fails location only. |
 | 3012 | Semantic trap | Frontend-like title, backend/data skills; passes hard filter but ranks below 3009. |
 
 Expected JD run: `3007 > 3008 > 3009 > 3012`; exclude `3010`, `3011`.
 
 ### JD-3: AI/Data Fulltime TP HCM Mid
 
-Job ID: `4003`. Fulltime, `tp_hcm`, mid, requires `dai_hoc`.
+Job ID: `4003`. Fulltime, `TP. Hồ Chí Minh`, mid, requires `bachelor`.
 
 | CV | Role | Expected |
 |---:|---|---|
-| 3013 | Strong pass | `thac_si` education passes; strong ML/data fit; expected top. |
-| 3014 | Good pass | `dai_hoc` equals requirement; good ML/data fit. |
+| 3013 | Strong pass | `master` education passes; strong ML/data fit; expected top. |
+| 3014 | Good pass | `bachelor` equals requirement; good ML/data fit. |
 | 3015 | Noisy pass | Adjacent analytics profile; ranks below 3014. |
-| 3016 | Hard fail | All fields match but `education=lop_12`; fails education only. |
+| 3016 | Hard fail | All fields match but `education=high_school`; fails education only. |
 | 3017 | Low overlap pass | Hard filters pass with low skill overlap; ranks below 3015 with `min_score=0`. |
 | 3018 | Missing embedding row | Hard filters pass; no `candidate_embeddings_v2` row and no exact skill overlap; score fields are `0` and deterministic missing-embedding reasoning is returned. |
 
@@ -121,14 +121,14 @@ and require `3013 > 3014 > 3015 > 3017`.
 
 ### JD-4: Product/BA Fulltime Da Nang Mid
 
-Job ID: `4004`. Fulltime, `da_nang`, mid.
+Job ID: `4004`. Fulltime, `Đà Nẵng`, mid.
 
 | CV | Role | Expected |
 |---:|---|---|
 | 3019 | Strong pass | Product/BA strong fit; expected top. |
 | 3020 | Good pass | Product analyst with good partial BA fit. |
 | 3021 | Noisy pass | Project/operations analyst adjacent to Product/BA. |
-| 3022 | Hard fail | Same as strong but `location=ha_noi`; fails location only. |
+| 3022 | Hard fail | Same as strong but `location=Hà Nội`; fails location only. |
 | 3023 | Hard fail | Same as strong but `job_type=remote`; fails job_type only. |
 | 3024 | Semantic trap | Business/growth title with sales/marketing skills; passes hard filter but ranks below 3021. |
 
@@ -136,7 +136,7 @@ Expected JD run: `3019 > 3020 > 3021 > 3024`; exclude `3022`, `3023`.
 
 ### JD-5: Sales/Marketing Parttime Ha Noi Junior
 
-Job ID: `4005`. Parttime, `ha_noi`, junior, requires `google_ads`.
+Job ID: `4005`. Parttime, `Hà Nội`, junior, requires `google_ads`.
 
 | CV | Role | Expected |
 |---:|---|---|
@@ -151,7 +151,7 @@ Expected JD run: top `3025`; exclude `3028`; require `3025 > 3026 > 3027 > 3029`
 
 ### JD-6: Finance/HR/Admin Fulltime TP HCM Mid
 
-Job ID: `4006`. Fulltime, `tp_hcm`, mid.
+Job ID: `4006`. Fulltime, `TP. Hồ Chí Minh`, mid.
 
 | CV | Role | Expected |
 |---:|---|---|

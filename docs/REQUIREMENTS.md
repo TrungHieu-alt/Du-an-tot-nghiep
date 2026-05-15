@@ -57,7 +57,7 @@ Stage 2: Hard filter
   - Nếu JD `job_type = remote` thì bỏ qua hard filter `location`.
   - Nếu JD `job_type != remote` thì `job_type` và `location` phải match chính xác giữa JD và CV.
 - `seniority`: cả JD và CV đều phải có và phải khớp.
-- `education` là hard filter theo thứ bậc taxonomy: `lop_9` < `lop_12` < `dai_hoc` < `thac_si` < `tien_si` (cả JD và CV đều phải có).
+- `education` là hard filter theo thứ bậc taxonomy: `unknown` < `high_school` < `bachelor` < `master` < `phd` (cả JD và CV đều phải có).
 - Rule pass: education của CV phải >= education yêu cầu của JD.
 - `required_certifications`: nếu JD đánh dấu bắt buộc thì CV phải có đầy đủ.
 
@@ -120,10 +120,10 @@ Prototype run-only cần dữ liệu JD/CV và embeddings trong PostgreSQL. Khô
 - `skills`: `TEXT[] NOT NULL DEFAULT '{}'`
 - `summary`: `TEXT NOT NULL DEFAULT ''`
 - `experience`: `TEXT NOT NULL DEFAULT ''`
-- `location`: `TEXT NOT NULL` (chỉ nhận `ha_noi|tp_hcm|da_nang`)
+- `location`: `TEXT NOT NULL` (chỉ nhận `Hà Nội|TP. Hồ Chí Minh|Đà Nẵng`)
 - `job_type`: `TEXT NOT NULL` (chỉ nhận `remote|fulltime|parttime`)
 - `seniority`: `TEXT NOT NULL`
-- `education`: `TEXT NOT NULL` (chỉ nhận `lop_9|lop_12|dai_hoc|thac_si|tien_si`)
+- `education`: `TEXT NOT NULL` (chỉ nhận `high_school|bachelor|master|phd`)
 - `certifications`: `TEXT[] NOT NULL DEFAULT '{}'`
 
 ### 5.2 PostgreSQL - Job fields dùng cho matching
@@ -131,10 +131,10 @@ Prototype run-only cần dữ liệu JD/CV và embeddings trong PostgreSQL. Khô
 - `title`: `TEXT NOT NULL`
 - `skills`: `TEXT[] NOT NULL DEFAULT '{}'`
 - `requirement`: `TEXT NOT NULL DEFAULT ''`
-- `location`: `TEXT NOT NULL` (chỉ nhận `ha_noi|tp_hcm|da_nang`)
+- `location`: `TEXT NOT NULL` (chỉ nhận `Hà Nội|TP. Hồ Chí Minh|Đà Nẵng`)
 - `job_type`: `TEXT NOT NULL` (chỉ nhận `remote|fulltime|parttime`)
 - `seniority`: `TEXT NOT NULL`
-- `education`: `TEXT NOT NULL` (chỉ nhận `lop_9|lop_12|dai_hoc|thac_si|tien_si`)
+- `education`: `TEXT NOT NULL` (chỉ nhận `high_school|bachelor|master|phd`)
 - `required_certifications`: `TEXT[] NOT NULL DEFAULT '{}'`
 
 ### 5.3 PostgreSQL - Embedding fields
@@ -224,7 +224,7 @@ Phạm vi spec gốc (mục 1–9) **không đổi**. Phần này ghi lại mộ
 - Search blend formula: `score = (1 - blend_skills) * cos(emb_title, q_vec) + blend_skills * cos(emb_skills, q_vec)`, clamp `[0, 1]`. Không phải `final_score` của FR3 và không persist.
 
 ### Filter contract
-Filter `location/job_type/seniority` áp dụng trong SQL CTE WHERE trước khi scoring, dùng cùng enum cứng đã định nghĩa ở mục 3 (`ha_noi/tp_hcm/da_nang`, `remote/fulltime/parttime`, `intern/fresher/junior/mid/senior/lead`). Pydantic Literal reject 422 nếu sai enum.
+Filter `location/job_type/seniority` áp dụng trong SQL CTE WHERE trước khi scoring, dùng cùng enum cứng đã định nghĩa ở mục 3 (`Hà Nội/TP. Hồ Chí Minh/Đà Nẵng`, `remote/fulltime/parttime`, `intern/fresher/junior/mid/senior/lead`). Pydantic Literal reject 422 nếu sai enum.
 
 ### Out-of-scope addendum
 - KHÔNG có ingestion / parse / upload (giống spec gốc).
