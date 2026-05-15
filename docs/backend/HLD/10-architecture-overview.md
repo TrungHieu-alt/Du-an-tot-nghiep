@@ -1,61 +1,73 @@
-# Backend HLD V2: Architecture Overview
+# Production HLD: Architecture Overview
 
 ## Runtime Layers
 
-- Router layer: FastAPI contracts and request validation.
-- Matching layer: hard filters, scoring, deterministic reasoning, and response
-  assembly in `backend/matching_v2/`.
-- Data access layer: direct PostgreSQL reads through `psycopg`.
-- Seed/tooling layer: SQL/SQLAlchemy scripts under `backend/db_v2/`.
+- API layer: FastAPI routers, request validation, response schemas, and OpenAPI
+  contracts for the production namespaces.
+- Auth and authorization layer: email/password login, JWT sessions, role checks,
+  ownership checks, disabled-user blocking, and pool visibility rules.
+- Domain services: users/profiles, organizations, resumes, jobs, documents,
+  parsing, matching, applications, invites, notifications, audit, and admin
+  monitoring.
+- Data access layer: PostgreSQL repositories for production entities and
+  pgvector-backed embeddings.
+- Worker layer: asynchronous document parsing and embedding jobs.
+- External services: object storage for original files, LLM parser, embedding
+  model, optional reranker, and email delivery.
 
-## Main Runtime Components
+## Target Component Map
 
 ```text
-backend/main.py
-  ├─ routers/v2_catalog_router.py
-  ├─ routers/match_v2_router.py
-  └─ routers/system_router.py
+FastAPI app
+  ├─ auth
+  ├─ users/profiles
+  ├─ organizations
+  ├─ documents + parse jobs
+  ├─ candidate resumes
+  ├─ job posts
+  ├─ matching + search
+  ├─ applications
+  ├─ recruiter invites
+  ├─ notifications
+  └─ admin monitoring
 
-routers/match_v2_router.py
-  └─ matching_v2/runner.py
-       ├─ matching_v2/db.py
-       ├─ matching_v2/filters.py
-       ├─ matching_v2/scoring.py
-       └─ matching_v2/reasoning.py
+Workers
+  └─ parse pipeline
+       ├─ object storage read
+       ├─ text extraction/preprocess
+       ├─ skill normalization
+       ├─ LLM structured extraction
+       └─ embedding generation
 
-routers/v2_catalog_router.py
-  ├─ matching_v2/db.py
-  └─ v2_search/*
+PostgreSQL + pgvector
+  ├─ production relational entities
+  └─ resume/job embedding tables
 ```
 
 ## Component Responsibilities
 
 | Component | Responsibility |
 |---|---|
-| `backend/main.py` | App creation, CORS, v2 router mounting |
-| `routers/match_v2_router.py` | Matching request/response contract |
-| `routers/v2_catalog_router.py` | Read-only browse/detail/search contract |
-| `matching_v2/db.py` | PostgreSQL loaders for v2 records and embeddings |
-| `matching_v2/filters.py` | Hard-filter rules |
-| `matching_v2/scoring.py` | Component and final score formulas |
-| `matching_v2/reasoning.py` | Rule-based reasoning strings |
-| `v2_search/` | Deterministic query embedding and pgvector literal helpers |
-| `db_v2/` | Migrations, seed/reset scripts, scenario validation |
+| Auth | Register/login, password hashing, JWT issuance, role and status checks |
+| Profiles | Candidate and recruiter profile CRUD |
+| Organizations | Employer profile for recruiter-owned jobs |
+| Documents | Original CV/JD metadata and object storage linkage |
+| Parse jobs | Async extraction, normalization, LLM parse, embedding lifecycle |
+| Resumes | Candidate-owned matching entities and active/draft/archive visibility |
+| Jobs | Recruiter-owned matching entities and draft/published/closed lifecycle |
+| Matching/search | Two-way matching, keyword search, semantic search, reasoning |
+| Applications | Candidate apply and recruiter status transitions |
+| Invites | Recruiter invite, candidate accept/reject, application creation on accept |
+| Notifications | In-app notification records and basic email attempts |
+| Audit | Business event trail for important lifecycle actions |
+| Admin | Read-only monitoring of users, content, parse jobs, audit, and operations |
 
-## Boundaries
+## Architectural Boundaries
 
-- PostgreSQL is the runtime source of truth for v2 prototype JD/CV records and
-  embeddings.
-- Matching and catalog endpoints are read-only except for seed/reset tooling run
-  outside request handling.
-- Matching results are returned directly and are not persisted.
-- The backend exposes no non-v2 business lifecycle endpoints in the current
-  repository state.
-
-## Related Docs
-
-- `docs/REQUIREMENTS.md`
-- `docs/backend/HLD/20-matching-pipeline.md`
-- `docs/backend/HLD/30-data-and-storage.md`
-- `docs/backend/HLD/40-api-and-runtime-flows.md`
-- `docs/matching-v2-scenario-test-cases.md`
+- PostgreSQL is the source of truth for production business entities.
+- Object storage is the source of truth for original uploaded files.
+- pgvector embeddings support retrieval and scoring, but structured fields and
+  visibility flags control eligibility.
+- Matching results are recommendations and are not application records.
+- Legacy prototype docs can be reused as migration reference, but runtime code
+  implements production API contracts rather than `/api/v2/prototype/*`.

@@ -1,5 +1,0 @@
-{
-  "name": "JobConnect V2",
-  "description": "PostgreSQL and pgvector prototype for catalog search and run-only job-CV matching.",
-  "requestFramePermissions": []
-}

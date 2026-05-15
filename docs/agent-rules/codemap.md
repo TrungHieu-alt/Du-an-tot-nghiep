@@ -5,96 +5,213 @@ canonical in `AGENTS.md`.
 
 ## Documentation Map
 
-- Backend architecture and matching HLD index:
+- Product source of truth:
+  - `docs/REQUIREMENTS.md`
+- Backend architecture:
+  - `docs/backend/HLD/`
+- Agent doc router:
   - `docs/agent-rules/doc-map.md`
 
-## 1) Platform Bootstrap and API Surface
+## 1) Platform Bootstrap And API Surface
 
-- `backend/main.py`
-  - FastAPI app creation.
-  - CORS configuration.
-  - Router mounting under `/api`.
-- Router layer:
-  - `backend/routers/match_v2_router.py`
-  - `backend/routers/v2_catalog_router.py`
-  - `backend/routers/system_router.py`
+Current code paths:
 
-## 2) Matching V2 Prototype Workflow (Run-Only PostgreSQL + pgvector)
+- `backend/main.py` (compatibility wrapper)
+- `backend/src/jobconnect/main.py`
+- `backend/src/jobconnect/app.py`
+- `backend/src/jobconnect/modules/api/router.py` (current monolithic `/api/*` router)
+- `backend/src/jobconnect/modules/system/router.py`
+- `backend/src/jobconnect/core/database.py`
+- `backend/db/migrations/001_production_mvp.sql`
+- `backend/db/apply_migrations.py`
 
-Use this workflow for `/api/v2/prototype/matching/*`.
+Current runtime boundary:
 
-Primary docs:
+- App routes under `/api/*`.
+- Legacy `/api/v2/prototype/*` runtime code has been removed.
+- PostgreSQL tables are defined in `backend/db/migrations/`.
+
+Use this section for tasks that target the runtime surface.
+
+## 1A) Backend Module Layout
+
+Current source layout:
+
+- `backend/src/jobconnect/main.py`: FastAPI app entrypoint.
+- `backend/src/jobconnect/app.py`: app metadata and router registration.
+- `backend/src/jobconnect/core/`: infrastructure boundaries such as config,
+  database, security, exceptions, and logging.
+- `backend/src/jobconnect/common/`: shared dependencies, pagination, responses,
+  utilities, and constants.
+- `backend/src/jobconnect/integrations/`: external integration boundaries such
+  as pgvector, future object storage, email, and LLM providers.
+- `backend/src/jobconnect/modules/api/router.py`: current centralized `/api/*`
+  implementation. Do not split it unless the task explicitly asks for API
+  module extraction.
+- `backend/src/jobconnect/modules/*/`: feature ownership folders for future
+  route/service/schema splits.
+- `backend/db/`: migrations and database maintenance scripts.
+
+Current feature module ownership targets:
+
+- `modules/auth/`: authentication and token/session helpers.
+- `modules/users/`: users, candidate profiles, and recruiter profiles.
+- `modules/organizations/`: employer organization ownership.
+- `modules/jobs/`: job post lifecycle and search ownership.
+- `modules/resumes/`: candidate resume lifecycle and search ownership.
+- `modules/documents/`: uploaded documents and parse jobs.
+- `modules/matching/`: hard filters, scoring, reasoning, embeddings, and vector
+  search helpers.
+- `modules/applications/`: applications and application events.
+- `modules/invites/`: recruiter invite lifecycle.
+- `modules/notifications/`: notification records and email status boundaries.
+- `modules/admin/`: read-only admin monitoring.
+- `modules/system/`: health and runtime probes.
+
+## 1B) Legacy Prototype Reference Surface
+
+Legacy code paths:
+
+- none in runtime code.
+
+Legacy runtime boundary:
+
+- `/api/v2/prototype/*` is no longer implemented in code.
+- Legacy prototype behavior remains available only as documentation under
+  `docs/backend/HLD/legacy/` and matching scenario docs.
+
+Use this section only for reading legacy reference material.
+
+## 2) Auth, Users, And Profiles
+
+Target docs:
 
 - `docs/REQUIREMENTS.md`
-- `docs/backend/HLD/20-matching-pipeline.md`
+- `docs/backend/HLD/10-architecture-overview.md`
+- `docs/backend/HLD/50-api-and-runtime-flows.md`
+- `docs/backend/HLD/60-security-notifications-audit.md`
+
+Target entities:
+
+- `users`
+- `candidate_profiles`
+- `recruiter_profiles`
+- `organizations`
+
+Current code areas:
+
+- `backend/src/jobconnect/modules/api/router.py` contains
+  auth/profile/organization route handlers, schemas, and authorization
+  dependencies.
+- Future split target folders: `modules/auth/`, `modules/users/`, and
+  `modules/organizations/`.
+
+## 3) Documents, Parsing, And Normalization
+
+Target docs:
+
+- `docs/backend/HLD/20-ingestion-and-normalization.md`
 - `docs/backend/HLD/30-data-and-storage.md`
-- `docs/backend/HLD/40-api-and-runtime-flows.md`
+- `docs/backend/HLD/50-api-and-runtime-flows.md`
+
+Target entities:
+
+- `uploaded_documents`
+- `parse_jobs`
+- `candidate_resumes`
+- `job_posts`
+- embedding tables.
+
+Current code areas:
+
+- `backend/src/jobconnect/modules/api/router.py` contains document
+  metadata and parse-job routes.
+- Future split target folders: `modules/documents/`, `modules/resumes/`, and
+  `modules/jobs/`.
+- External storage/parser/email provider adapters are represented at the API
+  boundary and still need concrete provider implementations.
+
+## 4) Matching And Search
+
+Target docs:
+
+- `docs/backend/HLD/40-matching-and-search-pipeline.md`
+- `docs/backend/HLD/30-data-and-storage.md`
+- `docs/backend/HLD/50-api-and-runtime-flows.md`
+
+Target behavior:
+
+- job anchor ranks active resumes.
+- resume anchor ranks published jobs.
+- keyword search and semantic search remain separate.
+- matching results are recommendations and do not create applications.
+
+Current code areas:
+
+- `backend/src/jobconnect/modules/api/router.py` contains search and matching
+  routes over `candidate_resumes`, `job_posts`, and embedding tables.
+- `backend/src/jobconnect/modules/matching/` contains pure scoring, hard-filter,
+  reasoning, and deterministic local embedding helpers.
+- Future route/service split target: keep matching algorithm helpers in
+  `modules/matching/` and move only API handlers out of `modules/api/` when
+  explicitly requested.
+
+## 5) Applications, Invites, Notifications, And Audit
+
+Target docs:
+
+- `docs/backend/HLD/30-data-and-storage.md`
+- `docs/backend/HLD/50-api-and-runtime-flows.md`
+- `docs/backend/HLD/60-security-notifications-audit.md`
+
+Target entities:
+
+- `applications`
+- `application_events`
+- `recruiter_invites`
+- `notifications`
+- `audit_logs`
+
+Current code areas:
+
+- `backend/src/jobconnect/modules/api/router.py` contains
+  application, invite, notification, audit, and admin monitoring route handlers.
+- Future split target folders: `modules/applications/`, `modules/invites/`,
+  `modules/notifications/`, and `modules/admin/`.
+
+## 6) Legacy Prototype Matching Verification
+
+Legacy docs:
+
+- `docs/backend/HLD/legacy/legacy-overview-and-problem.md`
+- `docs/backend/HLD/legacy/legacy-architecture-overview.md`
+- `docs/backend/HLD/legacy/legacy-matching-pipeline.md`
+- `docs/backend/HLD/legacy/legacy-data-and-storage.md`
+- `docs/backend/HLD/legacy/legacy-api-and-runtime-flows.md`
+- `docs/matching-v2-scenario-dataset.md`
 - `docs/matching-v2-scenario-test-cases.md`
 
-Runtime boundary:
+Rule for agents:
 
-- Prototype data lives in PostgreSQL V2 tables: `job_posts_v2`,
-  `candidate_profiles_v2`, `job_embeddings_v2`, `candidate_embeddings_v2`.
-- Vector storage/scoring uses pgvector in PostgreSQL.
-- Matching returns run results directly from the V2 prototype endpoints and
-  does not persist match results.
+- Treat these as legacy reference and migration verification assets.
+- Do not edit the scenario docs unless the user explicitly asks to change legacy
+  prototype matching verification.
+- Reuse deterministic hard-filter/scoring cases when migrating app
+  matching tests.
 
-Expected code areas:
+## 7) Frontend Planning Notes
 
-- DB/schema/seed tooling: `backend/db_v2/*` and related tests.
-- V2 matching runtime: `backend/matching_v2/*`.
-- V2 matching router/schema: `backend/routers/match_v2_router.py`,
-  `backend/schemas/match_v2_schema.py`.
-- OpenAPI contract checks: FastAPI generated `/openapi.json`.
+Reference-only notes:
 
-Out of scope for V2 run-only prototype unless the task says otherwise:
+- all files under `docs/frontend/`
 
-- Document ingestion, parsing, or upload flows.
-- Runtime LLM scoring/reasoning.
-- `match_results_v2` or persisted result query/delete APIs.
-- Auth/role guard changes.
+No frontend runtime code is present. Follow `README.md` Frontend Planning Rule;
+`docs/frontend/` is archived reference only.
 
-## 3) V2 Catalog and Search Workflow
+## 8) Integration Boundary
 
-Use this workflow for `/api/v2/prototype/catalog/*` and frontend browse/search.
-
-Runtime boundary:
-
-- Read-only helpers over the same four V2 PostgreSQL tables.
-- Search uses deterministic query embeddings from `backend/v2_search/*`.
-- Search score is catalog relevance only and is not the matching final score.
-
-Expected code areas:
-
-- `backend/routers/v2_catalog_router.py`
-- `backend/schemas/v2_catalog_schema.py`
-- `backend/v2_search/*`
-- `frontend/src/api/v2.ts`
-- `frontend/lib/api-routes.ts`
-- `frontend/pages/V2Search.tsx`
-- `frontend/pages/V2JobDetail.tsx`
-- `frontend/pages/V2CvDetail.tsx`
-- `frontend/components/v2/*`
-
-## 4) Frontend V2 Routing Workflow
-
-- `frontend/App.tsx`
-  - `/` redirects to `/v2/search`.
-  - Active user-facing routes:
-    - `/v2/search`
-    - `/v2/jobs/:id`
-    - `/v2/cvs/:id`
-    - `/v2/matching`
-- `frontend/components/Header.tsx` and `frontend/components/Footer.tsx`
-  - Navigation must point only to V2 user-facing routes.
-
-## 5) Data Ownership Boundaries
-
-- PostgreSQL is source of truth for prototype JD/CV records and embeddings.
-- pgvector in PostgreSQL is the prototype vector storage/scoring layer.
-- Run results are returned directly and are not persisted.
-
-## 6) Integration Boundary For Frontend
-
-- Frontend integrates through `/api/v2/prototype/*` contracts.
-- Contract evolution is OpenAPI-first and documented when changed.
+- App contract evolution is OpenAPI-first.
+- `/api/*` contracts are the main app baseline.
+- `/api/v2/prototype/*` is legacy-only documentation and is not implemented in
+  runtime code.
+- The `/api/*` migration is breaking relative to the prototype API.

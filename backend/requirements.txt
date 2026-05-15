@@ -1,13 +1,9 @@
-# Matching V2 runtime
+# Production API runtime
 fastapi==0.115.6
 uvicorn[standard]==0.24.0
 pydantic==2.11.7
 psycopg[binary]==3.2.3
 numpy==1.26.4
-
-# V2 seed/reset tooling
-sqlalchemy==2.0.36
-pgvector==0.3.6
 
 # TestClient support
 httpx==0.28.1

@@ -1,5 +1,9 @@
 # Matching V2 Scenario Test Cases
 
+> Legacy prototype verification asset. This document preserves run-only V2
+> matching test coverage and should not be edited unless the user explicitly
+> asks to change legacy prototype verification.
+
 Purpose: source of truth for Matching V2 test coverage, including executed baseline cases and the compact scenario dataset planned before any broad scale dataset.
 
 This file replaces the previous standalone baseline test report.

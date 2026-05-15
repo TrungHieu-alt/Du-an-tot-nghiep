@@ -1,90 +1,103 @@
-# JobConnect Matching V2
+# JobConnect MVP
 
-This repository contains the v2-only Matching prototype: a FastAPI backend,
-PostgreSQL + pgvector storage, and a React/Vite frontend for catalog search and
-run-only matching.
+This repository now centers on the FastAPI backend for the JobConnect
+recruiting marketplace MVP.
 
-## Active Product Scope
+## Product Target
 
-- Browse and search seeded v2 job and CV records.
-- Open job/CV detail pages from the v2 catalog.
-- Run synchronous JD -> CV or CV -> JD matching from an existing integer ID.
-- Return top matches with score breakdown, deterministic reasoning, and runtime
-  metrics.
+The target product is a shared-pool recruiting marketplace:
 
-Out of scope for the current repository state: document upload, parsing,
-authentication, application tracking, LLM scoring, vector-store sidecars, and
-persisted match results.
+- candidates upload CVs, review parsed data, activate resumes, match against
+  published jobs, apply to jobs, and respond to recruiter invites.
+- recruiters create employer profiles, upload or create job descriptions,
+  publish jobs, match against active resumes, invite candidates, and manage
+  applications.
+- admins monitor users, content, parse jobs, matching, notifications, and audit
+  events.
 
-## Runtime Architecture
+Canonical product requirements live in `docs/REQUIREMENTS.md`.
+Target backend architecture lives in `docs/backend/HLD/`.
 
-- **Backend**: FastAPI (`backend/main.py`).
-- **Database**: PostgreSQL with pgvector, exposed on host port `5433`.
-- **Tables**: `job_posts_v2`, `candidate_profiles_v2`,
-  `job_embeddings_v2`, `candidate_embeddings_v2`.
-- **Matching**: hard filters + exhaustive pgvector-compatible scoring +
-  deterministic rerank.
-- **Frontend**: React + Vite. User-facing routes are `/`, `/v2/search`,
-  `/v2/jobs/:id`, `/v2/cvs/:id`, and `/v2/matching`.
+## Current Runnable Baseline
 
-`/` redirects to `/v2/search`.
+- FastAPI backend under `backend/src/jobconnect`.
+- API namespaces under `/api/*`.
+- PostgreSQL + pgvector storage on host port `5433`.
+- Schema migration at `backend/db/migrations/001_production_mvp.sql`.
+- Legacy V2 prototype code has been removed from runtime. Legacy docs remain
+  under `docs/backend/HLD/legacy/` and matching scenario docs for reference.
 
-## API Surface
+## Backend Layout
 
-Matching:
+```text
+backend/
+  main.py
+  src/jobconnect/
+    main.py
+    app.py
+    core/
+      config.py
+      database.py
+      exceptions.py
+      logging.py
+      security.py
+    common/
+      constants.py
+      dependencies.py
+      pagination.py
+      responses.py
+      utils.py
+    integrations/
+      pgvector/
+    modules/
+      api/
+      auth/
+      users/
+      organizations/
+      jobs/
+      resumes/
+      documents/
+      matching/
+      applications/
+      invites/
+      notifications/
+      admin/
+      system/
+  db/
+    migrations/
+    apply_migrations.py
+  tests/
+```
 
-- `POST /api/v2/prototype/matching/job/{job_id}/run`
-- `POST /api/v2/prototype/matching/cv/{cv_id}/run`
-
-Catalog:
-
-- `GET /api/v2/prototype/catalog/jobs`
-- `GET /api/v2/prototype/catalog/jobs/{job_id}`
-- `POST /api/v2/prototype/catalog/jobs/search`
-- `GET /api/v2/prototype/catalog/cvs`
-- `GET /api/v2/prototype/catalog/cvs/{cv_id}`
-- `POST /api/v2/prototype/catalog/cvs/search`
-
-System:
-
-- `GET /api/health`
-- `GET /openapi.json`
+The layout keeps FastAPI but organizes code around app, core, common,
+integration, and feature-module boundaries similar to a NestJS project. The
+current `/api/*` implementation is intentionally still centralized in
+`modules/api/router.py`; the feature folders are the ownership targets for
+future splits.
 
 ## Setup
 
-Create `.env` from the example:
+Create `.env` from the example if present:
 
 ```bash
 cp .env.example .env
 ```
 
-Start the app with Docker Compose:
+Start the backend and database:
 
 ```bash
-docker compose up --build
+docker compose up -d postgres backend
 ```
 
 Services:
 
 - Backend API: `http://localhost:8000`
-- Frontend: `http://localhost:5173`
 - PostgreSQL: `localhost:5433`
 
-## Seed Data
-
-PostgreSQL starts empty unless a persisted Docker volume already contains data.
-Seed the v2 dataset from the backend container:
+Apply schema migrations:
 
 ```bash
-docker compose up -d postgres backend
-docker compose exec backend python db_v2/reset.py
-```
-
-For the compact scenario profile:
-
-```bash
-docker compose exec backend python db_v2/reset.py --profile scenario
-docker compose exec backend python db_v2/validate_scenario_dataset.py --db
+docker compose exec backend python db/apply_migrations.py
 ```
 
 ## Verification
@@ -95,27 +108,24 @@ Backend unit tests:
 docker compose exec backend python -m unittest discover -s tests
 ```
 
-Frontend tests:
+OpenAPI and health:
 
 ```bash
-docker compose run --rm frontend npm run test:run
-```
-
-Frontend build:
-
-```bash
-docker compose run --rm frontend npm run build
-```
-
-Live v2 smoke:
-
-```bash
-bash scripts/smoke_match_v2_live.sh
+curl http://localhost:8000/api/health
+curl http://localhost:8000/openapi.json
 ```
 
 ## Documentation
 
 - Product spec: `docs/REQUIREMENTS.md`
-- V2 database notes: `backend/db_v2/README.md`
-- Frontend v2 notes: `frontend/README.md`
-- API examples: `frontend/apiExamples.md`
+- Production backend HLD: `docs/backend/HLD/`
+- Production API LLD: `docs/backend/LLD/40-api-contract.md`
+- MVP implementation roadmap: `docs/mvp-roadmap/README.md`
+- Legacy prototype reference docs: `docs/backend/HLD/legacy/`
+
+## Frontend Planning Rule
+
+No frontend runtime is active right now. Files under `docs/frontend/` are
+experimental prototype-adjacent notes and are not source of truth for the next
+frontend implementation. Future screens must be redesigned later from
+`docs/REQUIREMENTS.md`, backend HLD/LLD docs, and the current OpenAPI surface.

@@ -166,7 +166,9 @@ Required verification before completion:
 
 ## Current Repository Baseline
 - Backend is the active implemented system (`backend/`).
-- Frontend integration is expected next; API contract discipline is mandatory now.
+- Frontend runtime code is not active yet; future screens will be redesigned
+  later from product/backend/OpenAPI sources.
+- API contract discipline is mandatory now.
 - Automated tests are currently limited; strict smoke-contract verification is required until full tests exist.
 
 ## Mandatory Output Template For Completed Tasks
@@ -178,21 +180,22 @@ Use this exact section structure in every completion handoff.
 4. API/OpenAPI impact
 5. Risks, gaps, and follow-up actions
 
-## V2 Prototype Surface (current state)
+## Backend Surface (current state)
 
-* **Backend**: Postgres + pgvector at port 5433, 4 tables only (`job_posts_v2`,
-  `candidate_profiles_v2`, `job_embeddings_v2`, `candidate_embeddings_v2`).
-  Routers: `routers/match_v2_router.py` (run-only matching) and
-  `routers/v2_catalog_router.py` (browse + detail + semantic search), plus
-  `routers/system_router.py` for health.
-  Embedder: `backend/v2_search/embedder.py` (hash-based, deterministic, pure
-  numpy — same algorithm seeded the stored embeddings).
-* **Frontend** (`frontend/`): v2-only routes. `/` redirects to `/v2/search`.
-  Pages: `V2Search`, `V2JobDetail`, `V2CvDetail`, `V2Matching` (deep-link via
-  `?anchor=&id=`).
-* **IDs are integers**: V2 entities use BigInt primary keys (`job_id`,
-  `cv_id`).
-* **Data is NOT auto-loaded** by `docker compose up`. Postgres starts empty.
-  Seed once via `docker exec jobmatcher-backend python db_v2/seed_orm.py` or
-  `psql -f backend/db_v2/seeds/<file>.sql`. Volume `postgres_data` persists
-  rows across `docker compose down/up` (only `down -v` wipes).
+* **Backend source**: `backend/src/jobconnect/` with app, core, common,
+  integrations, and feature module boundaries. `backend/main.py` is a
+  compatibility wrapper.
+* **Runtime API**: `/api/*` namespaces plus `/api/health` and `/`.
+  Legacy `/api/v2/prototype/*` code is removed from runtime.
+* **Database**: Postgres + pgvector at host port 5433. Schema lives
+  in `backend/db/migrations/001_production_mvp.sql`.
+* **Matching helpers**: deterministic hard filters, scoring, reasoning, and
+  local hash embedding helpers live under
+  `backend/src/jobconnect/modules/matching/`.
+* **Frontend**: frontend runtime code is not present yet. `docs/frontend/`
+  contains experimental prototype-adjacent notes only; do not treat them as the
+  source of truth for the next frontend design.
+* **Data is NOT auto-loaded** by `docker compose up`. Apply migrations with
+  `docker compose exec backend python db/apply_migrations.py`.
+  Volume `postgres_data` persists rows across `docker compose down/up`; only
+  `down -v` wipes.

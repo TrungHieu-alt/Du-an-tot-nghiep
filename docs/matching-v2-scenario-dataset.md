@@ -1,5 +1,9 @@
 # Matching V2 Slice 6B Scenario Dataset
 
+> Legacy prototype verification asset. This document exists to preserve the
+> deterministic V2 matching scenario dataset and should not be edited unless the
+> user explicitly asks to change legacy prototype verification.
+
 Purpose: compact scenario dataset for Matching V2 run-only prototype coverage.
 This is not the broad 40 JD / 240 CV dataset. The broad dataset is deferred to a
 later slice.

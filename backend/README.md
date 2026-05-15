@@ -1,18 +1,49 @@
-# Backend V2
+# Backend
 
-FastAPI backend for the Matching V2 prototype.
+FastAPI backend for the JobConnect MVP recruiting marketplace.
 
-## Active Modules
+## Module Layout
 
-- `main.py` mounts the v2 catalog, v2 matching, and health routers.
-- `routers/match_v2_router.py` exposes run-only matching endpoints.
-- `routers/v2_catalog_router.py` exposes read-only browse/detail/search helpers.
-- `matching_v2/` contains hard filters, scoring, deterministic reasoning, and
-  PostgreSQL loaders.
-- `v2_search/` contains deterministic query embedding helpers for catalog
-  semantic search.
-- `db_v2/` contains migrations, seed/reset tooling, ORM mappings for seed
-  scripts, and scenario validation.
+```text
+backend/
+  main.py                         # compatibility wrapper for older imports
+  sitecustomize.py                # adds backend/src to Python path in local runs
+  src/jobconnect/
+    main.py                       # FastAPI app bootstrap
+    app.py                        # app-level router registry and OpenAPI metadata
+    core/
+      database.py                 # PostgreSQL connection helper
+    common/
+      constants.py
+      pagination.py
+      responses.py
+      utils.py
+    integrations/
+      pgvector/vector.py          # pgvector literal helper
+    modules/
+      api/router.py               # /api/* routers
+      auth/
+      users/
+      organizations/
+      jobs/
+      resumes/
+      documents/
+      matching/                   # deterministic matching helpers
+      applications/
+      invites/
+      notifications/
+      admin/
+      system/router.py            # health route
+  db/
+    migrations/
+    apply_migrations.py
+  tests/
+```
+
+This keeps the Python/FastAPI runtime but follows a NestJS-style module
+boundary: app bootstrap, core infrastructure, shared common helpers,
+integrations, and feature modules. The current `/api/*` router remains
+centralized in `modules/api/router.py` until feature route files are split.
 
 ## Runtime
 
@@ -22,17 +53,17 @@ docker compose up -d postgres backend
 
 The API is available at `http://localhost:8000`.
 
+Apply schema migrations:
+
+```bash
+docker compose exec backend python db/apply_migrations.py
+```
+
 ## Tests
 
 ```bash
 docker compose exec backend python -m unittest discover -s tests
 ```
 
-## Live Smoke
-
-```bash
-bash scripts/smoke_match_v2_live.sh
-```
-
-The backend has no document ingestion, account, application, or persisted match
-result endpoints in the current v2-only surface.
+Legacy V2 prototype backend and frontend runtime code has been removed. Legacy
+reference docs remain under `docs/`.
