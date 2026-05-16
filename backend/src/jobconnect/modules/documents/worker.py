@@ -21,15 +21,20 @@ from dataclasses import dataclass
 from typing import Optional
 
 from jobconnect.core.database import get_connection
+from jobconnect.integrations.llm import ParserError, get_parser
 from jobconnect.integrations.pgvector import vector_to_pg_literal
 from jobconnect.integrations.storage import get_storage
 from jobconnect.modules.documents.extractor import extract_text
-from jobconnect.modules.documents.local_parser import ParsedJob, ParsedResume, parse_job, parse_resume
+from jobconnect.modules.documents.local_parser import ParsedJob, ParsedResume
 from jobconnect.modules.documents.preprocessor import preprocess_text
 from jobconnect.modules.matching.embedding import embed_text
 
 logger = logging.getLogger(__name__)
 
+# Slice 6: parser_version is now sourced from the active LLM adapter
+# (`get_parser().parser_version`). This module-level constant is kept for
+# backward-compatibility with tests/imports; the active value flows through
+# `_mark_succeeded`.
 PARSER_VERSION = "local-v1"
 EMBEDDING_VERSION = "hash-v1"
 
@@ -95,23 +100,29 @@ def _execute(parse_job_id: int) -> None:
 
     text = preprocess_text(raw_text)
 
+    # Slice 6: structured parsing through the LLM adapter (local fallback by default).
+    parser = get_parser()
+
     # Parse + entity creation
     try:
         if info.target_entity_type == "candidate_resume":
-            parsed_resume = parse_resume(text, filename=info.original_filename)
+            parsed_resume = parser.parse_resume(text, filename=info.original_filename)
             entity_id = _upsert_resume(info, parsed_resume)
         else:
             org_id = _get_organization_id(info.owner_user_id)
             if org_id is None:
                 _fail(info, "recruiter_profile_missing", "Recruiter profile or organization not found.")
                 return
-            parsed_job = parse_job(text, filename=info.original_filename)
+            parsed_job = parser.parse_job(text, filename=info.original_filename)
             entity_id = _upsert_job(info, org_id, parsed_job)
+    except ParserError as exc:
+        _fail(info, "llm_parse_failed", f"LLM parser error: {exc}")
+        return
     except Exception as exc:
         _fail(info, "parse_failed", f"Parsing error: {exc}")
         return
 
-    _mark_succeeded(info, entity_id, text)
+    _mark_succeeded(info, entity_id, text, parser_version=parser.parser_version)
 
 
 def _load_parse_job(parse_job_id: int) -> Optional[_ParseJobInfo]:
@@ -157,7 +168,12 @@ def _mark_processing(parse_job_id: int) -> None:
         )
 
 
-def _mark_succeeded(info: _ParseJobInfo, entity_id: int, extracted_text: str) -> None:
+def _mark_succeeded(
+    info: _ParseJobInfo,
+    entity_id: int,
+    extracted_text: str,
+    parser_version: str = PARSER_VERSION,
+) -> None:
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -170,7 +186,7 @@ def _mark_succeeded(info: _ParseJobInfo, entity_id: int, extracted_text: str) ->
                    updated_at = now()
              WHERE parse_job_id = %s
             """,
-            (extracted_text[:10000], PARSER_VERSION, EMBEDDING_VERSION, info.parse_job_id),
+            (extracted_text[:10000], parser_version, EMBEDDING_VERSION, info.parse_job_id),
         )
         if info.target_entity_type == "candidate_resume":
             cur.execute(

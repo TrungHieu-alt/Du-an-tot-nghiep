@@ -10,6 +10,35 @@ import re
 from dataclasses import dataclass, field
 
 
+# --- Canonical enum sets (mirror DB CHECK constraints in 001_production_mvp.sql) ---
+# Exposed for downstream parser adapters (LLM/local) to validate output before
+# persisting. Raw unsupported values must never reach the database.
+
+LOCATION_VALUES: frozenset[str] = frozenset({"ha_noi", "tp_hcm", "da_nang"})
+JOB_TYPE_VALUES: frozenset[str] = frozenset({"remote", "fulltime", "parttime"})
+SENIORITY_VALUES: frozenset[str] = frozenset(
+    {"intern", "fresher", "junior", "mid", "senior", "lead"}
+)
+EDUCATION_VALUES: frozenset[str] = frozenset(
+    {"lop_9", "lop_12", "dai_hoc", "thac_si", "tien_si"}
+)
+
+DEFAULT_LOCATION = "ha_noi"
+DEFAULT_JOB_TYPE = "fulltime"
+DEFAULT_SENIORITY = "junior"
+DEFAULT_EDUCATION = "dai_hoc"
+
+
+def validate_enum(value: str, allowed: frozenset[str], default: str) -> str:
+    """Return value if it is in the canonical set, otherwise the safe default.
+
+    Used by LLM adapters to sanitize structured output before persistence.
+    """
+    if isinstance(value, str) and value in allowed:
+        return value
+    return default
+
+
 @dataclass
 class ParsedResume:
     title: str
