@@ -686,7 +686,7 @@ Handoff checklist:
 
 ## Slice 12: Backend End-to-End Hardening
 
-Status: `not_started`
+Status: `done`
 
 Goal: make backend ready for frontend and MVP demo flows.
 
