@@ -605,7 +605,7 @@ Implementation note (2026-05-17):
 
 ## Slice 10: Notifications, Email, Audit
 
-Status: `not_started`
+Status: `done`
 
 Goal: make business side effects visible and non-blocking.
 
@@ -655,6 +655,27 @@ Handoff checklist:
 
 - Record email adapter mode.
 - Record event coverage.
+
+Implementation note (2026-05-17):
+
+- Added `backend/src/jobconnect/integrations/email.py` with local/log default
+  sender and SMTP provider path selected by `EMAIL_PROVIDER=smtp`.
+- Added `email_attempts` persistence and notification metadata support in the
+  production migration.
+- Notification side effects now create the in-app row, attempt email, persist
+  the email attempt, update `notifications.email_delivery_status`, and write
+  email audit evidence without raising email send failures.
+- Covered events: parse failure, application submitted, application status
+  changed, recruiter invite sent, invite accepted, and invite rejected.
+- Admin monitoring read endpoints now audit `admin_monitoring_access`
+  consistently with filter metadata.
+- Verification: Docker 28.5.2 / Compose v2.40.3; `docker compose up -d --build`
+  completed; `docker compose exec backend python db/apply_migrations.py` exit 0;
+  targeted `python -m unittest tests.test_slice10_notifications_email_audit`
+  passed 10/10; full `python -m unittest discover -s tests` passed 161/161;
+  `/api/health` returned `ok`; live `/openapi.json` exposed 47 paths, 51
+  schemas, and `NotificationDetail.metadata` plus
+  `NotificationDetail.email_delivery_status`.
 
 ## Slice 11: Admin Monitoring
 

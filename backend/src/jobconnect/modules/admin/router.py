@@ -68,9 +68,9 @@ def admin_applications(
     resume_id: Optional[int] = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    _: CurrentUser = Depends(require_roles("admin")),
+    user: CurrentUser = Depends(require_roles("admin")),
 ):
-    return service.admin_applications(status, job_id, resume_id, limit, offset)
+    return service.admin_applications(status, job_id, resume_id, limit, offset, user)
 
 
 @router.get("/invites", response_model=Paginated)
@@ -80,9 +80,9 @@ def admin_invites(
     resume_id: Optional[int] = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    _: CurrentUser = Depends(require_roles("admin")),
+    user: CurrentUser = Depends(require_roles("admin")),
 ):
-    return service.admin_invites(status, job_id, resume_id, limit, offset)
+    return service.admin_invites(status, job_id, resume_id, limit, offset, user)
 
 
 @router.get("/notifications", response_model=Paginated)
@@ -91,9 +91,9 @@ def admin_notifications(
     user_id: Optional[int] = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    _: CurrentUser = Depends(require_roles("admin")),
+    user: CurrentUser = Depends(require_roles("admin")),
 ):
-    return service.admin_notifications(status, user_id, limit, offset)
+    return service.admin_notifications(status, user_id, limit, offset, user)
 
 
 @router.get("/audit-logs", response_model=Paginated)
@@ -104,6 +104,6 @@ def admin_audit_logs(
     event_type: Optional[str] = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    _: CurrentUser = Depends(require_roles("admin")),
+    user: CurrentUser = Depends(require_roles("admin")),
 ):
-    return service.admin_audit_logs(actor_user_id, target_type, target_id, event_type, limit, offset)
+    return service.admin_audit_logs(actor_user_id, target_type, target_id, event_type, limit, offset, user)

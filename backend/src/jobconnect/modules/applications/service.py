@@ -180,10 +180,29 @@ def create_application_in_cursor(
         "A candidate applied to your job.",
         "application",
         application_id,
+        actor_id=actor_user_id,
+        metadata={
+            "application_id": application_id,
+            "job_id": job_id,
+            "resume_id": resume_id,
+            "candidate_user_id": candidate_user_id,
+        },
     )
     from jobconnect.modules.api.shared import audit
 
-    audit(cur, actor_user_id, "candidate_applied", "application", application_id)
+    audit(
+        cur,
+        actor_user_id,
+        "candidate_applied",
+        "application",
+        application_id,
+        metadata={
+            "job_id": job_id,
+            "resume_id": resume_id,
+            "candidate_user_id": candidate_user_id,
+            "recruiter_user_id": recruiter_user_id,
+        },
+    )
     created = _select_application_by_id(cur, application_id)
     if created is None:
         raise business_error(500, "application_create_failed", "Application was not readable after creation.")
@@ -309,10 +328,33 @@ def update_application_status(application_id: int, request: ApplicationStatusReq
             f"Application is now {request.status}.",
             "application",
             application_id,
+            actor_id=user.user_id,
+            metadata={
+                "application_id": application_id,
+                "from_status": current,
+                "to_status": request.status,
+                "actor_role": user.role,
+                "job_id": row[1],
+                "resume_id": row[3],
+            },
         )
         from jobconnect.modules.api.shared import audit
 
-        audit(cur, user.user_id, "application_status_changed", "application", application_id)
+        audit(
+            cur,
+            user.user_id,
+            "application_status_changed",
+            "application",
+            application_id,
+            metadata={
+                "from_status": current,
+                "to_status": request.status,
+                "actor_role": user.role,
+                "job_id": row[1],
+                "resume_id": row[3],
+                "recipient_user_id": notify_recipient,
+            },
+        )
         detail_row = _select_application_by_id(cur, updated[0])
         if detail_row is None:
             raise business_error(500, "application_update_failed", "Application was not readable after status update.")

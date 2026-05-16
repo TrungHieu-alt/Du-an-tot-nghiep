@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
+
+from pydantic import Field
 
 from jobconnect.modules.api.shared import APIModel, NotificationStatus
 
@@ -18,3 +20,5 @@ class NotificationDetail(APIModel):
     body: str
     entity_type: Optional[str] = None
     entity_id: Optional[int] = None
+    email_delivery_status: Optional[str] = None
+    metadata: dict[str, Any] = Field(default_factory=dict)

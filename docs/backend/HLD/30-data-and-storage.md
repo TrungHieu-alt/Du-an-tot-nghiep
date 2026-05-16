@@ -3,7 +3,7 @@
 ## Storage Ownership
 
 - PostgreSQL owns users, profiles, organizations, jobs, resumes, parse jobs,
-  applications, invites, notifications, and audit logs.
+  applications, invites, notifications, email attempts, and audit logs.
 - Object storage owns original CV/JD files.
 - pgvector columns in PostgreSQL own semantic vectors for job and resume fields.
 
@@ -25,6 +25,7 @@ Production implementation must provide these entity groups:
 - `application_events`
 - `recruiter_invites`
 - `notifications`
+- `email_attempts`
 - `audit_logs`
 
 Detailed table columns, constraints, relationships, and index strategy are
@@ -60,12 +61,28 @@ documentation and is not an executable migration.
   - candidate: `submitted | shortlisted -> withdrawn`
   - terminal: `rejected | hired | withdrawn`
 - Every valid application creation/status change writes the required lifecycle
-  side effects: application event where applicable, notification, and audit log.
+  side effects: application event where applicable, notification, email attempt,
+  and audit log.
 - Closed jobs reject new applications and recruiter invites.
 - Application and invite API responses denormalize linked job/resume display
   summaries and timestamps for frontend list/detail rendering. These are read
   models over the canonical tables, not duplicated persisted application/invite
   columns.
+
+## Notification, Email, And Audit Invariants
+
+- Business events create in-app `notifications` rows before email delivery is
+  attempted.
+- Every email attempt is persisted to `email_attempts` with event type, target,
+  provider, status, timestamps, and metadata.
+- Local development uses the local/log email adapter and records attempts as
+  `logged`.
+- Provider-backed delivery can mark attempts `sent`; provider failures mark
+  attempts `failed`.
+- Email delivery failure must not roll back parse, application, invite, or
+  status-change transactions.
+- Audit rows always include actor user ID when known, event type, target entity,
+  timestamp, and metadata JSON.
 
 ## Embedding Contract
 

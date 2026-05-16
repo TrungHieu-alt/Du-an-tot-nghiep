@@ -179,6 +179,16 @@ def _invite_detail_row(invite_id: int = 200, status: str = "pending") -> tuple:
     )
 
 
+def _notify_script(notification_id: int = 900, attempt_id: int = 800, email: str = "recipient@example.com") -> list[Any]:
+    return [
+        (notification_id,),
+        (email,),
+        (attempt_id,),
+        None,
+        None,
+    ]
+
+
 def _count_sql(state: dict[str, Any], fragment: str) -> int:
     needle = fragment.lower()
     return sum(1 for sql, _params in state["statements"] if needle in " ".join(sql.lower().split()))
@@ -198,7 +208,7 @@ class Slice9ApplicationTests(unittest.TestCase):
                 None,
                 (100,),
                 None,
-                None,
+                *_notify_script(),
                 None,
                 _application_detail_row(),
             ]
@@ -217,7 +227,8 @@ class Slice9ApplicationTests(unittest.TestCase):
         self.assertEqual(body["resume_summary"]["resume_id"], 7)
         self.assertEqual(_count_sql(state, "insert into application_events"), 1)
         self.assertEqual(_count_sql(state, "insert into notifications"), 1)
-        self.assertEqual(_count_sql(state, "insert into audit_logs"), 1)
+        self.assertEqual(_count_sql(state, "insert into email_attempts"), 1)
+        self.assertEqual(_count_sql(state, "insert into audit_logs"), 2)
 
     def test_duplicate_apply_returns_409_without_side_effects(self) -> None:
         token = _token(10, "candidate")
@@ -353,7 +364,7 @@ class Slice9InviteTests(unittest.TestCase):
                 _job_row(),
                 None,
                 (200, 5, 7, 10, 20, "pending", "Please apply."),
-                None,
+                *_notify_script(),
                 None,
                 _invite_detail_row(),
             ]
@@ -368,7 +379,8 @@ class Slice9InviteTests(unittest.TestCase):
         self.assertEqual(resp.json()["status"], "pending")
         self.assertEqual(_count_sql(state, "insert into recruiter_invites"), 1)
         self.assertEqual(_count_sql(state, "insert into notifications"), 1)
-        self.assertEqual(_count_sql(state, "insert into audit_logs"), 1)
+        self.assertEqual(_count_sql(state, "insert into email_attempts"), 1)
+        self.assertEqual(_count_sql(state, "insert into audit_logs"), 2)
         self.assertEqual(_count_sql(state, "insert into applications"), 0)
 
     def test_invite_to_closed_job_is_rejected(self) -> None:
@@ -401,11 +413,11 @@ class Slice9InviteTests(unittest.TestCase):
                 None,
                 (100,),
                 None,
-                None,
+                *_notify_script(notification_id=901, attempt_id=801),
                 None,
                 _application_detail_row(),
                 (200, 5, 7, 10, 20, "accepted", "Please apply."),
-                None,
+                *_notify_script(notification_id=902, attempt_id=802),
                 None,
                 _invite_detail_row(status="accepted"),
             ]
@@ -422,7 +434,8 @@ class Slice9InviteTests(unittest.TestCase):
         self.assertEqual(_count_sql(state, "insert into applications"), 1)
         self.assertEqual(_count_sql(state, "insert into application_events"), 1)
         self.assertEqual(_count_sql(state, "insert into notifications"), 2)
-        self.assertEqual(_count_sql(state, "insert into audit_logs"), 2)
+        self.assertEqual(_count_sql(state, "insert into email_attempts"), 2)
+        self.assertEqual(_count_sql(state, "insert into audit_logs"), 4)
 
     def test_accept_invite_returns_existing_application_without_duplicate(self) -> None:
         token = _token(10, "candidate")
@@ -434,7 +447,7 @@ class Slice9InviteTests(unittest.TestCase):
                 _job_row(),
                 _application_detail_row(application_id=101),
                 (200, 5, 7, 10, 20, "accepted", "Please apply."),
-                None,
+                *_notify_script(),
                 None,
                 _invite_detail_row(status="accepted"),
             ]
@@ -449,7 +462,8 @@ class Slice9InviteTests(unittest.TestCase):
         self.assertEqual(_count_sql(state, "insert into applications"), 0)
         self.assertEqual(_count_sql(state, "insert into application_events"), 0)
         self.assertEqual(_count_sql(state, "insert into notifications"), 1)
-        self.assertEqual(_count_sql(state, "insert into audit_logs"), 1)
+        self.assertEqual(_count_sql(state, "insert into email_attempts"), 1)
+        self.assertEqual(_count_sql(state, "insert into audit_logs"), 2)
 
     def test_reject_invite_creates_no_application(self) -> None:
         token = _token(10, "candidate")
@@ -458,7 +472,7 @@ class Slice9InviteTests(unittest.TestCase):
                 (10, "c@example.com", "candidate", "active"),
                 _invite_detail_row(),
                 (200, 5, 7, 10, 20, "rejected", "Please apply."),
-                None,
+                *_notify_script(),
                 None,
                 _invite_detail_row(status="rejected"),
             ]
@@ -474,7 +488,8 @@ class Slice9InviteTests(unittest.TestCase):
         self.assertEqual(_count_sql(state, "insert into applications"), 0)
         self.assertEqual(_count_sql(state, "insert into application_events"), 0)
         self.assertEqual(_count_sql(state, "insert into notifications"), 1)
-        self.assertEqual(_count_sql(state, "insert into audit_logs"), 1)
+        self.assertEqual(_count_sql(state, "insert into email_attempts"), 1)
+        self.assertEqual(_count_sql(state, "insert into audit_logs"), 2)
 
 
 if __name__ == "__main__":

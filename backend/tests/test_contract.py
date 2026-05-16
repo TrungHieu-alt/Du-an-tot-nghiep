@@ -95,6 +95,16 @@ def _job_row(job_id: int, recruiter_user_id: int, status: str = "draft") -> tupl
     )
 
 
+def _notify_script(notification_id: int = 900, attempt_id: int = 800, email: str = "recipient@example.com") -> list[Any]:
+    return [
+        (notification_id,),
+        (email,),
+        (attempt_id,),
+        None,
+        None,
+    ]
+
+
 class PartialPatchTests(unittest.TestCase):
     def setUp(self) -> None:
         self.client = TestClient(app, raise_server_exceptions=False)
@@ -231,8 +241,8 @@ class TransitionGuardTests(unittest.TestCase):
             (8, 5, 10, 7, "shortlisted"),
             (8,),
             None,  # application_events insert
-            None,  # notification insert
-            None,  # audit insert
+            *_notify_script(),
+            None,  # business audit insert
             (8, 5, 10, 7, "withdrawn"),
             [],  # refreshed event history
         ]

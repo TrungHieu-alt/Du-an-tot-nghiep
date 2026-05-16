@@ -22,6 +22,8 @@ def notification_detail(row: tuple) -> NotificationDetail:
         body=row[5],
         entity_type=row[6],
         entity_id=row[7],
+        email_delivery_status=row[8] if len(row) > 8 else None,
+        metadata=row[9] if len(row) > 9 and row[9] is not None else {},
     )
 
 
@@ -37,7 +39,8 @@ def list_notifications(status: Optional[NotificationStatus], limit: int, offset:
         total = cur.fetchone()[0]
         cur.execute(
             f"""
-            SELECT notification_id, recipient_user_id, type, status, title, body, entity_type, entity_id
+            SELECT notification_id, recipient_user_id, type, status, title, body,
+                   entity_type, entity_id, email_delivery_status, metadata
             FROM notifications WHERE {sql_where}
             ORDER BY notification_id DESC LIMIT %s OFFSET %s
             """,
@@ -53,7 +56,8 @@ def mark_notification_read(notification_id: int, user: CurrentUser) -> Notificat
             """
             UPDATE notifications SET status = 'read', updated_at = now()
             WHERE notification_id = %s AND recipient_user_id = %s
-            RETURNING notification_id, recipient_user_id, type, status, title, body, entity_type, entity_id
+            RETURNING notification_id, recipient_user_id, type, status, title, body,
+                      entity_type, entity_id, email_delivery_status, metadata
             """,
             (notification_id, user.user_id),
         )

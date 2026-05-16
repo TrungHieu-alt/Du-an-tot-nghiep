@@ -190,9 +190,18 @@ def admin_applications(
     resume_id: Optional[int],
     limit: int,
     offset: int,
+    user: CurrentUser,
 ) -> Paginated:
     where, params = admin_filters(status=status, job_id=job_id, resume_id=resume_id)
     with _api().get_connection() as conn, conn.cursor() as cur:
+        audit(
+            cur,
+            user.user_id,
+            "admin_monitoring_access",
+            "applications",
+            None,
+            metadata={"status": status, "job_id": job_id, "resume_id": resume_id},
+        )
         cur.execute(f"SELECT COUNT(*) FROM applications WHERE {where}", params)
         total = cur.fetchone()[0]
         cur.execute(
@@ -209,9 +218,18 @@ def admin_invites(
     resume_id: Optional[int],
     limit: int,
     offset: int,
+    user: CurrentUser,
 ) -> Paginated:
     where, params = admin_filters(status=status, job_id=job_id, resume_id=resume_id)
     with _api().get_connection() as conn, conn.cursor() as cur:
+        audit(
+            cur,
+            user.user_id,
+            "admin_monitoring_access",
+            "invites",
+            None,
+            metadata={"status": status, "job_id": job_id, "resume_id": resume_id},
+        )
         cur.execute(f"SELECT COUNT(*) FROM recruiter_invites WHERE {where}", params)
         total = cur.fetchone()[0]
         cur.execute(
@@ -227,13 +245,26 @@ def admin_notifications(
     user_id: Optional[int],
     limit: int,
     offset: int,
+    user: CurrentUser,
 ) -> Paginated:
     where, params = admin_filters(status=status, recipient_user_id=user_id)
     with _api().get_connection() as conn, conn.cursor() as cur:
+        audit(
+            cur,
+            user.user_id,
+            "admin_monitoring_access",
+            "notifications",
+            None,
+            metadata={"status": status, "recipient_user_id": user_id},
+        )
         cur.execute(f"SELECT COUNT(*) FROM notifications WHERE {where}", params)
         total = cur.fetchone()[0]
         cur.execute(
-            f"SELECT notification_id, recipient_user_id, type, status, title, body, entity_type, entity_id FROM notifications WHERE {where} ORDER BY notification_id DESC LIMIT %s OFFSET %s",
+            f"""
+            SELECT notification_id, recipient_user_id, type, status, title, body,
+                   entity_type, entity_id, email_delivery_status, metadata
+            FROM notifications WHERE {where} ORDER BY notification_id DESC LIMIT %s OFFSET %s
+            """,
             (*params, limit, offset),
         )
         items = [notification_detail(r) for r in cur.fetchall()]
@@ -247,6 +278,7 @@ def admin_audit_logs(
     event_type: Optional[str],
     limit: int,
     offset: int,
+    user: CurrentUser,
 ) -> Paginated:
     where, params = admin_filters(
         actor_user_id=actor_user_id,
@@ -255,6 +287,19 @@ def admin_audit_logs(
         event_type=event_type,
     )
     with _api().get_connection() as conn, conn.cursor() as cur:
+        audit(
+            cur,
+            user.user_id,
+            "admin_monitoring_access",
+            "audit_logs",
+            None,
+            metadata={
+                "actor_user_id": actor_user_id,
+                "target_type": target_type,
+                "target_id": target_id,
+                "event_type": event_type,
+            },
+        )
         cur.execute(f"SELECT COUNT(*) FROM audit_logs WHERE {where}", params)
         total = cur.fetchone()[0]
         cur.execute(

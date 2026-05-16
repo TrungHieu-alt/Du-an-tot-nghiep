@@ -37,6 +37,21 @@ Create in-app notifications and attempt basic email for:
 Email delivery failure must be logged and must not roll back the business
 transaction.
 
+Runtime email delivery uses an adapter boundary:
+
+- `EMAIL_PROVIDER=local` or unset: local/log sender; no real email is sent and
+  attempts are recorded as `logged`.
+- `EMAIL_PROVIDER=smtp`: SMTP sender if `SMTP_HOST` and `EMAIL_FROM` are set;
+  otherwise runtime falls back to local/log.
+- SMTP optional env vars: `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
+  `SMTP_USE_TLS`, and `SMTP_TIMEOUT_SECONDS`.
+
+Every notification side effect records an `email_attempts` row with recipient,
+event type, target, provider, status, error message when present, timestamps,
+and metadata. Email send exceptions are caught after the notification is
+created; the business action continues and the email attempt is marked
+`failed`.
+
 ## Audit
 
 Business audit events are required for:
@@ -52,6 +67,11 @@ Business audit events are required for:
 
 Audit events must include actor user ID when known, target entity, event type,
 timestamp, and metadata JSON.
+
+Admin monitoring read endpoints use the same audit policy: read-only access is
+audited as `admin_monitoring_access` with the monitored resource and filters in
+metadata. This keeps Slice 11 operational monitoring data visible without
+adding admin write behavior.
 
 ## Observability
 

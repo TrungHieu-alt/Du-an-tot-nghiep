@@ -163,10 +163,38 @@ def create_invite(request: InviteRequest, user: CurrentUser) -> InviteDetail:
             (request.job_id, request.resume_id, resume[1], user.user_id, request.message),
         )
         row = cur.fetchone()
-        notify(cur, resume[1], "recruiter_invite_sent", "Recruiter invite sent", "A recruiter invited you to apply.", "invite", row[0])
+        notify(
+            cur,
+            resume[1],
+            "recruiter_invite_sent",
+            "Recruiter invite sent",
+            "A recruiter invited you to apply.",
+            "invite",
+            row[0],
+            actor_id=user.user_id,
+            metadata={
+                "invite_id": row[0],
+                "job_id": request.job_id,
+                "resume_id": request.resume_id,
+                "candidate_user_id": resume[1],
+                "recruiter_user_id": user.user_id,
+            },
+        )
         from jobconnect.modules.api.shared import audit
 
-        audit(cur, user.user_id, "recruiter_invite_sent", "invite", row[0])
+        audit(
+            cur,
+            user.user_id,
+            "recruiter_invite_sent",
+            "invite",
+            row[0],
+            metadata={
+                "job_id": request.job_id,
+                "resume_id": request.resume_id,
+                "candidate_user_id": resume[1],
+                "recruiter_user_id": user.user_id,
+            },
+        )
         detail_row = _select_invite_by_id(cur, row[0])
         if detail_row is None:
             raise business_error(500, "invite_create_failed", "Invite was not readable after creation.")
@@ -210,10 +238,40 @@ def accept_invite(invite_id: int, user: CurrentUser) -> InviteAcceptResponse:
         updated = cur.fetchone()
         if updated is None:
             raise business_error(409, "invalid_state", "Invite is not pending.")
-        notify(cur, updated[4], "invite_accepted", "Invite accepted", "Candidate accepted your invite.", "invite", invite_id)
+        notify(
+            cur,
+            updated[4],
+            "invite_accepted",
+            "Invite accepted",
+            "Candidate accepted your invite.",
+            "invite",
+            invite_id,
+            actor_id=user.user_id,
+            metadata={
+                "invite_id": invite_id,
+                "job_id": updated[1],
+                "resume_id": updated[2],
+                "candidate_user_id": updated[3],
+                "recruiter_user_id": updated[4],
+                "application_id": app[0],
+            },
+        )
         from jobconnect.modules.api.shared import audit
 
-        audit(cur, user.user_id, "invite_accepted", "invite", invite_id)
+        audit(
+            cur,
+            user.user_id,
+            "invite_accepted",
+            "invite",
+            invite_id,
+            metadata={
+                "job_id": updated[1],
+                "resume_id": updated[2],
+                "candidate_user_id": updated[3],
+                "recruiter_user_id": updated[4],
+                "application_id": app[0],
+            },
+        )
         detail_row = _select_invite_by_id(cur, invite_id)
         if detail_row is None:
             raise business_error(500, "invite_update_failed", "Invite was not readable after acceptance.")
@@ -239,10 +297,38 @@ def reject_invite(invite_id: int, request: InviteRejectRequest, user: CurrentUse
         updated = cur.fetchone()
         if updated is None:
             raise business_error(409, "invalid_state", "Invite is not pending.")
-        notify(cur, updated[4], "invite_rejected", "Invite rejected", request.note or "Candidate rejected your invite.", "invite", invite_id)
+        notify(
+            cur,
+            updated[4],
+            "invite_rejected",
+            "Invite rejected",
+            request.note or "Candidate rejected your invite.",
+            "invite",
+            invite_id,
+            actor_id=user.user_id,
+            metadata={
+                "invite_id": invite_id,
+                "job_id": updated[1],
+                "resume_id": updated[2],
+                "candidate_user_id": updated[3],
+                "recruiter_user_id": updated[4],
+            },
+        )
         from jobconnect.modules.api.shared import audit
 
-        audit(cur, user.user_id, "invite_rejected", "invite", invite_id)
+        audit(
+            cur,
+            user.user_id,
+            "invite_rejected",
+            "invite",
+            invite_id,
+            metadata={
+                "job_id": updated[1],
+                "resume_id": updated[2],
+                "candidate_user_id": updated[3],
+                "recruiter_user_id": updated[4],
+            },
+        )
         detail_row = _select_invite_by_id(cur, invite_id)
         if detail_row is None:
             raise business_error(500, "invite_update_failed", "Invite was not readable after rejection.")
