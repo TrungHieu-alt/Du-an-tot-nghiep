@@ -220,6 +220,9 @@ def _mark_succeeded(
 
 
 def _fail(info: _ParseJobInfo, error_code: str, error_message: str) -> None:
+    from jobconnect.modules.api.shared import dispatch_email
+
+    notif_id = -1
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -238,6 +241,7 @@ def _fail(info: _ParseJobInfo, error_code: str, error_message: str) -> None:
             INSERT INTO notifications
                 (recipient_user_id, type, title, body, entity_type, entity_id, email_delivery_status)
             VALUES (%s, 'parse_failed', 'Document parsing failed', %s, 'parse_job', %s, 'queued')
+            RETURNING notification_id
             """,
             (
                 info.owner_user_id,
@@ -245,7 +249,11 @@ def _fail(info: _ParseJobInfo, error_code: str, error_message: str) -> None:
                 info.parse_job_id,
             ),
         )
+        row = cur.fetchone()
+        if row:
+            notif_id = int(row[0])
         _write_audit(cur, info.owner_user_id, "parse_job_failed", "parse_job", info.parse_job_id)
+    dispatch_email(notif_id)
 
 
 # ---------------------------------------------------------------------------

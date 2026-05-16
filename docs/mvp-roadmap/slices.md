@@ -583,7 +583,7 @@ Handoff checklist:
 
 ## Slice 10: Notifications, Email, Audit
 
-Status: `not_started`
+Status: `done`
 
 Goal: make business side effects visible and non-blocking.
 

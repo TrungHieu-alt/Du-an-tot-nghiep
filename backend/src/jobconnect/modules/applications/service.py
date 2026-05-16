@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 import psycopg
 
-from jobconnect.modules.api.shared import CurrentUser, Paginated, _dt, business_error, notify, validate_application_transition
+from jobconnect.modules.api.shared import CurrentUser, Paginated, _dt, business_error, dispatch_email, notify, validate_application_transition
 from jobconnect.modules.applications.schemas import (
     ApplicationDetail,
     ApplicationEvent,
@@ -87,6 +87,7 @@ def create_application_record(
         raise business_error(409, "closed_job", "Job is closed and cannot accept new applications.")
     if job[11] != "published":
         raise business_error(404, "not_found", "Published job not found.")
+    notif_id = -1
     with _api().get_connection() as conn, conn.cursor() as cur:
         try:
             cur.execute(
@@ -102,11 +103,11 @@ def create_application_record(
                 "INSERT INTO application_events (application_id, from_status, to_status, actor_user_id, note) VALUES (%s, NULL, 'submitted', %s, %s)",
                 (row[0], actor_user_id, note),
             )
-            notify(cur, job[2], "application_submitted", "Application submitted", "A candidate applied to your job.", "application", row[0])
+            notif_id = notify(cur, job[2], "application_submitted", "Application submitted", "A candidate applied to your job.", "application", row[0])
             from jobconnect.modules.api.shared import audit
 
             audit(cur, actor_user_id, "candidate_applied", "application", row[0])
-            return row
+            result_row = row
         except psycopg.errors.UniqueViolation as exc:
             if not allow_existing:
                 raise business_error(409, "duplicate_application", "Application already exists.") from exc
@@ -116,7 +117,10 @@ def create_application_record(
                     "SELECT application_id, job_id, candidate_user_id, resume_id, status FROM applications WHERE job_id = %s AND resume_id = %s",
                     (job_id, resume_id),
                 )
-                return cur2.fetchone()
+                result_row = cur2.fetchone()
+    if notif_id != -1:
+        dispatch_email(notif_id)
+    return result_row
 
 
 def list_applications(
@@ -194,7 +198,7 @@ def update_application_status(application_id: int, request: ApplicationStatusReq
             "INSERT INTO application_events (application_id, from_status, to_status, actor_user_id, note) VALUES (%s, %s, %s, %s, %s)",
             (application_id, current, request.status, user.user_id, request.note),
         )
-        notify(
+        notif_id = notify(
             cur,
             updated[2],
             "application_status_changed",
@@ -206,4 +210,5 @@ def update_application_status(application_id: int, request: ApplicationStatusReq
         from jobconnect.modules.api.shared import audit
 
         audit(cur, user.user_id, "application_status_changed", "application", application_id)
+    dispatch_email(notif_id)
     return application_detail(updated)

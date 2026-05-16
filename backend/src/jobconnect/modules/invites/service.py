@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from jobconnect.modules.api.shared import CurrentUser, Paginated, business_error, notify
+from jobconnect.modules.api.shared import CurrentUser, Paginated, business_error, dispatch_email, notify
 from jobconnect.modules.applications.service import application_detail, create_application_record
 from jobconnect.modules.invites.schemas import InviteAcceptResponse, InviteDetail, InviteRejectRequest, InviteRequest
 from jobconnect.modules.jobs.service import get_job_row
@@ -124,10 +124,11 @@ def create_invite(request: InviteRequest, user: CurrentUser) -> InviteDetail:
             (request.job_id, request.resume_id, resume[1], user.user_id, request.message),
         )
         row = cur.fetchone()
-        notify(cur, resume[1], "recruiter_invite_sent", "Recruiter invite sent", "A recruiter invited you to apply.", "invite", row[0])
+        notif_id = notify(cur, resume[1], "recruiter_invite_sent", "Recruiter invite sent", "A recruiter invited you to apply.", "invite", row[0])
         from jobconnect.modules.api.shared import audit
 
         audit(cur, user.user_id, "recruiter_invite_sent", "invite", row[0])
+    dispatch_email(notif_id)
     return invite_detail(row)
 
 
@@ -158,10 +159,11 @@ def accept_invite(invite_id: int, user: CurrentUser) -> InviteAcceptResponse:
             (invite_id,),
         )
         updated = cur.fetchone()
-        notify(cur, updated[4], "invite_accepted", "Invite accepted", "Candidate accepted your invite.", "invite", invite_id)
+        notif_id = notify(cur, updated[4], "invite_accepted", "Invite accepted", "Candidate accepted your invite.", "invite", invite_id)
         from jobconnect.modules.api.shared import audit
 
         audit(cur, user.user_id, "invite_accepted", "invite", invite_id)
+    dispatch_email(notif_id)
     app = create_application_record(updated[1], updated[2], updated[3], user.user_id, "Accepted invite", allow_existing=True)
     return InviteAcceptResponse(invite=invite_detail(updated), application=application_detail(app))
 
@@ -178,8 +180,9 @@ def reject_invite(invite_id: int, request: InviteRejectRequest, user: CurrentUse
             (invite_id,),
         )
         updated = cur.fetchone()
-        notify(cur, updated[4], "invite_rejected", "Invite rejected", request.note or "Candidate rejected your invite.", "invite", invite_id)
+        notif_id = notify(cur, updated[4], "invite_rejected", "Invite rejected", request.note or "Candidate rejected your invite.", "invite", invite_id)
         from jobconnect.modules.api.shared import audit
 
         audit(cur, user.user_id, "invite_rejected", "invite", invite_id)
+    dispatch_email(notif_id)
     return invite_detail(updated)

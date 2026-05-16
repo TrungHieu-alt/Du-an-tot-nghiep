@@ -37,6 +37,14 @@ Create in-app notifications and attempt basic email for:
 Email delivery failure must be logged and must not roll back the business
 transaction.
 
+### Email Adapter (Slice 10)
+
+- `integrations/email/base.py` — `EmailSender` abstract interface (`send(to, subject, body)`).
+- `integrations/email/local.py` — `LocalLogEmailSender`: writes to application log, always succeeds. Default for dev/test.
+- `integrations/email/__init__.py` — `get_email_sender()` factory; env var `EMAIL_PROVIDER` (default `local`).
+- `shared.dispatch_email(notification_id)` — fetches committed notification row, calls sender, updates `email_delivery_status` to `sent`/`failed` in a separate DB connection. Returns immediately for `notification_id <= 0`. Swallows all exceptions.
+- All `notify()` calls now use `RETURNING notification_id`; dispatchers call `dispatch_email()` after the business transaction commits.
+
 ## Audit
 
 Business audit events are required for:
