@@ -32,14 +32,11 @@ Response-only exception (see canonical rule in `AGENTS.md`):
   - Compatibility/migration notes are included.
 
 ## 4) Documentation Sync
-- Update relevant docs when behavior, assumptions, or flow changes:
-  - `docs/agent-rules/quick-context.md` for system reality changes.
-  - `docs/agent-rules/codemap.md` for flow ownership/path changes.
-  - `docs/agent-rules/playbook.md` if execution procedure standards changed.
-- If task edits AI guardrails docs (`AGENTS.md` or `docs/agent-rules/*`):
-  - Run a duplicate-rule check across all AI guardrails docs.
-  - Keep canonical rules in `AGENTS.md`; other files should reference rather than duplicate.
-  - Include duplicate-check result in handoff evidence.
+- Follow `AGENTS.md` Documentation Synchronization Gate.
+- Completion evidence must state which docs changed, or `docs: none` with the
+  reason.
+- If task edits AI guardrails docs (`AGENTS.md` or `docs/agent-rules/*`), follow
+  `AGENTS.md` AI Guardrails Doc Change Gate.
 
 ## 5) Failure Condition
 - If any required item is missing, task status is `not done`.

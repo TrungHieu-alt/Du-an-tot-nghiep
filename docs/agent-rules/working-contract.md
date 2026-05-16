@@ -18,11 +18,8 @@ For non-trivial decisions, record:
 
 ## 3) API and OpenAPI Contract
 - OpenAPI is source of truth for frontend-backend wiring.
-- No endpoint contract drift without explicit update notes.
-- For breaking changes, include:
-  - What breaks.
-  - Who is affected.
-  - Migration path.
+- Follow `AGENTS.md` Documentation Synchronization Gate for API contract notes,
+  compatibility notes, and roadmap/status sync.
 
 ## 4) Code and Data Safety
 - Do not weaken auth/security behavior silently.
@@ -31,8 +28,7 @@ For non-trivial decisions, record:
 
 ## 5) Verification Responsibility
 - Definition of Done gates in `definition-of-done.md` are mandatory.
-- Every completed task includes command log summary and pass/fail outcomes.
-- Missing evidence means incomplete task.
+- Missing command-backed evidence means incomplete task.
 
 ## 6) Escalation Triggers
 Escalate immediately when:

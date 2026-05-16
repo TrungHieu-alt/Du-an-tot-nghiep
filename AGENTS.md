@@ -70,6 +70,7 @@ Use this rule when the user explicitly requests chat output only (for example: "
 
 ### 2) Scope (Touch Files)
 - Exact file list expected to be edited
+- Exact documentation files expected to be synced, or `none` with reason
 - Explicit out-of-scope areas
 - Affected runtime workflows from `codemap.md`
 
@@ -147,9 +148,33 @@ If code contradicts `docs/REQUIREMENTS.md`, treat the spec as authoritative and 
 - Do not ship behavior changes without verification evidence.
 - When a bug/regression or uncovered case is identified, add or update an automated test that reproduces and guards that case before closing the task.
 - Do not change API behavior without OpenAPI contract sync notes.
-- Do not skip docs updates when behavior, flow, or assumptions change.
+- Do not skip docs updates when behavior, flow, assumptions, slice status, verification evidence, or Go/No-Go readiness changes.
 - Do not make silent assumptions on security, auth, or tenant boundaries.
 - Do not merge AI guardrails doc edits without a duplicate-rule check across `AGENTS.md` and `docs/agent-rules/*`.
+
+## Documentation Synchronization Gate (Canonical)
+Before final handoff or staging, run a documentation impact check for every
+task that changes behavior, API/OpenAPI semantics, data flow, provider behavior,
+verification status, roadmap/slice readiness, operational assumptions, or
+Go/No-Go decisions.
+
+Required behavior:
+1. Identify docs from `docs/agent-rules/doc-map.md` plus roadmap/status docs
+   when progress or readiness changes.
+2. Update every affected source-of-truth doc in the same task, or explicitly
+   record `docs: none` with the reason in the handoff.
+3. For slice/risk-sweep work, always check these roadmap files:
+   - `docs/mvp-roadmap/progress.md`
+   - `docs/mvp-roadmap/slices.md`
+   - `docs/mvp-roadmap/requirements-acceptance-matrix.md`
+4. For API/behavior changes, also check current implementation/API docs:
+   - `docs/backend/LLD/50-current-api-implementation-matrix.md`
+   - `docs/backend/HLD/*` files loaded for the task
+   - `docs/backend/LLD/40-api-contract.md` when request/response/status
+     semantics change
+5. Stage or report code and doc changes together. Never stage code-only work
+   after a behavior/risk-sweep change unless the documentation impact check
+   found no required doc updates and the handoff says why.
 
 ## Runtime Execution Rule (Canonical)
 - For any task that requires runtime execution (for example: running tests, starting app services, smoke checks, or commands that depend on live backend/frontend processes), use Docker Compose runtime instead of host-local runtimes.
