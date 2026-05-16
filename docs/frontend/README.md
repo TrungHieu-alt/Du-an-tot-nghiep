@@ -79,6 +79,8 @@ frontend has been removed from runtime code.
   session-expired, validation, and fallback state contract.
 - `screen-to-api-state-matrix.md`: implementation matrix mapping each screen to
   routes, roles, APIs, states, success navigation, and blocked actions.
+- `screen/design-references.md`: external product references, style rationale,
+  component library decision, and blocked API dependency list for Slice 14+.
 
 ## Notes for Engineers
 

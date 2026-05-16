@@ -739,7 +739,7 @@ Handoff checklist:
 
 ## Slice 13: Frontend Design Direction
 
-Status: `review`
+Status: `done`
 
 Goal: define a simple, implementable frontend direction without resurrecting the
 removed prototype.
@@ -800,7 +800,7 @@ Handoff checklist:
 
 ## Slice 14: Frontend Shell And API Client
 
-Status: `not_started`
+Status: `done`
 
 Goal: create active frontend runtime foundation.
 
@@ -852,7 +852,7 @@ Handoff checklist:
 
 ## Slice 15: Frontend Core Workflows
 
-Status: `not_started`
+Status: `done`
 
 Goal: implement simple UI for the real MVP flows using real backend data.
 
