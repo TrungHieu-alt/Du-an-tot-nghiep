@@ -15,9 +15,10 @@ from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, Heade
 from pydantic import BaseModel, ConfigDict, Field
 
 from jobconnect.core.database import get_connection
+from jobconnect.integrations.embedding import get_embedding_provider
 from jobconnect.integrations.pgvector import vector_to_pg_literal
 from jobconnect.integrations.storage import get_storage
-from jobconnect.modules.matching.embedding import embed_text
+from jobconnect.modules.matching.embedding import embed_text  # legacy direct usage retained for tests
 from jobconnect.modules.matching.filters import passes_hard_filter
 from jobconnect.modules.matching.models import (
     CandidateEmbeddings,
@@ -530,16 +531,18 @@ def _list(value: Optional[list[str]]) -> list[str]:
 
 
 def _vec(text: str) -> str:
-    return vector_to_pg_literal(embed_text(text).tolist())
+    """Embed via the active provider and render as a pgvector text literal."""
+    return vector_to_pg_literal(get_embedding_provider().embed(text))
 
 
 def _upsert_resume_embeddings(conn: psycopg.Connection, resume_id: int, data: ResumeRequest) -> None:
+    provider = get_embedding_provider()
     with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO candidate_resume_embeddings
                 (resume_id, emb_title, emb_skills, emb_summary, emb_experience, embedding_version)
-            VALUES (%s, %s::vector, %s::vector, %s::vector, %s::vector, 'hash-v1')
+            VALUES (%s, %s::vector, %s::vector, %s::vector, %s::vector, %s)
             ON CONFLICT (resume_id) DO UPDATE SET
                 emb_title = EXCLUDED.emb_title,
                 emb_skills = EXCLUDED.emb_skills,
@@ -550,21 +553,23 @@ def _upsert_resume_embeddings(conn: psycopg.Connection, resume_id: int, data: Re
             """,
             (
                 resume_id,
-                _vec(data.title),
-                _vec(" ".join(data.skills)),
-                _vec(data.summary),
-                _vec(data.experience),
+                vector_to_pg_literal(provider.embed(data.title)),
+                vector_to_pg_literal(provider.embed(" ".join(data.skills))),
+                vector_to_pg_literal(provider.embed(data.summary)),
+                vector_to_pg_literal(provider.embed(data.experience)),
+                provider.embedding_version,
             ),
         )
 
 
 def _upsert_job_embeddings(conn: psycopg.Connection, job_id: int, data: JobRequest) -> None:
+    provider = get_embedding_provider()
     with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO job_post_embeddings
                 (job_id, emb_title, emb_skills, emb_requirement, embedding_version)
-            VALUES (%s, %s::vector, %s::vector, %s::vector, 'hash-v1')
+            VALUES (%s, %s::vector, %s::vector, %s::vector, %s)
             ON CONFLICT (job_id) DO UPDATE SET
                 emb_title = EXCLUDED.emb_title,
                 emb_skills = EXCLUDED.emb_skills,
@@ -572,7 +577,13 @@ def _upsert_job_embeddings(conn: psycopg.Connection, job_id: int, data: JobReque
                 embedding_version = EXCLUDED.embedding_version,
                 updated_at = now()
             """,
-            (job_id, _vec(data.title), _vec(" ".join(data.skills)), _vec(data.requirement)),
+            (
+                job_id,
+                vector_to_pg_literal(provider.embed(data.title)),
+                vector_to_pg_literal(provider.embed(" ".join(data.skills))),
+                vector_to_pg_literal(provider.embed(data.requirement)),
+                provider.embedding_version,
+            ),
         )
 
 

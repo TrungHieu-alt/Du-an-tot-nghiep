@@ -21,20 +21,20 @@ from dataclasses import dataclass
 from typing import Optional
 
 from jobconnect.core.database import get_connection
+from jobconnect.integrations.embedding import EmbeddingError, get_embedding_provider
 from jobconnect.integrations.llm import ParserError, get_parser
 from jobconnect.integrations.pgvector import vector_to_pg_literal
 from jobconnect.integrations.storage import get_storage
 from jobconnect.modules.documents.extractor import extract_text
 from jobconnect.modules.documents.local_parser import ParsedJob, ParsedResume
 from jobconnect.modules.documents.preprocessor import preprocess_text
-from jobconnect.modules.matching.embedding import embed_text
 
 logger = logging.getLogger(__name__)
 
-# Slice 6: parser_version is now sourced from the active LLM adapter
-# (`get_parser().parser_version`). This module-level constant is kept for
-# backward-compatibility with tests/imports; the active value flows through
-# `_mark_succeeded`.
+# Slice 6/7: parser_version + embedding_version come from the active adapters.
+# These module-level constants are retained as defaults for backward
+# compatibility with callers/tests; live values flow through _mark_succeeded
+# and the upsert helpers.
 PARSER_VERSION = "local-v1"
 EMBEDDING_VERSION = "hash-v1"
 
@@ -117,6 +117,9 @@ def _execute(parse_job_id: int) -> None:
             entity_id = _upsert_job(info, org_id, parsed_job)
     except ParserError as exc:
         _fail(info, "llm_parse_failed", f"LLM parser error: {exc}")
+        return
+    except EmbeddingError as exc:
+        _fail(info, "embedding_failed", f"Embedding provider error: {exc}")
         return
     except Exception as exc:
         _fail(info, "parse_failed", f"Parsing error: {exc}")
@@ -341,6 +344,7 @@ def _get_organization_id(user_id: int) -> Optional[int]:
 
 
 def _upsert_resume_embeddings(cur, resume_id: int, parsed: ParsedResume) -> None:
+    provider = get_embedding_provider()
     cur.execute(
         """
         INSERT INTO candidate_resume_embeddings
@@ -356,16 +360,17 @@ def _upsert_resume_embeddings(cur, resume_id: int, parsed: ParsedResume) -> None
         """,
         (
             resume_id,
-            vector_to_pg_literal(embed_text(parsed.title)),
-            vector_to_pg_literal(embed_text(" ".join(parsed.skills))),
-            vector_to_pg_literal(embed_text(parsed.summary)),
-            vector_to_pg_literal(embed_text(parsed.experience)),
-            EMBEDDING_VERSION,
+            vector_to_pg_literal(provider.embed(parsed.title)),
+            vector_to_pg_literal(provider.embed(" ".join(parsed.skills))),
+            vector_to_pg_literal(provider.embed(parsed.summary)),
+            vector_to_pg_literal(provider.embed(parsed.experience)),
+            provider.embedding_version,
         ),
     )
 
 
 def _upsert_job_embeddings(cur, job_id: int, parsed: ParsedJob) -> None:
+    provider = get_embedding_provider()
     cur.execute(
         """
         INSERT INTO job_post_embeddings
@@ -380,10 +385,10 @@ def _upsert_job_embeddings(cur, job_id: int, parsed: ParsedJob) -> None:
         """,
         (
             job_id,
-            vector_to_pg_literal(embed_text(parsed.title)),
-            vector_to_pg_literal(embed_text(" ".join(parsed.skills))),
-            vector_to_pg_literal(embed_text(parsed.requirement)),
-            EMBEDDING_VERSION,
+            vector_to_pg_literal(provider.embed(parsed.title)),
+            vector_to_pg_literal(provider.embed(" ".join(parsed.skills))),
+            vector_to_pg_literal(provider.embed(parsed.requirement)),
+            provider.embedding_version,
         ),
     )
 

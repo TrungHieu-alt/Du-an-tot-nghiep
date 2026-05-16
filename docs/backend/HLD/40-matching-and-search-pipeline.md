@@ -80,3 +80,41 @@ Keyword search and semantic search are separate APIs and UI intents.
   optional structured filters.
 - Semantic search scores are retrieval relevance, not final matching scores.
 
+## Embedding Provider Boundary (Slice 7)
+
+Implementations live under `backend/src/jobconnect/integrations/embedding/`:
+
+- `base.py` defines the `EmbeddingProvider` Protocol (`embed`, `dim`,
+  `embedding_version`) and the `EmbeddingError` exception. `EMBEDDING_DIM = 384`
+  is fixed by the DB schema (`VECTOR(384)`).
+- `local.py` exposes `LocalHashEmbeddingProvider` wrapping the Slice 0
+  SHA-256-seeded bag-of-words embedder. `embedding_version = "hash-v1"`.
+- `openai.py` exposes `OpenAIEmbeddingProvider` calling `/v1/embeddings` with
+  `dimensions=384` (supported by `text-embedding-3-*`). Vectors with the wrong
+  length raise `EmbeddingError` rather than being silently padded.
+  `embedding_version = "openai-{model}-v1"`.
+
+Selection happens in `get_embedding_provider()` based on env:
+
+| Var | Default | Notes |
+|---|---|---|
+| `EMBEDDING_PROVIDER` | `local` | `local` or `openai`. Unknown values fall back to local. |
+| `OPENAI_EMBEDDING_API_KEY` | _(unset)_ | Falls back to `OPENAI_API_KEY` if unset. Required for `openai` provider; missing → factory falls back to local. |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | Embedded in `embedding_version`. |
+| `OPENAI_EMBEDDING_BASE_URL` | `https://api.openai.com/v1` | For compatible endpoints / proxies. |
+| `OPENAI_EMBEDDING_TIMEOUT_SECONDS` | `30` | httpx request timeout. |
+
+Failure handling:
+
+- Network / HTTP / decode / dimension-mismatch errors raise `EmbeddingError`.
+- Worker pipeline catches `EmbeddingError` → marks parse job `failed` with
+  `error_code = embedding_failed`; the uploaded file is preserved.
+- Direct call sites (router CRUD upserts, semantic-search query embed) currently
+  let the exception bubble; production hardening (Slice 8) will wrap them in a
+  user-visible 503 envelope.
+
+Re-embedding / backfill: when `embedding_version` advances, operators run a
+backfill script that re-embeds existing rows. The version column on each
+embedding row makes the impacted set discoverable with a single
+`WHERE embedding_version <> '<new>'` query.
+
