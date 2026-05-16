@@ -79,7 +79,13 @@ def create_application_record(
     job = get_job_row(job_id)
     if resume is None or resume[12] != "active" or resume[1] != candidate_user_id:
         raise business_error(404, "not_found", "Active owned resume not found.")
-    if job is None or job[11] != "published":
+    # Slice 9: distinguish closed jobs (409 closed_job) from missing/draft (404 not_found)
+    # per REQUIREMENTS §6.3 ("Closed jobs must not accept new applications").
+    if job is None:
+        raise business_error(404, "not_found", "Published job not found.")
+    if job[11] == "closed":
+        raise business_error(409, "closed_job", "Job is closed and cannot accept new applications.")
+    if job[11] != "published":
         raise business_error(404, "not_found", "Published job not found.")
     with _api().get_connection() as conn, conn.cursor() as cur:
         try:

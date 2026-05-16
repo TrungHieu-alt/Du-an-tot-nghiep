@@ -274,16 +274,18 @@ Classification rules:
 | `POST /api/matching/jobs/{job_id}/run` | Rerank path now active with local cross-encoder and deterministic fallback warnings. | Implemented. | non-breaking |
 | `POST /api/matching/resumes/{resume_id}/run` | Same behavior for resume anchor. | Implemented. | non-breaking |
 
-### Applications And Invites (Slice 9)
+### Applications And Invites (Slice 9 — done 2026-05-16)
 
 | Endpoint | Gap | Fix | Impact |
 |---|---|---|---|
-| `POST /api/applications/{id}/status` | Full transition graph enforcement was missing. | Done: graph and terminal-state lock are enforced. | non-breaking |
-| `POST /api/invites` | No duplicate pending-invite guard. | Reject duplicate pending invite (409). | non-breaking |
-| `POST /api/invites/{id}/accept` | Response shape has no explicit model. | Add explicit response model `{ invite, application }`. | non-breaking |
-| Closed-job blocks | Not enforced for apply/invite/status. | Reject mutations against closed jobs. | non-breaking |
-| Application DTOs | List/detail responses lack linked display summaries and timestamps. | Return `ApplicationSummary`/detail with job/resume summaries and `applied_at`/`updated_at`. | non-breaking |
-| Invite DTOs | List/detail responses lack linked display summaries and timestamps. | Return `InviteSummary`/detail with job/resume summaries and `created_at`/`updated_at`. | non-breaking |
+| `POST /api/applications/{id}/status` | Full transition graph enforcement was missing. | Done: graph and terminal-state lock are enforced. Slice 9 added regression tests for `rejected→shortlisted`, `hired→rejected`, `withdrawn→submitted`, and self-loops on terminal states. | non-breaking |
+| `POST /api/applications` | Duplicate `(job_id, resume_id)` returned only the DB `UniqueViolation` path without explicit envelope. | Done: returns `409 duplicate_application` via psycopg `UniqueViolation` handler with regression test. | non-breaking |
+| `POST /api/invites` | No duplicate pending-invite guard. | Done in Slice 3: rejects duplicate pending invite with `409 duplicate_invite`. | non-breaking |
+| `POST /api/invites/{id}/accept` | Response shape has no explicit model; duplicate (job, resume) application was raised as 409. | Done: `{ invite, application }`. `allow_existing=True` path returns the pre-existing application without duplicate event. | non-breaking |
+| Closed-job blocks (apply/invite/accept) | Closed jobs returned generic `404 not_found`, indistinguishable from missing jobs. | Done in Slice 9: `POST /api/applications`, `POST /api/invites`, and `POST /api/invites/{id}/accept` return `409 closed_job` when the target job has `status = closed`. Draft/missing jobs continue to return `404 not_found`. Status updates on existing applications remain allowed so recruiters can wrap up. | non-breaking |
+| Application/invite side effects | Status/lifecycle mutations had to produce `application_events` + notification + audit. | Done: regression test asserts all three rows are written for recruiter shortlisting. | none |
+| Application DTOs | List/detail responses lack linked display summaries and timestamps. | Return `ApplicationSummary`/detail with job/resume summaries and `applied_at`/`updated_at`. | non-breaking (carry-over for Slice 12 cleanup) |
+| Invite DTOs | List/detail responses lack linked display summaries and timestamps. | Return `InviteSummary`/detail with job/resume summaries and `created_at`/`updated_at`. | non-breaking (carry-over for Slice 12 cleanup) |
 
 ### Notifications, Email, Audit (Slice 10)
 

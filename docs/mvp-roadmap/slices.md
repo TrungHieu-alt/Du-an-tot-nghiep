@@ -525,7 +525,7 @@ Handoff checklist:
 
 ## Slice 9: Applications And Invites
 
-Status: `not_started`
+Status: `done`
 
 Goal: make ATS-lite application and invite lifecycle complete and safe.
 

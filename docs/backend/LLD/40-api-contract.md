@@ -1097,7 +1097,15 @@ Errors: `400`, `401`, `403`, `404`, `409`, `422`.
 Side effects: creates `applications` with `status = submitted`; appends
 `application_events`; creates notification and attempts email for application
 submitted; writes audit event `candidate_applied`. Duplicate `(job_id,
-resume_id)` applications are rejected with `409`.
+resume_id)` applications are rejected with `409 duplicate_application`.
+
+Slice 9 error envelope:
+
+- `409 closed_job` — job exists but `status = closed`. Frontend should surface
+  "this job is no longer accepting applications" rather than a generic
+  not-found.
+- `404 not_found` — job missing, draft, or owned-resume unavailable. Reserved
+  for cases where the candidate is not authorised to see the job.
 
 ### `GET /api/applications/{application_id}`
 
@@ -1191,6 +1199,13 @@ Side effects: creates `recruiter_invites` with `status = pending`; creates
 notification and attempts email for invite sent; writes audit event
 `recruiter_invite_sent`. Pending invite does not create an application.
 
+Slice 9 error envelope:
+
+- `409 duplicate_invite` — a pending invite for the same `(job_id, resume_id)`
+  pair already exists.
+- `409 closed_job` — job exists but `status = closed`; new invites are rejected.
+- `404 not_found` — job missing/draft or resume missing/inactive.
+
 ### `GET /api/invites/{invite_id}`
 
 Roles: candidate, recruiter, admin.
@@ -1222,6 +1237,11 @@ endpoint still returns `200` with the accepted invite and the existing
 application, without creating a second `applications` or `application_events`
 row. Return `409` only when the invite is not pending or another lifecycle
 state conflict prevents acceptance.
+
+Slice 9 closed-job guard: if the job has been closed since the invite was
+created, the endpoint returns `409 closed_job` BEFORE flipping the invite to
+`accepted`, so the invite is never left in an accepted state without a
+corresponding application.
 
 ### `POST /api/invites/{invite_id}/reject`
 

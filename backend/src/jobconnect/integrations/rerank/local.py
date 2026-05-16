@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
-
-from sentence_transformers import CrossEncoder
+from typing import Any
 
 from .base import RerankError
 
@@ -11,7 +10,15 @@ _DEFAULT_MODEL = "BAAI/bge-reranker-v2-m3"
 
 
 @lru_cache(maxsize=1)
-def _load_model(model_name: str) -> CrossEncoder:
+def _load_model(model_name: str) -> Any:
+    # Lazy import: sentence_transformers is a heavy optional dependency.
+    # Importing it at module top would prevent the FastAPI app from starting
+    # in environments where the package is not installed (e.g. minimal test
+    # images). The runtime imports it only when rerank is actually invoked.
+    try:
+        from sentence_transformers import CrossEncoder  # type: ignore[import]
+    except ImportError as exc:  # pragma: no cover - covered by wrapper tests
+        raise RerankError(f"sentence_transformers is not installed: {exc}") from exc
     return CrossEncoder(model_name)
 
 

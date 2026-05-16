@@ -93,7 +93,12 @@ def create_invite(request: InviteRequest, user: CurrentUser) -> InviteDetail:
     job = get_job_row(request.job_id)
     if resume is None or resume[12] != "active":
         raise business_error(404, "not_found", "Active resume not found.")
-    if job is None or job[11] != "published":
+    # Slice 9: closed jobs (409 closed_job) vs missing/draft (404 not_found)
+    if job is None:
+        raise business_error(404, "not_found", "Published job not found.")
+    if job[11] == "closed":
+        raise business_error(409, "closed_job", "Job is closed and cannot send new invites.")
+    if job[11] != "published":
         raise business_error(404, "not_found", "Published job not found.")
     if job[2] != user.user_id:
         raise business_error(403, "forbidden", "Recruiters can invite only for their own jobs.")
@@ -139,6 +144,14 @@ def accept_invite(invite_id: int, user: CurrentUser) -> InviteAcceptResponse:
         raise business_error(404, "not_found", "Invite not found.")
     if row[5] != "pending":
         raise business_error(409, "invalid_state", "Invite is not pending.")
+    # Slice 9: prevent accepting an invite whose job has since been closed.
+    # Without this check the invite would flip to 'accepted' but the downstream
+    # application creation would fail with 409, leaving inconsistent state.
+    job = get_job_row(row[1])  # row[1] = job_id
+    if job is None:
+        raise business_error(404, "not_found", "Job not found.")
+    if job[11] == "closed":
+        raise business_error(409, "closed_job", "Job is closed; invite cannot be accepted.")
     with _api().get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE recruiter_invites SET status = 'accepted', updated_at = now() WHERE invite_id = %s RETURNING invite_id, job_id, resume_id, candidate_user_id, recruiter_user_id, status, message",
