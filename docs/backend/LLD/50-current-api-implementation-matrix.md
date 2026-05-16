@@ -53,7 +53,7 @@ not treat it as the final architecture contract.
 | Parsing | Document create/retry inserts `parse_jobs` rows and schedules the worker when `BackgroundTasks` is available. The public parse-job response is still thin. | Target flow expects extraction, preprocessing, LLM parse, entity creation/update, embeddings, and a parse review payload with normalized fields, hard-filter fields, extracted text reference, parser metadata, and embedding metadata. |
 | Embeddings | Manual resume/job create and update write through the active embedding provider, with local hash as the default fallback. | Aligned with Slice 7 provider boundary; broader backfill/re-embedding operations remain future work. |
 | Matching rerank | Runtime now attempts local cross-encoder rerank on top deterministic candidates. | If reranker fails/unavailable, request falls back to deterministic scoring with runtime warning metadata. |
-| Email | Notification rows use `email_delivery_status = queued`; no email provider call in this router. | Target requires basic email attempt and failure handling. |
+| Email | `integrations/email/` adapter with `LocalLogEmailSender` (default); `dispatch_email()` in `shared.py` sends after business transaction commits and updates `email_delivery_status` to `sent`/`failed`. Email failure never rolls back business transactions. | Aligned (Slice 10). SMTP/SendGrid provider deferred to post-MVP. |
 | Admin | Admin endpoints are read-heavy; some admin reads audit access. | Aligned with MVP read-only admin stance. |
 
 ## System And Root

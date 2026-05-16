@@ -636,7 +636,7 @@ Handoff checklist:
 
 ## Slice 11: Admin Monitoring
 
-Status: `not_started`
+Status: `done`
 
 Goal: complete read-only admin monitoring for MVP operations.
 
