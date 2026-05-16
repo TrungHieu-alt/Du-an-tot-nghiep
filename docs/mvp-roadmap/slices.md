@@ -6,6 +6,18 @@ Each slice should be completed with command-backed verification before it is
 marked `done`. Backend runtime checks must use Docker Compose unless the team
 explicitly records why Docker is unavailable.
 
+## API Split Migration Note (2026-05-16)
+
+- The runtime API behavior is served by domain modules under
+  `backend/src/jobconnect/modules/*/{router.py,schemas.py,service.py}`.
+- `backend/src/jobconnect/modules/api/_legacy_api_impl.py` has been removed.
+- `backend/src/jobconnect/modules/api/router.py` is now an aggregator with
+  compatibility re-exports used by app wiring and tests.
+- Slices that touch API behavior should continue aligning endpoint behavior with:
+  - `docs/backend/LLD/40-api-contract.md`
+  - `docs/backend/LLD/50-current-api-implementation-matrix.md`
+  - `docs/REQUIREMENTS.md`
+
 ## Slice 0: Baseline Contract Audit
 
 Status: `done`

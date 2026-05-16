@@ -19,7 +19,7 @@ Current code paths:
 - `backend/main.py` (compatibility wrapper)
 - `backend/src/jobconnect/main.py`
 - `backend/src/jobconnect/app.py`
-- `backend/src/jobconnect/modules/api/router.py` (current monolithic `/api/*` router)
+- `backend/src/jobconnect/modules/api/router.py` (API router aggregator + compatibility re-exports)
 - `backend/src/jobconnect/modules/system/router.py`
 - `backend/src/jobconnect/core/database.py`
 - `backend/db/migrations/001_production_mvp.sql`
@@ -45,14 +45,15 @@ Current source layout:
   utilities, and constants.
 - `backend/src/jobconnect/integrations/`: external integration boundaries such
   as pgvector, future object storage, email, and LLM providers.
-- `backend/src/jobconnect/modules/api/router.py`: current centralized `/api/*`
-  implementation. Do not split it unless the task explicitly asks for API
-  module extraction.
-- `backend/src/jobconnect/modules/*/`: feature ownership folders for future
-  route/service/schema splits.
+- `backend/src/jobconnect/modules/api/router.py`: imports domain routers,
+  builds `ALL_API_ROUTERS`, and re-exports compatibility symbols used by tests.
+- `backend/src/jobconnect/modules/api/shared.py`: shared auth/error/dependency
+  helpers and cross-domain constants/utilities.
+- `backend/src/jobconnect/modules/*/`: active feature ownership folders with
+  `router.py`, `schemas.py`, and `service.py` runtime implementations.
 - `backend/db/`: migrations and database maintenance scripts.
 
-Current feature module ownership targets:
+Current feature module ownership:
 
 - `modules/auth/`: authentication and token/session helpers.
 - `modules/users/`: users, candidate profiles, and recruiter profiles.
@@ -100,11 +101,8 @@ Target entities:
 
 Current code areas:
 
-- `backend/src/jobconnect/modules/api/router.py` contains
-  auth/profile/organization route handlers, schemas, and authorization
-  dependencies.
-- Future split target folders: `modules/auth/`, `modules/users/`, and
-  `modules/organizations/`.
+- `modules/auth/`, `modules/users/`, and `modules/organizations/` own runtime
+  route handlers, schemas, and services.
 
 ## 3) Documents, Parsing, And Normalization
 
@@ -124,10 +122,8 @@ Target entities:
 
 Current code areas:
 
-- `backend/src/jobconnect/modules/api/router.py` contains document
-  metadata and parse-job routes.
-- Future split target folders: `modules/documents/`, `modules/resumes/`, and
-  `modules/jobs/`.
+- `modules/documents/`, `modules/resumes/`, and `modules/jobs/` own document
+  metadata, parse-job, resume, and job runtime handlers/services.
 - External storage/parser/email provider adapters are represented at the API
   boundary and still need concrete provider implementations.
 
@@ -148,13 +144,10 @@ Target behavior:
 
 Current code areas:
 
-- `backend/src/jobconnect/modules/api/router.py` contains search and matching
-  routes over `candidate_resumes`, `job_posts`, and embedding tables.
-- `backend/src/jobconnect/modules/matching/` contains pure scoring, hard-filter,
-  reasoning, and deterministic local embedding helpers.
-- Future route/service split target: keep matching algorithm helpers in
-  `modules/matching/` and move only API handlers out of `modules/api/` when
-  explicitly requested.
+- `modules/matching/` owns search/matching routers/services plus pure scoring,
+  hard-filter, reasoning, and deterministic local embedding helpers.
+- Cross-domain match dependencies are consumed from `modules/jobs/` and
+  `modules/resumes/` services.
 
 ## 5) Applications, Invites, Notifications, And Audit
 
@@ -174,10 +167,9 @@ Target entities:
 
 Current code areas:
 
-- `backend/src/jobconnect/modules/api/router.py` contains
-  application, invite, notification, audit, and admin monitoring route handlers.
-- Future split target folders: `modules/applications/`, `modules/invites/`,
-  `modules/notifications/`, and `modules/admin/`.
+- `modules/applications/`, `modules/invites/`, `modules/notifications/`, and
+  `modules/admin/` own runtime handlers/services for application lifecycle,
+  invite lifecycle, notification reads, and admin monitoring.
 
 ## 6) Legacy Prototype Matching Verification
 

@@ -2,9 +2,10 @@
 
 ## Purpose
 
-This document records the API surface currently implemented in
-`backend/src/jobconnect/modules/api/router.py` and compares it with the target
-contract in `docs/backend/LLD/40-api-contract.md`.
+This document records the API surface currently implemented behind
+`backend/src/jobconnect/modules/api/router.py` (domain router aggregator with
+compatibility re-exports) and compares it with the target contract in
+`docs/backend/LLD/40-api-contract.md`.
 
 Use this as an implementation reference while redesigning the production API. Do
 not treat it as the final architecture contract.
@@ -13,7 +14,9 @@ not treat it as the final architecture contract.
 
 - Runtime app mount: `backend/src/jobconnect/main.py`
 - Router registration: `backend/src/jobconnect/app.py`
-- Monolithic API router: `backend/src/jobconnect/modules/api/router.py`
+- API router aggregator path: `backend/src/jobconnect/modules/api/router.py`
+- Shared API core helpers: `backend/src/jobconnect/modules/api/shared.py`
+- Domain runtime implementations: `backend/src/jobconnect/modules/*/{router.py,schemas.py,service.py}`
 - Health router: `backend/src/jobconnect/modules/system/router.py`
 - Database schema: `backend/db/migrations/001_production_mvp.sql`
 - Target contract: `docs/backend/LLD/40-api-contract.md`
@@ -25,9 +28,9 @@ not treat it as the final architecture contract.
 - FastAPI service root is `/`.
 - Production API routers are mounted with base prefix `/api`.
 - Legacy `/api/v2/prototype/*` routes are not mounted.
-- Most business routes are implemented in one monolithic router file.
-- API behavior currently uses direct SQL inside route handlers and helper
-  functions.
+- Runtime logic is split by domain modules; `modules/api/router.py` aggregates
+  routers and keeps compatibility symbols for tests/entrypoints.
+- API behavior currently uses direct SQL in domain service helpers.
 
 ## Contract Status Legend
 

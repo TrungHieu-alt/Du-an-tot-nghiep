@@ -52,6 +52,8 @@ Keep updates concrete and evidence-backed.
 ## Latest Read-Only Baseline
 
 - Backend surface exists under `/api/*`.
+- API runtime no longer uses monolith fallback; domain routers/services are
+  active and `_legacy_api_impl.py` was removed.
 - Production schema exists under `backend/db/migrations/001_production_mvp.sql`.
 - Matching helpers exist under `backend/src/jobconnect/modules/matching/`.
 - Frontend runtime is not active; active Slice 13 screen specs now live under

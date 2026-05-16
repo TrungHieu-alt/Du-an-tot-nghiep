@@ -49,7 +49,7 @@ requirement is still untested or only partially implemented.
 | Notifications and email | `docs/REQUIREMENTS.md` sections 4.4, 6.8 | 10, 12, 15, 16 | Notification row checks; email failure non-rollback test; frontend notification smoke | partial | In-app rows exist; email provider not implemented. |
 | Audit logs | `docs/REQUIREMENTS.md` sections 6.9, 60 HLD | 10, 11, 12, 16 | Audit row checks for required events; admin audit filter smoke | partial | Some audit exists; consistency incomplete. |
 | Admin read-only monitoring | `docs/REQUIREMENTS.md` sections 1, 2, 6.9 | 11, 12, 15, 16 | Admin monitoring integration test; non-admin forbidden smoke | partial | Runtime exists but filters/details incomplete. |
-| OpenAPI production namespaces | `docs/REQUIREMENTS.md` section 9 | 0, 1, 3, 4, 8, 9, 12, 16 | `/openapi.json`; schema checks for changed endpoints; no prototype route check | partial | Current surface exists; contract drift remains. |
+| OpenAPI production namespaces | `docs/REQUIREMENTS.md` section 9 | 0, 1, 3, 4, 8, 9, 12, 16 | `/openapi.json`; schema checks for changed endpoints; no prototype route check | partial | Current surface exists; legacy monolith runtime fallback has been removed and `/api/*` is now served by domain modules. Contract drift remains. |
 | Frontend core workflows | `docs/frontend/*` reference plus product/backend docs | 13, 14, 15, 16 | Screen-to-API map; browser smoke for candidate, recruiter, admin | partial | Slice 13 is in review with active screen specs and a screen-to-API/state matrix. Frontend runtime, browser smoke, and real workflow implementation remain Slice 14/15/16. |
 
 ## Release Acceptance Rule

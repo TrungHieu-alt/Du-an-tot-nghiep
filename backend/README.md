@@ -21,7 +21,8 @@ backend/
     integrations/
       pgvector/vector.py          # pgvector literal helper
     modules/
-      api/router.py               # /api/* routers
+      api/router.py               # compatibility import path for API runtime symbols
+      api/_legacy_api_impl.py     # current legacy core implementation
       auth/
       users/
       organizations/
@@ -42,8 +43,9 @@ backend/
 
 This keeps the Python/FastAPI runtime but follows a NestJS-style module
 boundary: app bootstrap, core infrastructure, shared common helpers,
-integrations, and feature modules. The current `/api/*` router remains
-centralized in `modules/api/router.py` until feature route files are split.
+integrations, and feature modules. The module folders now include
+`router.py/schemas.py/service.py` scaffolds for API split work; runtime behavior
+is still driven by the current legacy API core implementation.
 
 ## Runtime
 
