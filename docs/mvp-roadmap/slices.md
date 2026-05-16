@@ -525,7 +525,7 @@ Handoff checklist:
 
 ## Slice 9: Applications And Invites
 
-Status: `not_started`
+Status: `done`
 
 Goal: make ATS-lite application and invite lifecycle complete and safe.
 
@@ -560,7 +560,9 @@ Impacted paths:
 Dependencies: Slices 2 and 3.
 
 API/OpenAPI impact: `non-breaking` behavior hardening unless response models
-change for application event history.
+change for application event history. Slice 9 adds typed application/invite
+list response models and linked summary/timestamp fields, which is additive for
+existing clients.
 
 DoD:
 
@@ -580,6 +582,26 @@ Handoff checklist:
 
 - Record allowed transition graph.
 - Record all side effects verified.
+
+Implementation note (2026-05-17):
+
+- Candidate apply now requires active owned resume plus published non-closed
+  job; duplicate `(job_id, resume_id)` returns `409 duplicate_application`.
+- Recruiter invite now requires active resume plus owned published non-closed
+  job; duplicate pending invite returns `409 duplicate_invite`.
+- Invite accept creates an application and event when absent, or returns the
+  existing application without duplicate application/event rows.
+- Invite reject creates no application.
+- Application status transitions use the canonical graph:
+  recruiter `submitted -> shortlisted | rejected | hired`, recruiter
+  `shortlisted -> rejected | hired`, candidate
+  `submitted | shortlisted -> withdrawn`, terminal
+  `rejected | hired | withdrawn`.
+- Verification: Docker Compose backend/postgres healthy; migration exit 0;
+  targeted `python -m unittest tests.test_slice9_applications_invites` passed
+  12/12; targeted Slice 9 + contract tests passed 30/30; full backend unittest
+  suite passed 151/151; `/api/health` returned `ok`; live `/openapi.json`
+  exposed 47 paths, 51 schemas, and application/invite list response schemas.
 
 ## Slice 10: Notifications, Email, Audit
 

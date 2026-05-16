@@ -276,9 +276,16 @@ APPLICATION_STATUS_TRANSITIONS: dict[str, dict[str, set[str]]] = {
         "hired": {"submitted", "shortlisted"},
     },
 }
+APPLICATION_TERMINAL_STATUSES = {"rejected", "hired", "withdrawn"}
 
 
 def validate_application_transition(current: str, target: str, role: str) -> None:
+    if current in APPLICATION_TERMINAL_STATUSES:
+        raise business_error(
+            409,
+            "invalid_transition",
+            f"Terminal application status {current} cannot transition further.",
+        )
     role_transitions = APPLICATION_STATUS_TRANSITIONS.get(role)
     if not role_transitions or target not in role_transitions:
         if role == "candidate":

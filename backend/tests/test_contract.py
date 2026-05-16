@@ -229,10 +229,12 @@ class TransitionGuardTests(unittest.TestCase):
         script = [
             (10, "c@example.com", "candidate", "active"),
             (8, 5, 10, 7, "shortlisted"),
-            (8, 5, 10, 7, "withdrawn"),
+            (8,),
             None,  # application_events insert
             None,  # notification insert
             None,  # audit insert
+            (8, 5, 10, 7, "withdrawn"),
+            [],  # refreshed event history
         ]
         with patch.object(api_router, "get_connection", _fake_get_connection(script)):
             resp = self.client.post(
@@ -360,9 +362,12 @@ class OpenAPIShapeTests(unittest.TestCase):
         components = schema["components"]["schemas"]
         for name in (
             "AdminUserDetail",
+            "ApplicationSummary",
+            "ApplicationListResponse",
             "ResumeUpdateRequest",
             "JobUpdateRequest",
             "ApplicationEvent",
+            "InviteListResponse",
             "InviteAcceptResponse",
             "NotificationsReadAllResponse",
             "SemanticResumeItem",
@@ -373,6 +378,10 @@ class OpenAPIShapeTests(unittest.TestCase):
             self.assertIn(name, components, f"{name} missing from OpenAPI components")
         # ApplicationDetail must include `events` field.
         self.assertIn("events", components["ApplicationDetail"]["properties"])
+        self.assertIn("job_summary", components["ApplicationSummary"]["properties"])
+        self.assertIn("resume_summary", components["ApplicationSummary"]["properties"])
+        self.assertIn("created_at", components["InviteDetail"]["properties"])
+        self.assertIn("job_summary", components["InviteDetail"]["properties"])
         # PATCH resumes/jobs reference the partial request bodies.
         patch_resume = schema["paths"]["/api/candidate/resumes/{resume_id}"]["patch"]
         body_ref = patch_resume["requestBody"]["content"]["application/json"]["schema"]["$ref"]

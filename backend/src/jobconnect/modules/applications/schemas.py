@@ -5,6 +5,8 @@ from typing import Optional
 from pydantic import Field
 
 from jobconnect.modules.api.shared import APIModel, ApplicationStatus
+from jobconnect.modules.jobs.schemas import JobSummary
+from jobconnect.modules.resumes.schemas import ResumeSummary
 
 
 class ApplicationRequest(APIModel):
@@ -27,10 +29,24 @@ class ApplicationEvent(APIModel):
     created_at: str
 
 
-class ApplicationDetail(APIModel):
+class ApplicationSummary(APIModel):
     application_id: int
     job_id: int
     candidate_user_id: int
     resume_id: int
     status: ApplicationStatus
+    applied_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    job_summary: Optional[JobSummary] = None
+    resume_summary: Optional[ResumeSummary] = None
+
+
+class ApplicationDetail(ApplicationSummary):
     events: list[ApplicationEvent] = Field(default_factory=list)
+
+
+class ApplicationListResponse(APIModel):
+    items: list[ApplicationSummary]
+    total: int
+    limit: int
+    offset: int

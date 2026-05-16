@@ -182,6 +182,7 @@ Application list/detail responses include:
 `applied_at`, `updated_at`, `job_summary`, and `resume_summary`.
 The linked summaries are read models for FE table stability and must respect the
 same role/privacy rules as the linked resource endpoints.
+Application detail event history is ordered by `created_at ASC, event_id ASC`.
 
 `InviteSummary`
 
@@ -1098,6 +1099,7 @@ Side effects: creates `applications` with `status = submitted`; appends
 `application_events`; creates notification and attempts email for application
 submitted; writes audit event `candidate_applied`. Duplicate `(job_id,
 resume_id)` applications are rejected with `409`.
+Closed jobs reject new application creation with `409 job_closed`.
 
 ### `GET /api/applications/{application_id}`
 
@@ -1143,6 +1145,8 @@ Invalid transition behavior:
 - state-disallowed target status returns `409 invalid_transition`.
 - terminal statuses `rejected`, `hired`, and `withdrawn` never transition
   further.
+- every valid status change appends `application_events`, creates a
+  notification, and writes audit event `application_status_changed`.
 
 Errors: `400`, `401`, `403`, `404`, `409`, `422`.
 
@@ -1190,6 +1194,7 @@ Errors: `400`, `401`, `403`, `404`, `409`, `422`.
 Side effects: creates `recruiter_invites` with `status = pending`; creates
 notification and attempts email for invite sent; writes audit event
 `recruiter_invite_sent`. Pending invite does not create an application.
+Closed jobs reject new invite creation with `409 job_closed`.
 
 ### `GET /api/invites/{invite_id}`
 

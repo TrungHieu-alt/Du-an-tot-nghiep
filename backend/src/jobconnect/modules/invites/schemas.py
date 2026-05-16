@@ -4,6 +4,8 @@ from typing import Optional
 
 from jobconnect.modules.api.shared import APIModel, InviteStatus
 from jobconnect.modules.applications.schemas import ApplicationDetail
+from jobconnect.modules.jobs.schemas import JobSummary
+from jobconnect.modules.resumes.schemas import ResumeSummary
 
 
 class InviteRequest(APIModel):
@@ -24,8 +26,19 @@ class InviteDetail(APIModel):
     recruiter_user_id: int
     status: InviteStatus
     message: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    job_summary: Optional[JobSummary] = None
+    resume_summary: Optional[ResumeSummary] = None
 
 
 class InviteAcceptResponse(APIModel):
     invite: InviteDetail
     application: ApplicationDetail
+
+
+class InviteListResponse(APIModel):
+    items: list[InviteDetail]
+    total: int
+    limit: int
+    offset: int

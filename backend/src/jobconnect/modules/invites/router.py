@@ -4,14 +4,14 @@ from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, Query
 
-from jobconnect.modules.api.shared import CurrentUser, InviteStatus, Paginated, require_active, require_roles
+from jobconnect.modules.api.shared import CurrentUser, InviteStatus, require_active, require_roles
 from jobconnect.modules.invites import service
-from jobconnect.modules.invites.schemas import InviteAcceptResponse, InviteDetail, InviteRejectRequest, InviteRequest
+from jobconnect.modules.invites.schemas import InviteAcceptResponse, InviteDetail, InviteListResponse, InviteRejectRequest, InviteRequest
 
 router = APIRouter(prefix="/invites", tags=["invites"])
 
 
-@router.get("", response_model=Paginated)
+@router.get("", response_model=InviteListResponse)
 def list_invites(
     status: Optional[InviteStatus] = None,
     job_id: Optional[int] = None,

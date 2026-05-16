@@ -54,6 +54,14 @@ documentation and is not an executable migration.
   exist.
 - Rejected invite creates no application.
 - Every application status change appends an `application_events` record.
+- Allowed MVP application transitions are:
+  - recruiter: `submitted -> shortlisted | rejected | hired`
+  - recruiter: `shortlisted -> rejected | hired`
+  - candidate: `submitted | shortlisted -> withdrawn`
+  - terminal: `rejected | hired | withdrawn`
+- Every valid application creation/status change writes the required lifecycle
+  side effects: application event where applicable, notification, and audit log.
+- Closed jobs reject new applications and recruiter invites.
 - Application and invite API responses denormalize linked job/resume display
   summaries and timestamps for frontend list/detail rendering. These are read
   models over the canonical tables, not duplicated persisted application/invite
