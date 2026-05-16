@@ -36,12 +36,17 @@ from jobconnect.modules.api import router as api_router
 
 
 class FakeCursor:
-    def __init__(self, shared_script: list[Any]):
+    def __init__(self, shared_script: list[Any], executed: Optional[list[tuple[Any, Any]]] = None):
         self._script = shared_script
         self._current: Any = None
         self.rowcount: int = 0
+        self._executed = executed
 
-    def execute(self, *_args, **_kwargs) -> None:
+    def execute(self, *args, **_kwargs) -> None:
+        if self._executed is not None:
+            sql = args[0] if args else None
+            params = args[1] if len(args) > 1 else None
+            self._executed.append((sql, params))
         self._current = self._script.pop(0) if self._script else None
         if isinstance(self._current, int):
             self.rowcount = self._current
@@ -61,11 +66,12 @@ class FakeCursor:
 
 
 class FakeConnection:
-    def __init__(self, shared_script: list[Any]):
+    def __init__(self, shared_script: list[Any], executed: Optional[list[tuple[Any, Any]]] = None):
         self._shared = shared_script
+        self._executed = executed
 
     def cursor(self) -> FakeCursor:
-        return FakeCursor(self._shared)
+        return FakeCursor(self._shared, self._executed)
 
     def commit(self) -> None:
         return None
@@ -77,11 +83,11 @@ class FakeConnection:
         return None
 
 
-def _fake_get_connection(script: Iterable[Any]):
+def _fake_get_connection(script: Iterable[Any], executed: Optional[list[tuple[Any, Any]]] = None):
     shared = list(script)
 
     def _factory():
-        return FakeConnection(shared)
+        return FakeConnection(shared, executed)
 
     return _factory
 
@@ -194,13 +200,18 @@ class DocumentUploadTests(unittest.TestCase):
 
     def test_happy_path_returns_document_and_parse_job(self) -> None:
         token = _token(10, "candidate")
+        executed: list[tuple[Any, Any]] = []
         script = [
             (10, "c@example.com", "candidate", "active"),  # current_user
             _document_row(),                                # INSERT uploaded_documents RETURNING
             _parse_job_row(),                               # INSERT parse_jobs RETURNING
             None,                                           # _audit insert
         ]
-        with patch.object(api_router, "get_connection", _fake_get_connection(script)):
+        parser = type("Parser", (), {"parser_version": "parser-test-v1"})()
+        provider = type("Provider", (), {"embedding_version": "embedding-test-v9"})()
+        with patch.object(api_router, "get_connection", _fake_get_connection(script, executed)), \
+             patch.object(api_router, "get_parser", return_value=parser), \
+             patch.object(api_router, "get_embedding_provider", return_value=provider):
             resp = self.client.post(
                 "/api/documents",
                 headers={"Authorization": f"Bearer {token}"},
@@ -214,6 +225,11 @@ class DocumentUploadTests(unittest.TestCase):
         self.assertEqual(body["document"]["document_id"], 11)
         self.assertEqual(body["parse_job"]["parse_job_id"], 21)
         self.assertEqual(body["parse_job"]["status"], "queued")
+        parse_insert = next(
+            params for sql, params in executed
+            if isinstance(sql, str) and "INSERT INTO parse_jobs" in sql
+        )
+        self.assertEqual(parse_insert[-2:], ("parser-test-v1", "embedding-test-v9"))
 
     def test_unsupported_mime_returns_415(self) -> None:
         token = _token(10, "candidate")
@@ -292,19 +308,29 @@ class DocumentReadTests(unittest.TestCase):
 
     def test_parse_jobs_retry_returns_parse_job_detail(self) -> None:
         token = _token(10, "candidate")
+        executed: list[tuple[Any, Any]] = []
         script = [
             (10, "c@example.com", "candidate", "active"),
             _document_row(),
             _parse_job_row(parse_job_id=22),
             None,  # audit insert
         ]
-        with patch.object(api_router, "get_connection", _fake_get_connection(script)):
+        parser = type("Parser", (), {"parser_version": "parser-test-v1"})()
+        provider = type("Provider", (), {"embedding_version": "embedding-test-v9"})()
+        with patch.object(api_router, "get_connection", _fake_get_connection(script, executed)), \
+             patch.object(api_router, "get_parser", return_value=parser), \
+             patch.object(api_router, "get_embedding_provider", return_value=provider):
             resp = self.client.post(
                 "/api/documents/11/parse-jobs",
                 headers={"Authorization": f"Bearer {token}"},
             )
         self.assertEqual(resp.status_code, 201, resp.text)
         self.assertEqual(resp.json()["parse_job_id"], 22)
+        parse_insert = next(
+            params for sql, params in executed
+            if isinstance(sql, str) and "INSERT INTO parse_jobs" in sql
+        )
+        self.assertEqual(parse_insert[-2:], ("parser-test-v1", "embedding-test-v9"))
 
 
 # ---------------------------------------------------------------------

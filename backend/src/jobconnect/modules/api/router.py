@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from jobconnect.core.database import get_connection
 from jobconnect.integrations.embedding import get_embedding_provider
+from jobconnect.integrations.llm import get_parser
 from jobconnect.integrations.pgvector import vector_to_pg_literal
 from jobconnect.integrations.storage import get_storage
 from jobconnect.modules.matching.embedding import embed_text  # legacy direct usage retained for tests
@@ -1083,14 +1084,17 @@ def semantic_search_resumes(
             f"""
             SELECT r.resume_id, r.title, r.location, r.job_type, r.seniority, r.education,
                    r.skills, r.certifications, r.status,
-                   1 - (e.emb_title <=> %s::vector) AS relevance_score
+                   GREATEST(
+                       COALESCE(1 - (e.emb_summary <=> %s::vector), -1),
+                       COALESCE(1 - (e.emb_experience <=> %s::vector), -1)
+                   ) AS relevance_score
             FROM candidate_resumes r
             JOIN candidate_resume_embeddings e USING (resume_id)
-            WHERE {where} AND e.emb_title IS NOT NULL
+            WHERE {where} AND (e.emb_summary IS NOT NULL OR e.emb_experience IS NOT NULL)
             ORDER BY relevance_score DESC, r.resume_id ASC
             LIMIT %s
             """,
-            (q_vec, *params, request.top_k),
+            (q_vec, q_vec, *params, request.top_k),
         )
         items = [
             SemanticResumeItem(
@@ -1290,10 +1294,10 @@ def semantic_search_jobs(request: SemanticSearchRequest, user: CurrentUser = Dep
             f"""
             SELECT j.job_id, j.title, j.location, j.job_type, j.seniority, j.education,
                    j.skills, j.required_certifications, j.status, j.published_at,
-                   1 - (e.emb_title <=> %s::vector) AS relevance_score
+                   1 - (e.emb_requirement <=> %s::vector) AS relevance_score
             FROM job_posts j
             JOIN job_post_embeddings e USING (job_id)
-            WHERE {where} AND e.emb_title IS NOT NULL
+            WHERE {where} AND e.emb_requirement IS NOT NULL
             ORDER BY relevance_score DESC, j.job_id ASC
             LIMIT %s
             """,
@@ -1337,6 +1341,7 @@ def update_job(job_id: int, request: JobUpdateRequest, user: CurrentUser = Depen
     params: list[Any] = list(patch.values())
     set_parts.append("updated_at = now()")
     params.append(job_id)
+
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             f"UPDATE job_posts SET {', '.join(set_parts)} WHERE job_id = %s RETURNING {JOB_DETAIL_COLS}",
@@ -1464,6 +1469,9 @@ def create_document(
         except Exception:  # pragma: no cover - best-effort cleanup
             pass
 
+    parser_version = get_parser().parser_version
+    embedding_version = get_embedding_provider().embedding_version
+
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -1490,11 +1498,11 @@ def create_document(
             """
             INSERT INTO parse_jobs
                 (document_id, target_entity_type, resume_id, job_id, parser_version, embedding_version_requested)
-            VALUES (%s, %s, %s, %s, 'external-parser-v1', 'hash-v1')
+            VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING parse_job_id, document_id, target_entity_type, resume_id, job_id, status,
                       error_code, error_message, created_at, updated_at
             """,
-            (document_row[0], document_type, resume_id, job_id),
+            (document_row[0], document_type, resume_id, job_id, parser_version, embedding_version),
         )
         parse_row = cur.fetchone()
         _audit(cur, user.user_id, "document_uploaded", "document", document_row[0])
@@ -1524,6 +1532,7 @@ def list_documents(
         where.append("EXISTS (SELECT 1 FROM parse_jobs p WHERE p.document_id = uploaded_documents.document_id AND p.status = %s)")
         params.append(parse_status)
     sql_where = " AND ".join(where)
+
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(f"SELECT COUNT(*) FROM uploaded_documents WHERE {sql_where}", params)
         total = cur.fetchone()[0]
@@ -1588,6 +1597,9 @@ def get_parse_job(document_id: int, parse_job_id: int, user: CurrentUser = Depen
     row = _get_document_row(document_id, user)
     if row is None:
         raise business_error(404, "not_found", "Document not found.")
+    parser_version = get_parser().parser_version
+    embedding_version = get_embedding_provider().embedding_version
+
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -1612,6 +1624,9 @@ def create_parse_job(
     row = _get_document_row(document_id, user)
     if row is None:
         raise business_error(404, "not_found", "Document not found.")
+    parser_version = get_parser().parser_version
+    embedding_version = get_embedding_provider().embedding_version
+
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -1621,7 +1636,7 @@ def create_parse_job(
             RETURNING parse_job_id, document_id, target_entity_type, resume_id, job_id, status,
                       error_code, error_message, created_at, updated_at
             """,
-            (document_id, row[2], row[8], row[9], "local-v1", "hash-v1"),
+            (document_id, row[2], row[8], row[9], parser_version, embedding_version),
         )
         parse = cur.fetchone()
         _audit(cur, user.user_id, "parse_job_retried", "parse_job", parse[0])

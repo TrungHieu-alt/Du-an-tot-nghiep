@@ -77,7 +77,9 @@ Keyword search and semantic search are separate APIs and UI intents.
 - Keyword search: names, email when permitted, organization, job title, resume
   title, and exact structured lookup.
 - Semantic search: description-style queries over job/resume meaning, with
-  optional structured filters.
+  optional structured filters. Job search ranks against JD requirement
+  embeddings. Resume search ranks against CV summary and experience embeddings,
+  not title embeddings.
 - Semantic search scores are retrieval relevance, not final matching scores.
 
 ## Embedding Provider Boundary (Slice 7)
@@ -117,4 +119,3 @@ Re-embedding / backfill: when `embedding_version` advances, operators run a
 backfill script that re-embeds existing rows. The version column on each
 embedding row makes the impacted set discoverable with a single
 `WHERE embedding_version <> '<new>'` query.
-

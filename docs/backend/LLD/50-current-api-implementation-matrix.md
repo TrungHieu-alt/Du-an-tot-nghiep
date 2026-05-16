@@ -48,7 +48,7 @@ not treat it as the final architecture contract.
 | Pagination | Offset pagination with `limit` and `offset` on list endpoints. | Aligned. |
 | Uploads | `POST /api/documents` accepts `multipart/form-data` and writes through the Storage adapter (`backend/src/jobconnect/integrations/storage/`). Default backend is `local` (filesystem under `STORAGE_LOCAL_ROOT`); cloud adapters slot in by implementing the same protocol. | Aligned (Slice 4). |
 | Parsing | Document create/retry inserts `parse_jobs` rows only. No worker/provider parse execution appears in this router. | Target flow expects extraction, preprocessing, LLM parse, entity creation/update, embeddings. |
-| Embeddings | Manual resume/job create and update write deterministic local hash embeddings. | Useful for local matching; provider-backed embedding lifecycle is still future work. |
+| Embeddings | Manual resume/job create and update write through the active embedding provider, with local hash as the default fallback. | Aligned with Slice 7 provider boundary; broader backfill/re-embedding operations remain future work. |
 | Matching rerank | Request has `rerank`, response always reports `rerank_ms: 0.0`; no reranker path. | Target allows optional rerank, but fallback deterministic scoring is acceptable. |
 | Email | Notification rows use `email_delivery_status = queued`; no email provider call in this router. | Target requires basic email attempt and failure handling. |
 | Admin | Admin endpoints are read-heavy; some admin reads audit access. | Aligned with MVP read-only admin stance. |
@@ -87,11 +87,11 @@ not treat it as the final architecture contract.
 | Method | Path | Roles | Main input | Response | Side effects | DB touchpoints | Contract status |
 |---|---|---|---|---|---|---|---|
 | `GET` | `/api/candidate/resumes` | candidate, admin | `status?`, `limit`, `offset` | paginated `ResumeSummary` | none | `candidate_resumes` read | Partial: admin sees all; candidate sees own. |
-| `POST` | `/api/candidate/resumes` | candidate | full `ResumeRequest` | `ResumeDetail` | Creates draft resume; upserts hash embeddings | `candidate_resumes` insert; `candidate_resume_embeddings` insert/update | Aligned for manual create; embedding is immediate local hash rather than async queue. |
+| `POST` | `/api/candidate/resumes` | candidate | full `ResumeRequest` | `ResumeDetail` | Creates draft resume; upserts provider-backed embeddings | `candidate_resumes` insert; `candidate_resume_embeddings` insert/update | Aligned for manual create; embedding is immediate through the active embedding provider rather than async queue. |
 | `GET` | `/api/candidate/resumes/search` | recruiter, admin | `q?`, `location?`, `job_type?`, `seniority?`, `limit`, `offset` | paginated `ResumeSummary` | none | `candidate_resumes` read | Partial: `q` searches title and skills, not candidate display name/email policy from target. |
-| `POST` | `/api/candidate/resumes/semantic-search` | recruiter, admin | `SemanticSearchRequest` | `SemanticResumeSearchResponse` (items are `SemanticResumeItem` with `relevance_score`) | Computes query embedding | `candidate_resumes` read; `candidate_resume_embeddings` read | Aligned (Slice 3): explicit semantic response schema. |
+| `POST` | `/api/candidate/resumes/semantic-search` | recruiter, admin | `SemanticSearchRequest` | `SemanticResumeSearchResponse` (items are `SemanticResumeItem` with `relevance_score`) | Computes query embedding; ranks by CV summary/experience embeddings | `candidate_resumes` read; `candidate_resume_embeddings` read | Aligned (Slice 7 risk sweep): explicit semantic response schema and intended CV description fields. |
 | `GET` | `/api/candidate/resumes/{resume_id}` | candidate, recruiter, admin | resume id | `ResumeDetail` | none | `candidate_resumes` read | Partial: recruiter can read only active resumes; response shape does not apply separate recruiter privacy DTO. |
-| `PATCH` | `/api/candidate/resumes/{resume_id}` | candidate | partial `ResumeUpdateRequest` | `ResumeDetail` | Updates owned resume; refreshes hash embeddings from merged row | `candidate_resumes` update; `candidate_resume_embeddings` insert/update | Aligned (Slice 3): true partial update via `exclude_unset`. Empty body returns current row unchanged. |
+| `PATCH` | `/api/candidate/resumes/{resume_id}` | candidate | partial `ResumeUpdateRequest` | `ResumeDetail` | Updates owned resume; refreshes provider-backed embeddings from merged row | `candidate_resumes` update; `candidate_resume_embeddings` insert/update | Aligned (Slice 3): true partial update via `exclude_unset`. Empty body returns current row unchanged. |
 | `POST` | `/api/candidate/resumes/{resume_id}/activate` | candidate | resume id | `ResumeDetail` | Sets status active if `status in {draft, archived}`; writes audit event | `candidate_resumes` update; `audit_logs` insert | Aligned (Slice 3): enforces `RESUME_STATUS_TRANSITIONS['active']`; 409 otherwise. |
 | `POST` | `/api/candidate/resumes/{resume_id}/archive` | candidate | resume id | `ResumeDetail` | Sets status archived if `status in {draft, active}`; writes audit event | `candidate_resumes` update; `audit_logs` insert | Aligned (Slice 3): enforces `RESUME_STATUS_TRANSITIONS['archived']`; 409 otherwise. |
 
@@ -100,11 +100,11 @@ not treat it as the final architecture contract.
 | Method | Path | Roles | Main input | Response | Side effects | DB touchpoints | Contract status |
 |---|---|---|---|---|---|---|---|
 | `GET` | `/api/jobs` | authenticated active user | `status?`, `location?`, `job_type?`, `seniority?`, `q?`, `limit`, `offset` | paginated `JobSummary` | none | `job_posts` read | Aligned (Slice 3): list and search share the same filter helper. |
-| `POST` | `/api/jobs` | recruiter, admin | full `JobRequest` | `JobDetail` | Creates draft job; upserts hash embeddings | `organizations` read; `job_posts` insert; `job_post_embeddings` insert/update | Partial: target says recruiter; runtime also allows admin. |
+| `POST` | `/api/jobs` | recruiter, admin | full `JobRequest` | `JobDetail` | Creates draft job; upserts provider-backed embeddings | `organizations` read; `job_posts` insert; `job_post_embeddings` insert/update | Partial: target says recruiter; runtime also allows admin. |
 | `GET` | `/api/jobs/search` | authenticated active user | `q?`, `location?`, `job_type?`, `seniority?`, `status?`, `limit`, `offset` | paginated `JobSummary` | none | `job_posts` read; `organizations` read for q-name match | Aligned (Slice 3): `q` matches title, skills, AND organization name. |
-| `POST` | `/api/jobs/semantic-search` | authenticated active user | `SemanticSearchRequest` | `SemanticJobSearchResponse` (items are `SemanticJobItem` with `relevance_score`) | Computes query embedding | `job_posts` read; `job_post_embeddings` read | Aligned (Slice 3): explicit semantic response schema. Relevance still uses title embedding only (Slice 7 ownership). |
+| `POST` | `/api/jobs/semantic-search` | authenticated active user | `SemanticSearchRequest` | `SemanticJobSearchResponse` (items are `SemanticJobItem` with `relevance_score`) | Computes query embedding; ranks by JD requirement embedding | `job_posts` read; `job_post_embeddings` read | Aligned (Slice 7 risk sweep): explicit semantic response schema and intended JD description field. |
 | `GET` | `/api/jobs/{job_id}` | authenticated active user | job id | `JobDetail` | none | `job_posts` read | Aligned on visibility: candidates published only; recruiters own jobs; admins all. |
-| `PATCH` | `/api/jobs/{job_id}` | recruiter (owner), admin | partial `JobUpdateRequest` | `JobDetail` | Updates job; refreshes hash embeddings from merged row | `job_posts` update; `job_post_embeddings` insert/update | Aligned (Slice 3): true partial update. |
+| `PATCH` | `/api/jobs/{job_id}` | recruiter (owner), admin | partial `JobUpdateRequest` | `JobDetail` | Updates job; refreshes provider-backed embeddings from merged row | `job_posts` update; `job_post_embeddings` insert/update | Aligned (Slice 3): true partial update. |
 | `POST` | `/api/jobs/{job_id}/publish` | recruiter (owner), admin | job id | `JobDetail` | Sets status published if `status == draft`; sets `published_at`; writes audit event | `job_posts` update; `audit_logs` insert | Aligned (Slice 3): enforces `JOB_STATUS_TRANSITIONS['published'] = {draft}`; 409 otherwise. |
 | `POST` | `/api/jobs/{job_id}/close` | recruiter (owner), admin | job id | `JobDetail` | Sets status closed if `status in {draft, published}`; writes audit event | `job_posts` update; `audit_logs` insert | Aligned (Slice 3): enforces `JOB_STATUS_TRANSITIONS['closed'] = {draft, published}`; 409 otherwise. |
 
@@ -173,8 +173,8 @@ not treat it as the final architecture contract.
 | Auth | `users` | Password hash is PBKDF2 SHA-256. JWT is stateless and custom. |
 | Candidate profile | `candidate_profiles` | One row per candidate user. |
 | Recruiter profile and organizations | `recruiter_profiles`, `organizations` | Organization ownership is not strongly enforced in update route. |
-| Resumes | `candidate_resumes`, `candidate_resume_embeddings` | Manual create/update immediately writes hash embeddings. |
-| Jobs | `job_posts`, `job_post_embeddings` | Manual create/update immediately writes hash embeddings. |
+| Resumes | `candidate_resumes`, `candidate_resume_embeddings` | Manual create/update immediately writes provider-backed embeddings. |
+| Jobs | `job_posts`, `job_post_embeddings` | Manual create/update immediately writes provider-backed embeddings. |
 | Documents and parsing | `uploaded_documents`, `parse_jobs` | Parse jobs are queued metadata only in current router. |
 | Matching and semantic search | `candidate_resumes`, `job_posts`, embedding tables | Matching iterates eligible public pool and applies hard filters before scoring. |
 | Applications | `applications`, `application_events`, `notifications`, `audit_logs` | Apply and status update create events, notifications, and audit logs. |
@@ -259,7 +259,7 @@ Classification rules:
 | Endpoint | Gap | Fix | Impact |
 |---|---|---|---|
 | Resume/job embeddings | Local deterministic hash only. | Plug provider-backed embedding adapter; keep local fallback for dev/test. | non-breaking |
-| `POST .../semantic-search` | Query embedding uses hash. | Use provider embeddings; preserve response schema. | non-breaking |
+| `POST .../semantic-search` | Provider-backed query embedding implemented. | Resume search uses summary/experience embeddings; job search uses requirement embeddings. | non-breaking |
 
 ### Matching Production Hardening (Slice 8)
 

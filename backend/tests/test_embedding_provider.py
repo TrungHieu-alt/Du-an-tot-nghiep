@@ -18,8 +18,11 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from fastapi.testclient import TestClient
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from jobconnect.main import app
 from jobconnect.integrations.embedding import (
     EMBEDDING_DIM,
     EmbeddingError,
@@ -28,6 +31,7 @@ from jobconnect.integrations.embedding import (
     get_embedding_provider,
     reset_embedding_provider_cache,
 )
+from jobconnect.modules.api import router as api_router
 from jobconnect.modules.matching.reasoning import build_reasoning
 from jobconnect.modules.matching.scoring import cosine_similarity
 
@@ -261,6 +265,9 @@ class FakeCursor:
     def fetchone(self) -> Any:
         return self._current
 
+    def fetchall(self) -> list[Any]:
+        return list(self._current or [])
+
     def __enter__(self) -> "FakeCursor":
         return self
 
@@ -288,13 +295,96 @@ class FakeConnection:
         return None
 
 
+def _token(user_id: int, role: str) -> str:
+    token, _ = api_router.create_access_token(user_id, role)
+    return token
+
+
+class FakeSemanticProvider:
+    embedding_version = "semantic-test-v1"
+
+    def embed(self, _text: str) -> list[float]:
+        return [0.0] * EMBEDDING_DIM
+
+
+class TestSemanticSearchIntendedFields(unittest.TestCase):
+    def setUp(self) -> None:
+        self.client = TestClient(app, raise_server_exceptions=False)
+
+    def test_resume_semantic_search_uses_summary_and_experience_not_title(self) -> None:
+        token = _token(20, "recruiter")
+        shared: list[Any] = [
+            (20, "r@example.com", "recruiter", "active"),
+            [
+                (
+                    7, "Backend CV", "ha_noi", "remote", "mid", "dai_hoc",
+                    ["python"], [], "active", 0.81,
+                )
+            ],
+        ]
+        cursors: list[FakeCursor] = []
+
+        with patch.object(api_router, "get_connection",
+                          lambda: FakeConnection(shared, cursors)), \
+             patch.object(api_router, "get_embedding_provider",
+                          return_value=FakeSemanticProvider()):
+            resp = self.client.post(
+                "/api/candidate/resumes/semantic-search",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"query": "backend api platform"},
+            )
+
+        self.assertEqual(resp.status_code, 200, resp.text)
+        search_sql = next(
+            sql for c in cursors for sql, _ in c.executed
+            if "candidate_resume_embeddings" in sql
+        )
+        self.assertIn("e.emb_summary", search_sql)
+        self.assertIn("e.emb_experience", search_sql)
+        self.assertNotIn("e.emb_title <=>", search_sql)
+        self.assertIn("(e.emb_summary IS NOT NULL OR e.emb_experience IS NOT NULL)", search_sql)
+
+    def test_job_semantic_search_uses_requirement_not_title(self) -> None:
+        token = _token(10, "candidate")
+        shared: list[Any] = [
+            (10, "c@example.com", "candidate", "active"),
+            [
+                (
+                    5, "Backend Engineer", "ha_noi", "remote", "mid", "dai_hoc",
+                    ["python"], [], "published", None, 0.83,
+                )
+            ],
+        ]
+        cursors: list[FakeCursor] = []
+
+        with patch.object(api_router, "get_connection",
+                          lambda: FakeConnection(shared, cursors)), \
+             patch.object(api_router, "get_embedding_provider",
+                          return_value=FakeSemanticProvider()):
+            resp = self.client.post(
+                "/api/jobs/semantic-search",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"query": "build backend APIs"},
+            )
+
+        self.assertEqual(resp.status_code, 200, resp.text)
+        search_sql = next(
+            sql for c in cursors for sql, _ in c.executed
+            if "job_post_embeddings" in sql
+        )
+        self.assertIn("e.emb_requirement <=>", search_sql)
+        self.assertIn("e.emb_requirement IS NOT NULL", search_sql)
+        self.assertNotIn("e.emb_title <=>", search_sql)
+
+
 class TestWorkerEmbeddingVersionPersistence(unittest.TestCase):
     """The worker MUST write the active provider's embedding_version to DB."""
 
-    def test_local_provider_writes_hash_v1(self) -> None:
+    def test_worker_success_metadata_matches_active_embedding_provider(self) -> None:
         from jobconnect.modules.documents import worker as worker_module
 
         reset_embedding_provider_cache()
+        provider = FakeSemanticProvider()
 
         load_row = (
             99, 11, "candidate_resume", None, None, "queued",
@@ -318,6 +408,7 @@ class TestWorkerEmbeddingVersionPersistence(unittest.TestCase):
         with patch.object(worker_module, "get_connection",
                           lambda: FakeConnection(shared, cursors)), \
              patch.object(worker_module, "get_storage", return_value=mock_storage), \
+             patch.object(worker_module, "get_embedding_provider", return_value=provider), \
              patch.object(worker_module, "extract_text",
                           return_value="Senior Python Engineer\nHa Noi"):
             worker_module._execute(99)
@@ -333,7 +424,18 @@ class TestWorkerEmbeddingVersionPersistence(unittest.TestCase):
                 break
         self.assertIsNotNone(embed_insert, "embedding INSERT not executed")
         # Last param = embedding_version
-        self.assertEqual(embed_insert[-1], "hash-v1")
+        self.assertEqual(embed_insert[-1], "semantic-test-v1")
+
+        success_update = None
+        for c in cursors:
+            for sql, params in c.executed:
+                if "status = 'succeeded'" in sql and params is not None:
+                    success_update = params
+                    break
+            if success_update is not None:
+                break
+        self.assertIsNotNone(success_update, "succeeded UPDATE not executed")
+        self.assertEqual(success_update[2], "semantic-test-v1")
 
 
 if __name__ == "__main__":

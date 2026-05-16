@@ -393,7 +393,7 @@ Handoff checklist:
 
 ## Slice 7: Embedding And Semantic Search
 
-Status: `not_started`
+Status: `done`
 
 Goal: make semantic search and matching embeddings versioned, useful, and
 replaceable.
@@ -444,6 +444,17 @@ Handoff checklist:
 
 - Record provider and embedding version.
 - Record re-embedding/backfill implications.
+
+Risk sweep update (2026-05-16):
+
+- Semantic resume search now ranks against CV summary/experience embeddings,
+  not title embeddings.
+- Semantic job search now ranks against JD requirement embeddings, not title
+  embeddings.
+- Parse-job creation/retry and worker success metadata persist the active
+  embedding provider version instead of hard-coded `hash-v1`.
+- Go for Slice 8 with condition: carry application lifecycle transition graph
+  and terminal-lock drift as P2 backlog outside Slice 7.
 
 ## Slice 8: Matching Production Hardening
 

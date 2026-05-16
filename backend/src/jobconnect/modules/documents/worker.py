@@ -7,7 +7,7 @@ Slice 5 orchestration:
   -> preprocess text
   -> local parse into structured fields
   -> create/update draft entity (candidate_resume or job_post)
-  -> upsert hash embeddings
+  -> upsert provider-backed embeddings
   -> mark succeeded / failed
   -> on failure: create notification + audit
 
@@ -107,14 +107,14 @@ def _execute(parse_job_id: int) -> None:
     try:
         if info.target_entity_type == "candidate_resume":
             parsed_resume = parser.parse_resume(text, filename=info.original_filename)
-            entity_id = _upsert_resume(info, parsed_resume)
+            entity_id, embedding_version = _upsert_resume(info, parsed_resume)
         else:
             org_id = _get_organization_id(info.owner_user_id)
             if org_id is None:
                 _fail(info, "recruiter_profile_missing", "Recruiter profile or organization not found.")
                 return
             parsed_job = parser.parse_job(text, filename=info.original_filename)
-            entity_id = _upsert_job(info, org_id, parsed_job)
+            entity_id, embedding_version = _upsert_job(info, org_id, parsed_job)
     except ParserError as exc:
         _fail(info, "llm_parse_failed", f"LLM parser error: {exc}")
         return
@@ -125,7 +125,13 @@ def _execute(parse_job_id: int) -> None:
         _fail(info, "parse_failed", f"Parsing error: {exc}")
         return
 
-    _mark_succeeded(info, entity_id, text, parser_version=parser.parser_version)
+    _mark_succeeded(
+        info,
+        entity_id,
+        text,
+        parser_version=parser.parser_version,
+        embedding_version=embedding_version,
+    )
 
 
 def _load_parse_job(parse_job_id: int) -> Optional[_ParseJobInfo]:
@@ -176,6 +182,7 @@ def _mark_succeeded(
     entity_id: int,
     extracted_text: str,
     parser_version: str = PARSER_VERSION,
+    embedding_version: str = EMBEDDING_VERSION,
 ) -> None:
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
@@ -189,7 +196,7 @@ def _mark_succeeded(
                    updated_at = now()
              WHERE parse_job_id = %s
             """,
-            (extracted_text[:10000], parser_version, EMBEDDING_VERSION, info.parse_job_id),
+            (extracted_text[:10000], parser_version, embedding_version, info.parse_job_id),
         )
         if info.target_entity_type == "candidate_resume":
             cur.execute(
@@ -246,7 +253,7 @@ def _fail(info: _ParseJobInfo, error_code: str, error_message: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _upsert_resume(info: _ParseJobInfo, parsed: ParsedResume) -> int:
+def _upsert_resume(info: _ParseJobInfo, parsed: ParsedResume) -> tuple[int, str]:
     with get_connection() as conn, conn.cursor() as cur:
         if info.existing_resume_id is not None:
             cur.execute(
@@ -283,11 +290,11 @@ def _upsert_resume(info: _ParseJobInfo, parsed: ParsedResume) -> int:
             )
             resume_id = cur.fetchone()[0]
 
-        _upsert_resume_embeddings(cur, resume_id, parsed)
-        return resume_id
+        embedding_version = _upsert_resume_embeddings(cur, resume_id, parsed)
+        return resume_id, embedding_version
 
 
-def _upsert_job(info: _ParseJobInfo, organization_id: int, parsed: ParsedJob) -> int:
+def _upsert_job(info: _ParseJobInfo, organization_id: int, parsed: ParsedJob) -> tuple[int, str]:
     with get_connection() as conn, conn.cursor() as cur:
         if info.existing_job_id is not None:
             cur.execute(
@@ -324,8 +331,8 @@ def _upsert_job(info: _ParseJobInfo, organization_id: int, parsed: ParsedJob) ->
             )
             job_id = cur.fetchone()[0]
 
-        _upsert_job_embeddings(cur, job_id, parsed)
-        return job_id
+        embedding_version = _upsert_job_embeddings(cur, job_id, parsed)
+        return job_id, embedding_version
 
 
 def _get_organization_id(user_id: int) -> Optional[int]:
@@ -343,7 +350,7 @@ def _get_organization_id(user_id: int) -> Optional[int]:
 # ---------------------------------------------------------------------------
 
 
-def _upsert_resume_embeddings(cur, resume_id: int, parsed: ParsedResume) -> None:
+def _upsert_resume_embeddings(cur, resume_id: int, parsed: ParsedResume) -> str:
     provider = get_embedding_provider()
     cur.execute(
         """
@@ -367,9 +374,10 @@ def _upsert_resume_embeddings(cur, resume_id: int, parsed: ParsedResume) -> None
             provider.embedding_version,
         ),
     )
+    return provider.embedding_version
 
 
-def _upsert_job_embeddings(cur, job_id: int, parsed: ParsedJob) -> None:
+def _upsert_job_embeddings(cur, job_id: int, parsed: ParsedJob) -> str:
     provider = get_embedding_provider()
     cur.execute(
         """
@@ -391,6 +399,7 @@ def _upsert_job_embeddings(cur, job_id: int, parsed: ParsedJob) -> None:
             provider.embedding_version,
         ),
     )
+    return provider.embedding_version
 
 
 # ---------------------------------------------------------------------------
