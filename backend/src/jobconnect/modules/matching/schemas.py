@@ -14,8 +14,8 @@ class SemanticSearchRequest(APIModel):
 
 
 class MatchingRequest(APIModel):
-    top_k: int = Field(default=20, ge=1, le=50)
-    min_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    top_k: int = Field(default=10, ge=1, le=50)
+    min_score: float = Field(default=0.7, ge=0.0, le=1.0)
     rerank: bool = False
 
 
@@ -24,6 +24,20 @@ class MatchingScoreBreakdown(APIModel):
     skills_sim: float
     req_exp_sim: float
     req_summary_sim: float
+    bonus_exact_skill: float = 0.0
+    penalty_missing_required: float = 0.0
+
+
+class MatchingRuntime(APIModel):
+    total_ms: float
+    retrieval_ms: float
+    filter_ms: float
+    scoring_ms: float
+    rerank_ms: float
+    candidates_total: int
+    candidates_after_filter: int
+    rerank_applied: bool
+    warnings: list[str] = Field(default_factory=list)
 
 
 class MatchingItem(APIModel):
@@ -41,4 +55,4 @@ class MatchingItem(APIModel):
 class MatchingResponse(APIModel):
     anchor: dict
     items: list[MatchingItem]
-    runtime: dict
+    runtime: MatchingRuntime

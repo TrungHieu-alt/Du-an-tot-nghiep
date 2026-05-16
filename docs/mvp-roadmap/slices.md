@@ -470,7 +470,7 @@ Risk sweep update (2026-05-16):
 
 ## Slice 8: Matching Production Hardening
 
-Status: `not_started`
+Status: `done`
 
 Goal: complete explainable two-way matching behavior from requirements.
 

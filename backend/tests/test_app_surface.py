@@ -91,6 +91,8 @@ class AppSurfaceTests(unittest.TestCase):
         schema = self.client.get("/openapi.json").json()
         matching_request = schema["components"]["schemas"]["MatchingRequest"]
         self.assertEqual(matching_request["properties"]["top_k"]["maximum"], 50)
+        self.assertEqual(matching_request["properties"]["top_k"]["default"], 10)
+        self.assertEqual(matching_request["properties"]["min_score"]["default"], 0.7)
         matching_response = schema["components"]["schemas"]["MatchingItem"]
         for field in [
             "score_breakdown",
@@ -100,6 +102,20 @@ class AppSurfaceTests(unittest.TestCase):
             "reasoning",
         ]:
             self.assertIn(field, matching_response["properties"])
+        score_breakdown = schema["components"]["schemas"]["MatchingScoreBreakdown"]
+        self.assertIn("bonus_exact_skill", score_breakdown["properties"])
+        self.assertIn("penalty_missing_required", score_breakdown["properties"])
+        runtime_schema = schema["components"]["schemas"]["MatchingRuntime"]
+        for field in [
+            "retrieval_ms",
+            "filter_ms",
+            "scoring_ms",
+            "rerank_applied",
+            "warnings",
+            "candidates_total",
+            "candidates_after_filter",
+        ]:
+            self.assertIn(field, runtime_schema["properties"])
 
 
 if __name__ == "__main__":

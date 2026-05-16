@@ -1014,9 +1014,14 @@ Response `200`:
   ],
   "runtime": {
     "total_ms": 35,
+    "retrieval_ms": 4,
     "filter_ms": 5,
     "scoring_ms": 25,
-    "rerank_ms": 0
+    "rerank_ms": 1,
+    "candidates_total": 120,
+    "candidates_after_filter": 24,
+    "rerank_applied": true,
+    "warnings": []
   }
 }
 ```
@@ -1040,6 +1045,8 @@ separate matching result page. A candidate must select one active owned resume
 before this endpoint is called.
 
 Request: same shape as job-anchor matching.
+`rerank` is accepted for backward compatibility; runtime attempts rerank by
+default and falls back to deterministic scoring if reranker is unavailable.
 
 Response `200`: same shape as job-anchor matching with `anchor.type = resume`
 and ranked jobs.

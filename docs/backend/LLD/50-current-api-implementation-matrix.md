@@ -52,7 +52,7 @@ not treat it as the final architecture contract.
 | Uploads | `POST /api/documents` accepts `multipart/form-data` and writes through the Storage adapter (`backend/src/jobconnect/integrations/storage/`). Default backend is `local` (filesystem under `STORAGE_LOCAL_ROOT`); cloud adapters slot in by implementing the same protocol. | Aligned (Slice 4). |
 | Parsing | Document create/retry inserts `parse_jobs` rows and schedules the worker when `BackgroundTasks` is available. The public parse-job response is still thin. | Target flow expects extraction, preprocessing, LLM parse, entity creation/update, embeddings, and a parse review payload with normalized fields, hard-filter fields, extracted text reference, parser metadata, and embedding metadata. |
 | Embeddings | Manual resume/job create and update write through the active embedding provider, with local hash as the default fallback. | Aligned with Slice 7 provider boundary; broader backfill/re-embedding operations remain future work. |
-| Matching rerank | Request has `rerank`, response always reports `rerank_ms: 0.0`; no reranker path. | Target allows optional rerank, but fallback deterministic scoring is acceptable. |
+| Matching rerank | Runtime now attempts local cross-encoder rerank on top deterministic candidates. | If reranker fails/unavailable, request falls back to deterministic scoring with runtime warning metadata. |
 | Email | Notification rows use `email_delivery_status = queued`; no email provider call in this router. | Target requires basic email attempt and failure handling. |
 | Admin | Admin endpoints are read-heavy; some admin reads audit access. | Aligned with MVP read-only admin stance. |
 
@@ -92,7 +92,7 @@ not treat it as the final architecture contract.
 | `GET` | `/api/candidate/resumes` | candidate, admin | `status?`, `limit`, `offset` | paginated `ResumeSummary` | none | `candidate_resumes` read | Partial: admin sees all; candidate sees own. |
 | `POST` | `/api/candidate/resumes` | candidate | full `ResumeRequest` | `ResumeDetail` | Creates draft resume; upserts provider-backed embeddings | `candidate_resumes` insert; `candidate_resume_embeddings` insert/update | Aligned for manual create; embedding is immediate through the active embedding provider rather than async queue. |
 | `GET` | `/api/candidate/resumes/search` | recruiter, admin | `q?`, `location?`, `job_type?`, `seniority?`, `limit`, `offset` | paginated `ResumeSummary` | none | `candidate_resumes` read | Partial: `q` searches title and skills, not candidate display name/email policy from target. |
-| `POST` | `/api/candidate/resumes/semantic-search` | recruiter, admin | `SemanticSearchRequest` | `SemanticResumeSearchResponse` (items are `SemanticResumeItem` with `relevance_score`) | Computes query embedding; ranks by CV summary/experience embeddings | `candidate_resumes` read; `candidate_resume_embeddings` read | Aligned (Slice 7 risk sweep): explicit semantic response schema and intended CV description fields. |
+| `POST` | `/api/candidate/resumes/semantic-search` | recruiter, admin | `SemanticSearchRequest` | `SemanticResumeSearchResponse` (items are `SemanticResumeItem` with `relevance_score`) | Computes query embedding; ranks by CV summary/experience embeddings | `candidate_resumes` read; `candidate_resume_embeddings` read | Aligned + hardened (Slice 8): provider embedding failures return `503 embedding_unavailable` envelope. |
 | `GET` | `/api/candidate/resumes/{resume_id}` | candidate, recruiter, admin | resume id | `ResumeDetail` | none | `candidate_resumes` read | Partial: recruiter can read only active resumes; response shape does not apply separate recruiter privacy DTO. |
 | `PATCH` | `/api/candidate/resumes/{resume_id}` | candidate | partial `ResumeUpdateRequest` | `ResumeDetail` | Updates owned resume; refreshes provider-backed embeddings from merged row | `candidate_resumes` update; `candidate_resume_embeddings` insert/update | Aligned (Slice 3): true partial update via `exclude_unset`. Empty body returns current row unchanged. |
 | `POST` | `/api/candidate/resumes/{resume_id}/activate` | candidate | resume id | `ResumeDetail` | Sets status active if `status in {draft, archived}`; writes audit event | `candidate_resumes` update; `audit_logs` insert | Aligned (Slice 3): enforces `RESUME_STATUS_TRANSITIONS['active']`; 409 otherwise. |
@@ -115,8 +115,8 @@ not treat it as the final architecture contract.
 
 | Method | Path | Roles | Main input | Response | Side effects | DB touchpoints | Contract status |
 |---|---|---|---|---|---|---|---|
-| `POST` | `/api/matching/jobs/{job_id}/run` | recruiter (owner), admin | `MatchingRequest`: `top_k`, `min_score`, `rerank` | `MatchingResponse` with ranked resumes | Computes hard filters, scores, reasoning; no application/invite creation | `job_posts` read; `candidate_resumes` read; `job_post_embeddings` read; `candidate_resume_embeddings` read | Partial (Slice 2 closed ownership): recruiter must own the job anchor; admin bypasses. `rerank` still accepted but not executed (Slice 8). |
-| `POST` | `/api/matching/resumes/{resume_id}/run` | candidate (owner), admin | `MatchingRequest`: `top_k`, `min_score`, `rerank` | `MatchingResponse` with ranked jobs | Computes hard filters, scores, reasoning; no application/invite creation | `candidate_resumes` read; `job_posts` read; `candidate_resume_embeddings` read; `job_post_embeddings` read | Partial (Slice 2 closed ownership): candidate must own the resume anchor; admin bypasses. `rerank` still accepted but not executed (Slice 8). |
+| `POST` | `/api/matching/jobs/{job_id}/run` | recruiter (owner), admin | `MatchingRequest`: `top_k` (default 10), `min_score` (default 0.7), `rerank` (compat) | `MatchingResponse` with ranked resumes | Computes hard filters + deterministic scores, attempts local rerank on top window, returns runtime phase metrics + rerank fallback warnings; no application/invite creation | `job_posts` read; `candidate_resumes` read; `job_post_embeddings` read; `candidate_resume_embeddings` read | Aligned (Slice 8): recruiter ownership + published anchor checks; rerank attempted regardless request flag and gracefully falls back on provider failure. |
+| `POST` | `/api/matching/resumes/{resume_id}/run` | candidate (owner), admin | `MatchingRequest`: `top_k` (default 10), `min_score` (default 0.7), `rerank` (compat) | `MatchingResponse` with ranked jobs | Computes hard filters + deterministic scores, attempts local rerank on top window, returns runtime phase metrics + rerank fallback warnings; no application/invite creation | `candidate_resumes` read; `job_posts` read; `candidate_resume_embeddings` read; `job_post_embeddings` read | Aligned (Slice 8): candidate ownership + active anchor checks; rerank attempted regardless request flag and gracefully falls back on provider failure. |
 
 ## Documents And Parse Jobs
 
@@ -271,8 +271,8 @@ Classification rules:
 
 | Endpoint | Gap | Fix | Impact |
 |---|---|---|---|
-| `POST /api/matching/jobs/{job_id}/run` | `rerank` ignored; `rerank_ms` always `0.0`. | Wire rerank path or document permanent fallback. | non-breaking |
-| `POST /api/matching/resumes/{resume_id}/run` | Same. | Same. | non-breaking |
+| `POST /api/matching/jobs/{job_id}/run` | Rerank path now active with local cross-encoder and deterministic fallback warnings. | Implemented. | non-breaking |
+| `POST /api/matching/resumes/{resume_id}/run` | Same behavior for resume anchor. | Implemented. | non-breaking |
 
 ### Applications And Invites (Slice 9)
 

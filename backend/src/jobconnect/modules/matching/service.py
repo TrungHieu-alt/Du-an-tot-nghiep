@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any, Optional
 
+from jobconnect.integrations.rerank import RerankError, get_rerank_provider
 from jobconnect.modules.api.shared import CurrentUser, business_error
 from jobconnect.modules.jobs.service import JOB_DETAIL_COLS, get_job_row, job_summary
 from jobconnect.modules.matching.filters import passes_hard_filter
@@ -24,9 +25,14 @@ from jobconnect.modules.matching.schemas import (
     MatchingItem,
     MatchingRequest,
     MatchingResponse,
+    MatchingRuntime,
     MatchingScoreBreakdown,
 )
 from jobconnect.modules.resumes.service import RESUME_DETAIL_COLS, get_resume_row, resume_summary
+
+RERANK_TOP_N = 10
+RERANK_BLEND_DETERMINISTIC = 0.3
+RERANK_BLEND_CROSS_ENCODER = 0.7
 
 
 def _api():
@@ -144,7 +150,9 @@ def _score_pair(
         "req_exp_sim": req_exp,
         "req_summary_sim": req_summary,
         "exact": exact,
-        "final_score": compute_final_score(title, skills, req_exp, req_summary),
+        "bonus_exact_skill": 0.0,
+        "penalty_missing_required": 0.0,
+        "deterministic_score": compute_final_score(title, skills, req_exp, req_summary),
     }, list(dict.fromkeys(missing))
 
 
@@ -159,82 +167,234 @@ def _hard_filter_notes(job: JobPostMatch) -> list[str]:
     return notes
 
 
+def _candidate_text_for_rerank(anchor_type: str, anchor: dict[str, Any], candidate: dict[str, Any]) -> tuple[str, str]:
+    if anchor_type == "job":
+        query = f"{anchor['model'].title}\n{anchor['model'].requirement}\n{' '.join(anchor['model'].skills)}"
+        document = (
+            f"{candidate['model'].title}\n"
+            f"{candidate['model'].summary}\n"
+            f"{candidate['model'].experience}\n"
+            f"{' '.join(candidate['model'].skills)}"
+        )
+    else:
+        query = (
+            f"{anchor['model'].title}\n"
+            f"{anchor['model'].summary}\n"
+            f"{anchor['model'].experience}\n"
+            f"{' '.join(anchor['model'].skills)}"
+        )
+        document = f"{candidate['model'].title}\n{candidate['model'].requirement}\n{' '.join(candidate['model'].skills)}"
+    return query.strip(), document.strip()
+
+
+def _blend_scores(deterministic_score: float, rerank_score: float) -> float:
+    return (
+        RERANK_BLEND_DETERMINISTIC * deterministic_score
+        + RERANK_BLEND_CROSS_ENCODER * rerank_score
+    )
+
+
 def _run_matching(anchor_type: str, anchor_id: int, request: MatchingRequest) -> MatchingResponse:
-    start = time.perf_counter()
+    started = time.perf_counter()
+    warnings: list[str] = []
+    rerank_applied = False
+    retrieval_ms = 0.0
+    filter_ms = 0.0
+    scoring_ms = 0.0
+    rerank_ms = 0.0
+
     if anchor_type == "job":
         anchor = _load_job(anchor_id)
+        retrieve_start = time.perf_counter()
         with _api().get_connection() as conn, conn.cursor() as cur:
             cur.execute(f"SELECT {RESUME_DETAIL_COLS} FROM candidate_resumes WHERE status = 'active' ORDER BY resume_id ASC")
             candidates = [_load_resume(r[0]) for r in cur.fetchall()]
-        scored = []
-        for candidate in candidates:
-            if candidate and passes_hard_filter(anchor["model"], candidate["model"]):
-                scores, missing = _score_pair(anchor["model"], anchor["emb"], candidate["model"], candidate["emb"])
-                scored.append((candidate, scores, missing))
-        scored.sort(key=lambda x: (-x[1]["final_score"], x[0]["model"].cv_id))
-        scored = [x for x in scored if x[1]["final_score"] >= request.min_score][: request.top_k]
+        retrieval_ms = (time.perf_counter() - retrieve_start) * 1000
+
+        filter_start = time.perf_counter()
+        filtered_candidates = [
+            candidate
+            for candidate in candidates
+            if candidate and passes_hard_filter(anchor["model"], candidate["model"])
+        ]
+        filter_ms = (time.perf_counter() - filter_start) * 1000
+
+        score_start = time.perf_counter()
+        scored: list[dict[str, Any]] = []
+        for candidate in filtered_candidates:
+            scores, missing = _score_pair(anchor["model"], anchor["emb"], candidate["model"], candidate["emb"])
+            scored.append(
+                {
+                    "candidate": candidate,
+                    "scores": scores,
+                    "missing": missing,
+                    "rerank_score": None,
+                }
+            )
+        scored.sort(key=lambda x: (-x["scores"]["deterministic_score"], x["candidate"]["model"].cv_id))
+        scoring_ms = (time.perf_counter() - score_start) * 1000
+
+        rerank_start = time.perf_counter()
+        rerank_target = scored[:RERANK_TOP_N]
+        if rerank_target:
+            query_docs = [_candidate_text_for_rerank(anchor_type, anchor, item["candidate"]) for item in rerank_target]
+            query = query_docs[0][0]
+            docs = [doc for _, doc in query_docs]
+            try:
+                rerank_scores = get_rerank_provider().score(query, docs)
+                for item, rerank_score in zip(rerank_target, rerank_scores):
+                    item["rerank_score"] = rerank_score
+                    item["scores"]["final_score"] = _blend_scores(item["scores"]["deterministic_score"], rerank_score)
+                rerank_applied = True
+            except RerankError as exc:
+                warnings.append(f"rerank_fallback: {exc}")
+                for item in rerank_target:
+                    item["scores"]["final_score"] = item["scores"]["deterministic_score"]
+            except Exception as exc:  # pragma: no cover
+                warnings.append(f"rerank_fallback: {exc}")
+                for item in rerank_target:
+                    item["scores"]["final_score"] = item["scores"]["deterministic_score"]
+        rerank_ms = (time.perf_counter() - rerank_start) * 1000
+
+        for item in scored[RERANK_TOP_N:]:
+            item["scores"]["final_score"] = item["scores"]["deterministic_score"]
+
+        scored.sort(key=lambda x: (-x["scores"]["final_score"], x["candidate"]["model"].cv_id))
+        filtered_total = len(scored)
+        scored = [x for x in scored if x["scores"]["final_score"] >= request.min_score][: request.top_k]
         items = [
             MatchingItem(
                 rank=i,
-                resume=candidate["summary"],
-                final_score=round(scores["final_score"], 6),
+                resume=item["candidate"]["summary"],
+                final_score=round(item["scores"]["final_score"], 6),
                 score_breakdown=MatchingScoreBreakdown(
-                    **{k: round(scores[k], 6) for k in ("title_sim", "skills_sim", "req_exp_sim", "req_summary_sim")}
+                    title_sim=round(item["scores"]["title_sim"], 6),
+                    skills_sim=round(item["scores"]["skills_sim"], 6),
+                    req_exp_sim=round(item["scores"]["req_exp_sim"], 6),
+                    req_summary_sim=round(item["scores"]["req_summary_sim"], 6),
+                    bonus_exact_skill=round(item["scores"]["bonus_exact_skill"], 6),
+                    penalty_missing_required=round(item["scores"]["penalty_missing_required"], 6),
                 ),
-                exact_skill_overlap=matched_skills_sorted(anchor["model"].skills, candidate["model"].skills),
+                exact_skill_overlap=matched_skills_sorted(anchor["model"].skills, item["candidate"]["model"].skills),
                 hard_filter_notes=_hard_filter_notes(anchor["model"]),
                 reasoning=build_reasoning(
-                    title_score=scores["title_sim"],
-                    skills_score=scores["skills_sim"],
-                    req_exp_score=scores["req_exp_sim"],
-                    req_summary_score=scores["req_summary_sim"],
-                    matched_skills=matched_skills_sorted(anchor["model"].skills, candidate["model"].skills),
-                    missing_emb_fields=missing,
+                    title_score=item["scores"]["title_sim"],
+                    skills_score=item["scores"]["skills_sim"],
+                    req_exp_score=item["scores"]["req_exp_sim"],
+                    req_summary_score=item["scores"]["req_summary_sim"],
+                    matched_skills=matched_skills_sorted(anchor["model"].skills, item["candidate"]["model"].skills),
+                    missing_emb_fields=item["missing"],
                 ),
-                missing_embedding_notes=missing,
+                missing_embedding_notes=item["missing"],
             )
-            for i, (candidate, scores, missing) in enumerate(scored, start=1)
+            for i, item in enumerate(scored, start=1)
         ]
         anchor_payload = {"type": "job", "job_id": anchor_id, "status": anchor["status"]}
+        candidates_total = len(candidates)
     else:
         anchor = _load_resume(anchor_id)
+        retrieve_start = time.perf_counter()
         with _api().get_connection() as conn, conn.cursor() as cur:
             cur.execute(f"SELECT {JOB_DETAIL_COLS} FROM job_posts WHERE status = 'published' ORDER BY job_id ASC")
             candidates = [_load_job(r[0]) for r in cur.fetchall()]
-        scored = []
-        for candidate in candidates:
-            if candidate and passes_hard_filter(candidate["model"], anchor["model"]):
-                scores, missing = _score_pair(candidate["model"], candidate["emb"], anchor["model"], anchor["emb"])
-                scored.append((candidate, scores, missing))
-        scored.sort(key=lambda x: (-x[1]["final_score"], x[0]["model"].job_id))
-        scored = [x for x in scored if x[1]["final_score"] >= request.min_score][: request.top_k]
+        retrieval_ms = (time.perf_counter() - retrieve_start) * 1000
+
+        filter_start = time.perf_counter()
+        filtered_candidates = [
+            candidate
+            for candidate in candidates
+            if candidate and passes_hard_filter(candidate["model"], anchor["model"])
+        ]
+        filter_ms = (time.perf_counter() - filter_start) * 1000
+
+        score_start = time.perf_counter()
+        scored: list[dict[str, Any]] = []
+        for candidate in filtered_candidates:
+            scores, missing = _score_pair(candidate["model"], candidate["emb"], anchor["model"], anchor["emb"])
+            scored.append(
+                {
+                    "candidate": candidate,
+                    "scores": scores,
+                    "missing": missing,
+                    "rerank_score": None,
+                }
+            )
+        scored.sort(key=lambda x: (-x["scores"]["deterministic_score"], x["candidate"]["model"].job_id))
+        scoring_ms = (time.perf_counter() - score_start) * 1000
+
+        rerank_start = time.perf_counter()
+        rerank_target = scored[:RERANK_TOP_N]
+        if rerank_target:
+            query_docs = [_candidate_text_for_rerank(anchor_type, anchor, item["candidate"]) for item in rerank_target]
+            query = query_docs[0][0]
+            docs = [doc for _, doc in query_docs]
+            try:
+                rerank_scores = get_rerank_provider().score(query, docs)
+                for item, rerank_score in zip(rerank_target, rerank_scores):
+                    item["rerank_score"] = rerank_score
+                    item["scores"]["final_score"] = _blend_scores(item["scores"]["deterministic_score"], rerank_score)
+                rerank_applied = True
+            except RerankError as exc:
+                warnings.append(f"rerank_fallback: {exc}")
+                for item in rerank_target:
+                    item["scores"]["final_score"] = item["scores"]["deterministic_score"]
+            except Exception as exc:  # pragma: no cover
+                warnings.append(f"rerank_fallback: {exc}")
+                for item in rerank_target:
+                    item["scores"]["final_score"] = item["scores"]["deterministic_score"]
+        rerank_ms = (time.perf_counter() - rerank_start) * 1000
+
+        for item in scored[RERANK_TOP_N:]:
+            item["scores"]["final_score"] = item["scores"]["deterministic_score"]
+
+        scored.sort(key=lambda x: (-x["scores"]["final_score"], x["candidate"]["model"].job_id))
+        filtered_total = len(scored)
+        scored = [x for x in scored if x["scores"]["final_score"] >= request.min_score][: request.top_k]
         items = [
             MatchingItem(
                 rank=i,
-                job=candidate["summary"],
-                final_score=round(scores["final_score"], 6),
+                job=item["candidate"]["summary"],
+                final_score=round(item["scores"]["final_score"], 6),
                 score_breakdown=MatchingScoreBreakdown(
-                    **{k: round(scores[k], 6) for k in ("title_sim", "skills_sim", "req_exp_sim", "req_summary_sim")}
+                    title_sim=round(item["scores"]["title_sim"], 6),
+                    skills_sim=round(item["scores"]["skills_sim"], 6),
+                    req_exp_sim=round(item["scores"]["req_exp_sim"], 6),
+                    req_summary_sim=round(item["scores"]["req_summary_sim"], 6),
+                    bonus_exact_skill=round(item["scores"]["bonus_exact_skill"], 6),
+                    penalty_missing_required=round(item["scores"]["penalty_missing_required"], 6),
                 ),
-                exact_skill_overlap=matched_skills_sorted(candidate["model"].skills, anchor["model"].skills),
-                hard_filter_notes=_hard_filter_notes(candidate["model"]),
+                exact_skill_overlap=matched_skills_sorted(item["candidate"]["model"].skills, anchor["model"].skills),
+                hard_filter_notes=_hard_filter_notes(item["candidate"]["model"]),
                 reasoning=build_reasoning(
-                    title_score=scores["title_sim"],
-                    skills_score=scores["skills_sim"],
-                    req_exp_score=scores["req_exp_sim"],
-                    req_summary_score=scores["req_summary_sim"],
-                    matched_skills=matched_skills_sorted(candidate["model"].skills, anchor["model"].skills),
-                    missing_emb_fields=missing,
+                    title_score=item["scores"]["title_sim"],
+                    skills_score=item["scores"]["skills_sim"],
+                    req_exp_score=item["scores"]["req_exp_sim"],
+                    req_summary_score=item["scores"]["req_summary_sim"],
+                    matched_skills=matched_skills_sorted(item["candidate"]["model"].skills, anchor["model"].skills),
+                    missing_emb_fields=item["missing"],
                 ),
-                missing_embedding_notes=missing,
+                missing_embedding_notes=item["missing"],
             )
-            for i, (candidate, scores, missing) in enumerate(scored, start=1)
+            for i, item in enumerate(scored, start=1)
         ]
         anchor_payload = {"type": "resume", "resume_id": anchor_id, "status": anchor["status"]}
+        candidates_total = len(candidates)
+
+    total_ms = (time.perf_counter() - started) * 1000
     return MatchingResponse(
         anchor=anchor_payload,
         items=items,
-        runtime={"total_ms": round((time.perf_counter() - start) * 1000, 2), "rerank_ms": 0.0},
+        runtime=MatchingRuntime(
+            total_ms=round(total_ms, 2),
+            retrieval_ms=round(retrieval_ms, 2),
+            filter_ms=round(filter_ms, 2),
+            scoring_ms=round(scoring_ms, 2),
+            rerank_ms=round(rerank_ms, 2),
+            candidates_total=candidates_total,
+            candidates_after_filter=filtered_total,
+            rerank_applied=rerank_applied,
+            warnings=warnings,
+        ),
     )
 
 

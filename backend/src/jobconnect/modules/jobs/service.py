@@ -4,6 +4,7 @@ from typing import Any, Optional
 
 import psycopg
 
+from jobconnect.integrations.embedding import EmbeddingError
 from jobconnect.integrations.pgvector import vector_to_pg_literal
 from jobconnect.modules.api.shared import (
     CurrentUser,
@@ -196,7 +197,10 @@ def search_jobs(
 
 
 def semantic_search_jobs(request: SemanticSearchRequest, user: CurrentUser) -> SemanticJobSearchResponse:
-    q_vec = _vec(request.query)
+    try:
+        q_vec = _vec(request.query)
+    except EmbeddingError:
+        raise business_error(503, "embedding_unavailable", "Semantic search is temporarily unavailable.")
     where, params = visible_job_search_filter(
         user,
         None,

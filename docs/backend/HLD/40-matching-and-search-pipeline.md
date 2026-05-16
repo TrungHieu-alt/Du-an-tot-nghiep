@@ -54,9 +54,16 @@ Defaults:
 
 - Embedding retrieval produces the candidate set.
 - Formula scoring remains the deterministic fallback.
-- Optional cross-encoder reranking may apply to top 10-20 candidates.
+- Local cross-encoder reranking is attempted on top 10 candidates after
+  deterministic pre-ranking.
+- If reranker is unavailable, runtime falls back to deterministic scoring and
+  exposes fallback warnings in matching runtime metadata.
 - Tie-break is deterministic: `final_score DESC`, then `resume_id ASC` for
   job anchors or `job_id ASC` for resume anchors.
+
+Runtime metrics include `total_ms`, `retrieval_ms`, `filter_ms`, `scoring_ms`,
+`rerank_ms`, candidate counts before/after hard filters, rerank-applied flag,
+and warning notes.
 
 ## Reasoning
 

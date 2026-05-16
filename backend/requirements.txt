@@ -12,3 +12,6 @@ pypdf==4.3.1
 
 # TestClient support
 httpx==0.28.1
+
+# Slice 8: local multilingual cross-encoder reranker.
+sentence-transformers==3.0.1
