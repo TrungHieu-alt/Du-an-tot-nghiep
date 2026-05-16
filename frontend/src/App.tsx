@@ -32,9 +32,13 @@ import UploadPage from "@/pages/UploadPage";
 import AdminPage from "@/pages/admin/AdminPage";
 
 function RoleHome() {
-  const { user, loading } = useAuth();
+  const { user, loading, candidateProfile, recruiterProfile } = useAuth();
   if (loading) return null;
   if (!user) return <Navigate to="/auth" replace />;
+  if (user.role === "candidate" && !candidateProfile)
+    return <Navigate to="/profile/candidate/setup" replace />;
+  if (user.role === "recruiter" && !recruiterProfile)
+    return <Navigate to="/profile/recruiter/setup" replace />;
   const dest: Record<Role, string> = {
     candidate: "/jobs",
     recruiter: "/talent",

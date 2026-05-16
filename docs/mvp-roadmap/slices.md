@@ -903,7 +903,7 @@ Handoff checklist:
 
 ## Slice 16: End-to-End MVP Hardening
 
-Status: `not_started`
+Status: `done`
 
 Goal: prepare the whole MVP for demo/release-style validation.
 

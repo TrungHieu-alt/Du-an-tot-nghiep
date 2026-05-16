@@ -1,131 +1,142 @@
 # JobConnect MVP
 
-This repository now centers on the FastAPI backend for the JobConnect
-recruiting marketplace MVP.
+A shared-pool recruiting marketplace. Candidates upload CVs, match against jobs, apply, and respond to invites. Recruiters create jobs, match against resumes, invite candidates, and manage applications. Admins monitor users, documents, and audit events.
 
-## Product Target
+Canonical product requirements: `docs/REQUIREMENTS.md`  
+Backend architecture: `docs/backend/HLD/`  
+MVP roadmap: `docs/mvp-roadmap/README.md`
 
-The target product is a shared-pool recruiting marketplace:
+## Quick Start
 
-- candidates upload CVs, review parsed data, activate resumes, match against
-  published jobs, apply to jobs, and respond to recruiter invites.
-- recruiters create employer profiles, upload or create job descriptions,
-  publish jobs, match against active resumes, invite candidates, and manage
-  applications.
-- admins monitor users, content, parse jobs, matching, notifications, and audit
-  events.
-
-Canonical product requirements live in `docs/REQUIREMENTS.md`.
-Target backend architecture lives in `docs/backend/HLD/`.
-
-## Current Runnable Baseline
-
-- FastAPI backend under `backend/src/jobconnect`.
-- API namespaces under `/api/*`.
-- PostgreSQL + pgvector storage on host port `5433`.
-- Schema migration at `backend/db/migrations/001_production_mvp.sql`.
-- Legacy V2 prototype code has been removed from runtime. Legacy docs remain
-  under `docs/backend/HLD/legacy/` and matching scenario docs for reference.
-
-## Backend Layout
-
-```text
-backend/
-  main.py
-  src/jobconnect/
-    main.py
-    app.py
-    core/
-      config.py
-      database.py
-      exceptions.py
-      logging.py
-      security.py
-    common/
-      constants.py
-      dependencies.py
-      pagination.py
-      responses.py
-      utils.py
-    integrations/
-      pgvector/
-    modules/
-      api/
-      auth/
-      users/
-      organizations/
-      jobs/
-      resumes/
-      documents/
-      matching/
-      applications/
-      invites/
-      notifications/
-      admin/
-      system/
-  db/
-    migrations/
-    apply_migrations.py
-  tests/
-```
-
-The layout keeps FastAPI but organizes code around app, core, common,
-integration, and feature-module boundaries similar to a NestJS project. The
-current `/api/*` implementation is intentionally still centralized in
-`modules/api/router.py`; the feature folders are the ownership targets for
-future splits.
-
-## Setup
-
-Create `.env` from the example if present:
+**Requirements:** Docker + Docker Compose.
 
 ```bash
+# 1. Copy environment config
 cp .env.example .env
-```
 
-Start the backend and database:
+# 2. Start all services
+docker compose up -d
 
-```bash
-docker compose up -d postgres backend
+# 3. Apply database migrations (first time, or after reset)
+docker compose exec backend python db/apply_migrations.py
 ```
 
 Services:
 
-- Backend API: `http://localhost:8000`
-- PostgreSQL: `localhost:5433`
+| Service  | URL                       |
+|----------|---------------------------|
+| Frontend | http://localhost:5173     |
+| Backend  | http://localhost:8000     |
+| Postgres | localhost:5433            |
 
-Apply schema migrations:
+## First-Time Setup Flow
 
-```bash
-docker compose exec backend python db/apply_migrations.py
-```
+1. Open http://localhost:5173
+2. Register as **candidate** or **recruiter** (or **admin**).
+3. Complete profile setup — candidates set name/headline/location, recruiters select/create an organization.
+4. Candidates: activate a resume to apply to jobs or receive invites.
+5. Recruiters: publish a job to appear in the talent market and accept applications.
 
 ## Verification
 
-Backend unit tests:
+Backend tests (204 tests):
 
 ```bash
 docker compose exec backend python -m unittest discover -s tests
 ```
 
-OpenAPI and health:
+Backend smoke (22-step live flow):
+
+```bash
+docker compose exec backend python tests/smoke_e2e.py
+```
+
+API health + OpenAPI:
 
 ```bash
 curl http://localhost:8000/api/health
 curl http://localhost:8000/openapi.json
 ```
 
+Frontend TypeScript check:
+
+```bash
+docker compose exec frontend node_modules/.bin/tsc --noEmit
+```
+
+## Project Layout
+
+```
+backend/
+  src/jobconnect/
+    core/           # config, database, security, logging
+    common/         # dependencies, pagination, responses
+    integrations/   # pgvector, llm, embedding, storage, email, rerank
+    modules/        # auth, users, orgs, jobs, resumes, documents,
+                    # matching, applications, invites, notifications,
+                    # admin, system
+  db/migrations/    # 001_production_mvp.sql
+  tests/            # 204 unit + integration tests + smoke_e2e.py
+
+frontend/
+  src/
+    contexts/       # AuthContext (JWT session)
+    components/     # ProtectedRoute, AppShell, UI primitives
+    pages/          # candidate/, recruiter/, admin/, shared
+    lib/            # api.ts, hooks.ts, constants.ts, cn.ts
+```
+
+## Known Gaps (MVP Scope)
+
+| Gap | Impact | Deferred to |
+|-----|--------|-------------|
+| `sentence_transformers` not installed → rerank falls back with a warning | Matching still works via score sort | Post-MVP |
+| Semantic search not wired in UI (filter-only search) | Users cannot do natural-language search from browser | Slice 16 follow-up |
+| Pagination UI not implemented (first 20 results shown) | Large datasets truncated | Post-MVP |
+| DOCX parsing returns empty text | Only PDF/TXT parsed for now | Post-MVP |
+| Admin disable-user action not in UI (read-only) | Admin must call API directly | Post-MVP |
+| Local filesystem storage for uploads | Not suitable for multi-instance or production | Post-MVP |
+| No email delivery (local log sender) | Notifications exist in DB; no email sent | Post-MVP |
+
+## Environment Variables
+
+Key vars (all have defaults — only set to override):
+
+```bash
+# Database
+POSTGRES_HOST=localhost       # use "postgres" inside Docker
+POSTGRES_PORT=5433
+POSTGRES_USER=jobmatcher
+POSTGRES_PASSWORD=jobmatcher
+POSTGRES_DB=jobmatcher_v2
+
+# Security
+JWT_SECRET=...               # random secret for JWT signing
+JWT_TTL_SECONDS=86400
+
+# LLM (optional — falls back to local deterministic parser)
+LLM_PROVIDER=local           # or "openai"
+OPENAI_API_KEY=...
+
+# Embedding (optional — falls back to local hash embedding)
+EMBEDDING_PROVIDER=local     # or "openai"
+
+# Storage
+STORAGE_BACKEND=local        # local filesystem under /app/backend/uploads
+STORAGE_LOCAL_ROOT=/app/backend/uploads
+
+# CORS (comma-separated)
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+
+# Frontend
+VITE_API_BASE_URL=http://localhost:8000
+```
+
 ## Documentation
 
 - Product spec: `docs/REQUIREMENTS.md`
-- Production backend HLD: `docs/backend/HLD/`
-- Production API LLD: `docs/backend/LLD/40-api-contract.md`
-- MVP implementation roadmap: `docs/mvp-roadmap/README.md`
-- Legacy prototype reference docs: `docs/backend/HLD/legacy/`
-
-## Frontend Planning Rule
-
-No frontend runtime is active right now. Files under `docs/frontend/` are
-experimental prototype-adjacent notes and are not source of truth for the next
-frontend implementation. Future screens must be redesigned later from
-`docs/REQUIREMENTS.md`, backend HLD/LLD docs, and the current OpenAPI surface.
+- Backend HLD: `docs/backend/HLD/`
+- API contract: `docs/backend/LLD/40-api-contract.md`
+- API implementation matrix: `docs/backend/LLD/50-current-api-implementation-matrix.md`
+- MVP slices: `docs/mvp-roadmap/slices.md`
+- MVP progress: `docs/mvp-roadmap/progress.md`
