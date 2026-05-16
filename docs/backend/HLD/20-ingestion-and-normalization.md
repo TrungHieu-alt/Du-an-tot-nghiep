@@ -18,6 +18,8 @@ upload file
   -> normalize skills
   -> LLM structured parse with constrained schema
   -> update resume/job fields
+  -> expose parsed review payload for user confirmation
+  -> save user corrections back to the draft resume/job
   -> generate embeddings
   -> mark succeeded or failed
 ```
@@ -59,6 +61,12 @@ Minimum preprocessing before LLM parsing:
 - Parser must not invent unsupported enum values.
 - Parser output feeds only draft/reviewable resume or job records until the user
   activates or publishes the record.
+- Parser output must be exposed to the frontend as a review payload containing
+  normalized fields, hard-filter fields, parser metadata, embedding metadata,
+  warnings, and extracted text or an extracted text URL.
+- User corrections from the review page are persisted through the normal draft
+  entity update endpoints. Saving reviewed data must not activate a resume or
+  publish a job.
 
 ### Adapter Boundary (Slice 6)
 
@@ -102,10 +110,19 @@ Failure handling:
 - `failed`: original file remains available and the user sees an actionable
   error.
 
+Succeeded parse job API detail must include enough data for the production
+review page:
+
+- linked `resume_id` or `job_id`.
+- parsed normalized fields for CV/JD.
+- hard-filter fields requiring confirmation.
+- extracted text or extracted text URL.
+- `parser_version` and embedding version metadata.
+- warnings/confidence metadata when available.
+
 ## Failure Rules
 
 - A parse failure does not delete the file or business entity.
 - Email failure does not roll back parse state.
 - Failed parse jobs should create user-visible notification and business audit
   entries.
-

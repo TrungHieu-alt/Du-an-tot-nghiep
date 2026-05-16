@@ -44,7 +44,7 @@ Keep updates concrete and evidence-backed.
 | 10 Notifications, Email, Audit | not_started | TBD | TBD | TBD | TBD | not checked | none | Wait for parse and lifecycle side effects. | none yet | none yet | Email failure must not roll back transactions. |
 | 11 Admin Monitoring | not_started | TBD | TBD | TBD | TBD | not checked | none | Wait for main backend workflows to expose operational data. | none yet | none yet | Admin MVP is read-only. |
 | 12 Backend End-to-End Hardening | not_started | TBD | TBD | TBD | TBD | not checked | none | Wait for backend feature slices. | none yet | none yet | Integration gate before full frontend workflow build-out. |
-| 13 Frontend Design Direction | not_started | TBD | TBD | TBD | TBD | not checked | none | Choose external references and define simple screen brief. | none yet | none yet | `docs/frontend/*` is archived reference only. |
+| 13 Frontend Design Direction | review | AI agent | v2 (working tree) | 2026-05-16 | 2026-05-16 | dirty: docs/frontend/screen/*, docs/frontend/README.md, roadmap docs | none | Review production-like screen specs and matrix before Slice 14 frontend shell starts. | production-like screen specs updated; `docs/frontend/screen-to-api-state-matrix.md` added; shared Vietnamese UI state contract added | Full MVP screen set maps to backend APIs/states for candidate, recruiter, shared, and admin flows; visible UI copy is Vietnamese while docs remain English. | Frontend runtime remains out of scope; archived docs remain reference only. |
 | 14 Frontend Shell And API Client | not_started | TBD | TBD | TBD | TBD | not checked | none | Wait for stable auth/API contracts and design direction. | none yet | none yet | Future runtime root likely `frontend/`. |
 | 15 Frontend Core Workflows | not_started | TBD | TBD | TBD | TBD | not checked | none | Wait for frontend shell and backend end-to-end readiness. | none yet | none yet | Validate real data display before visual polish. |
 | 16 End-to-End MVP Hardening | not_started | TBD | TBD | TBD | TBD | not checked | none | Wait for backend and frontend core workflows. | none yet | none yet | Final release/demo readiness pass. |
@@ -54,9 +54,15 @@ Keep updates concrete and evidence-backed.
 - Backend surface exists under `/api/*`.
 - Production schema exists under `backend/db/migrations/001_production_mvp.sql`.
 - Matching helpers exist under `backend/src/jobconnect/modules/matching/`.
-- Frontend runtime is not active.
-- Upload, parser/provider execution, real embedding provider, email delivery,
-  and several contract drifts remain open.
+- Frontend runtime is not active; active Slice 13 screen specs now live under
+  `docs/frontend/screen/`.
+- Upload, parse worker, LLM parser adapter, embedding provider boundary,
+  semantic search, auth/session, ownership, and core API drift cleanup have
+  slice-level verification evidence.
+- Remaining open work includes matching production hardening, application/invite
+  closed-job and display DTO hardening, email delivery, admin monitoring smoke
+  coverage, backend end-to-end smoke, frontend runtime implementation, and final
+  MVP hardening.
 
 ## Slice 0 Verification Snapshot (2026-05-16)
 

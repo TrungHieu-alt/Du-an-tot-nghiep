@@ -25,8 +25,9 @@ come after the core data and workflow behavior is trusted.
 ## How To Use This Roadmap
 
 1. Start with `slices.md` to choose the next implementation slice.
-2. Check `path-map.md` for the exact files and workflows affected by that
-   slice.
+2. Use each slice's impacted paths, then load targeted docs through
+   `docs/agent-rules/doc-map.md` and runtime ownership through
+   `docs/agent-rules/codemap.md`.
 3. Update `progress.md` when a slice starts, blocks, enters review, or finishes.
 4. Use the Definition of Done in each slice before marking it `done`.
 5. Record verification commands and outcomes in the slice handoff.
@@ -52,7 +53,6 @@ Recommended order:
 
 - `docs/mvp-roadmap/slices.md`: detailed implementation slices and DoD.
 - `docs/mvp-roadmap/progress.md`: team-maintained progress tracker.
-- `docs/mvp-roadmap/path-map.md`: full path map by workflow.
 - `docs/mvp-roadmap/slice-execution-guide.md`: rules and prompt template for
   starting and completing each slice.
 - `docs/mvp-roadmap/testing-strategy.md`: minimum unit, integration, and

@@ -134,6 +134,14 @@ class MeResponse(APIModel):
     organization: Optional[Organization] = None
 
 
+class AdminUserDetail(APIModel):
+    user: UserSummary
+    candidate_profile: Optional[CandidateProfile] = None
+    recruiter_profile: Optional[RecruiterProfile] = None
+    organization: Optional[Organization] = None
+    ops_summary: dict[str, int] = Field(default_factory=dict)
+
+
 class ResumeRequest(APIModel):
     title: str = Field(min_length=1)
     summary: str = ""
@@ -1719,10 +1727,7 @@ def update_application_status(
     if row is None:
         raise business_error(404, "not_found", "Application not found.")
     current = row[4]
-    if user.role == "candidate" and request.status != "withdrawn":
-        raise business_error(403, "forbidden", "Candidates can only withdraw applications.")
-    if user.role == "recruiter" and request.status not in ("shortlisted", "rejected", "hired"):
-        raise business_error(403, "forbidden", "Recruiters cannot set this status.")
+    _validate_application_transition(current, request.status, user.role)
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE applications SET status = %s, updated_at = now() WHERE application_id = %s RETURNING application_id, job_id, candidate_user_id, resume_id, status",
@@ -1934,34 +1939,98 @@ def admin_users(
     return Paginated(items=items, total=total, limit=limit, offset=offset)
 
 
-@admin_router.get("/users/{user_id}", response_model=UserSummary)
+@admin_router.get("/users/{user_id}", response_model=AdminUserDetail)
 def admin_user_detail(user_id: int, user: CurrentUser = Depends(require_roles("admin"))):
     with get_connection() as conn, conn.cursor() as cur:
         _audit(cur, user.user_id, "admin_monitoring_access", "user", user_id)
         cur.execute("SELECT user_id, email, role, status, created_at FROM users WHERE user_id = %s", (user_id,))
         row = cur.fetchone()
-    if row is None:
-        raise business_error(404, "not_found", "User not found.")
-    return user_summary(row)
+        if row is None:
+            raise business_error(404, "not_found", "User not found.")
+        summary = user_summary(row)
+        candidate_profile = None
+        recruiter_profile = None
+        organization = None
+        if summary.role == "candidate":
+            cur.execute(
+                """
+                SELECT user_id, full_name, phone, current_location, total_experience_years, headline
+                  FROM candidate_profiles WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+            profile = cur.fetchone()
+            if profile:
+                candidate_profile = CandidateProfile(
+                    user_id=profile[0],
+                    full_name=profile[1],
+                    phone=profile[2],
+                    current_location=profile[3],
+                    total_experience_years=profile[4],
+                    headline=profile[5],
+                )
+        elif summary.role == "recruiter":
+            cur.execute(
+                """
+                SELECT rp.user_id, rp.organization_id, rp.full_name, rp.title, rp.phone,
+                       o.organization_id, o.name, o.slug, o.logo_url, o.about
+                  FROM recruiter_profiles rp
+                  JOIN organizations o ON o.organization_id = rp.organization_id
+                 WHERE rp.user_id = %s
+                """,
+                (user_id,),
+            )
+            profile = cur.fetchone()
+            if profile:
+                recruiter_profile = RecruiterProfile(
+                    user_id=profile[0],
+                    organization_id=profile[1],
+                    full_name=profile[2],
+                    title=profile[3],
+                    phone=profile[4],
+                )
+                organization = Organization(
+                    organization_id=profile[5],
+                    name=profile[6],
+                    slug=profile[7],
+                    logo_url=profile[8],
+                    about=profile[9],
+                )
+        ops_summary = _admin_user_ops_summary(cur, user_id)
+    return AdminUserDetail(
+        user=summary,
+        candidate_profile=candidate_profile,
+        recruiter_profile=recruiter_profile,
+        organization=organization,
+        ops_summary=ops_summary,
+    )
 
 
 @admin_router.get("/documents", response_model=Paginated)
 def admin_documents(
+    document_type: Optional[Literal["candidate_resume", "job_post"]] = None,
+    parse_status: Optional[ParseStatus] = None,
+    owner_user_id: Optional[int] = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     user: CurrentUser = Depends(require_roles("admin")),
 ):
+    where, params = _admin_filters(
+        document_type=document_type,
+        owner_user_id=owner_user_id,
+        parse_status=parse_status,
+    )
     with get_connection() as conn, conn.cursor() as cur:
         _audit(cur, user.user_id, "admin_monitoring_access", "documents", None)
-        cur.execute("SELECT COUNT(*) FROM uploaded_documents")
+        cur.execute(f"SELECT COUNT(*) FROM uploaded_documents WHERE {where}", params)
         total = cur.fetchone()[0]
         cur.execute(
-            """
+            f"""
             SELECT document_id, owner_user_id, document_type, object_key, file_url,
                    original_filename, mime_type, file_size_bytes, resume_id, job_id, created_at
-            FROM uploaded_documents ORDER BY document_id DESC LIMIT %s OFFSET %s
+            FROM uploaded_documents WHERE {where} ORDER BY document_id DESC LIMIT %s OFFSET %s
             """,
-            (limit, offset),
+            (*params, limit, offset),
         )
         items = [_document_detail(r) for r in cur.fetchall()]
     return Paginated(items=items, total=total, limit=limit, offset=offset)
@@ -1970,21 +2039,32 @@ def admin_documents(
 @admin_router.get("/parse-jobs", response_model=Paginated)
 def admin_parse_jobs(
     status: Optional[ParseStatus] = None,
+    document_type: Optional[Literal["candidate_resume", "job_post"]] = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     user: CurrentUser = Depends(require_roles("admin")),
 ):
-    where = "status = %s" if status else "TRUE"
-    params: list[Any] = [status] if status else []
+    where, params = _admin_filters(status=status, document_type=document_type)
     with get_connection() as conn, conn.cursor() as cur:
         _audit(cur, user.user_id, "admin_monitoring_access", "parse_jobs", None)
-        cur.execute(f"SELECT COUNT(*) FROM parse_jobs WHERE {where}", params)
+        cur.execute(
+            f"""
+            SELECT COUNT(*) FROM parse_jobs
+            JOIN uploaded_documents USING (document_id)
+            WHERE {where}
+            """,
+            params,
+        )
         total = cur.fetchone()[0]
         cur.execute(
             f"""
-            SELECT parse_job_id, document_id, target_entity_type, resume_id, job_id, status,
-                   error_code, error_message, created_at, updated_at
-            FROM parse_jobs WHERE {where} ORDER BY parse_job_id DESC LIMIT %s OFFSET %s
+            SELECT parse_jobs.parse_job_id, parse_jobs.document_id, parse_jobs.target_entity_type,
+                   parse_jobs.resume_id, parse_jobs.job_id, parse_jobs.status,
+                   parse_jobs.error_code, parse_jobs.error_message,
+                   parse_jobs.created_at, parse_jobs.updated_at
+            FROM parse_jobs
+            JOIN uploaded_documents USING (document_id)
+            WHERE {where} ORDER BY parse_job_id DESC LIMIT %s OFFSET %s
             """,
             (*params, limit, offset),
         )
@@ -1995,12 +2075,13 @@ def admin_parse_jobs(
 @admin_router.get("/applications", response_model=Paginated)
 def admin_applications(
     status: Optional[ApplicationStatus] = None,
+    job_id: Optional[int] = None,
+    resume_id: Optional[int] = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     _: CurrentUser = Depends(require_roles("admin")),
 ):
-    where = "status = %s" if status else "TRUE"
-    params: list[Any] = [status] if status else []
+    where, params = _admin_filters(status=status, job_id=job_id, resume_id=resume_id)
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(f"SELECT COUNT(*) FROM applications WHERE {where}", params)
         total = cur.fetchone()[0]
@@ -2015,12 +2096,13 @@ def admin_applications(
 @admin_router.get("/invites", response_model=Paginated)
 def admin_invites(
     status: Optional[InviteStatus] = None,
+    job_id: Optional[int] = None,
+    resume_id: Optional[int] = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     _: CurrentUser = Depends(require_roles("admin")),
 ):
-    where = "status = %s" if status else "TRUE"
-    params: list[Any] = [status] if status else []
+    where, params = _admin_filters(status=status, job_id=job_id, resume_id=resume_id)
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(f"SELECT COUNT(*) FROM recruiter_invites WHERE {where}", params)
         total = cur.fetchone()[0]
@@ -2035,12 +2117,12 @@ def admin_invites(
 @admin_router.get("/notifications", response_model=Paginated)
 def admin_notifications(
     status: Optional[NotificationStatus] = None,
+    user_id: Optional[int] = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     _: CurrentUser = Depends(require_roles("admin")),
 ):
-    where = "status = %s" if status else "TRUE"
-    params: list[Any] = [status] if status else []
+    where, params = _admin_filters(status=status, recipient_user_id=user_id)
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(f"SELECT COUNT(*) FROM notifications WHERE {where}", params)
         total = cur.fetchone()[0]
@@ -2054,13 +2136,20 @@ def admin_notifications(
 
 @admin_router.get("/audit-logs", response_model=Paginated)
 def admin_audit_logs(
+    actor_user_id: Optional[int] = None,
+    target_type: Optional[str] = None,
+    target_id: Optional[int] = None,
     event_type: Optional[str] = None,
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     _: CurrentUser = Depends(require_roles("admin")),
 ):
-    where = "event_type = %s" if event_type else "TRUE"
-    params: list[Any] = [event_type] if event_type else []
+    where, params = _admin_filters(
+        actor_user_id=actor_user_id,
+        target_entity_type=target_type,
+        target_entity_id=target_id,
+        event_type=event_type,
+    )
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(f"SELECT COUNT(*) FROM audit_logs WHERE {where}", params)
         total = cur.fetchone()[0]
@@ -2149,6 +2238,33 @@ RESUME_STATUS_TRANSITIONS: dict[str, set[str]] = {
     "active": {"draft", "archived"},
     "archived": {"draft", "active"},
 }
+
+APPLICATION_STATUS_TRANSITIONS: dict[str, dict[str, set[str]]] = {
+    "candidate": {
+        "withdrawn": {"submitted", "shortlisted"},
+    },
+    "recruiter": {
+        "shortlisted": {"submitted"},
+        "rejected": {"submitted", "shortlisted"},
+        "hired": {"submitted", "shortlisted"},
+    },
+}
+
+
+def _validate_application_transition(current: str, target: str, role: str) -> None:
+    role_transitions = APPLICATION_STATUS_TRANSITIONS.get(role)
+    if not role_transitions or target not in role_transitions:
+        if role == "candidate":
+            raise business_error(403, "forbidden", "Candidates can only withdraw applications.")
+        if role == "recruiter":
+            raise business_error(403, "forbidden", "Recruiters cannot set this status.")
+        raise business_error(403, "forbidden", "Role is not allowed to change application status.")
+    if current not in role_transitions[target]:
+        raise business_error(
+            409,
+            "invalid_transition",
+            f"Application cannot transition from {current} to {target}.",
+        )
 
 
 def _recruiter_in_organization(user_id: int, organization_id: int) -> bool:
@@ -2609,10 +2725,38 @@ def _admin_filters(**kwargs):
         if key == "q":
             where.append("email ILIKE %s")
             params.append(f"%{value}%")
+        elif key == "parse_status":
+            where.append(
+                "EXISTS (SELECT 1 FROM parse_jobs p WHERE p.document_id = uploaded_documents.document_id AND p.status = %s)"
+            )
+            params.append(value)
         else:
             where.append(f"{key} = %s")
             params.append(value)
     return " AND ".join(where or ["TRUE"]), params
+
+
+def _admin_user_ops_summary(cur: psycopg.Cursor, user_id: int) -> dict[str, int]:
+    queries = {
+        "resumes": "SELECT COUNT(*) FROM candidate_resumes WHERE candidate_user_id = %s",
+        "jobs": "SELECT COUNT(*) FROM job_posts WHERE recruiter_user_id = %s",
+        "applications": "SELECT COUNT(*) FROM applications WHERE candidate_user_id = %s",
+        "invites": "SELECT COUNT(*) FROM recruiter_invites WHERE candidate_user_id = %s OR recruiter_user_id = %s",
+        "documents": "SELECT COUNT(*) FROM uploaded_documents WHERE owner_user_id = %s",
+        "parse_failures": """
+            SELECT COUNT(*)
+              FROM parse_jobs pj
+              JOIN uploaded_documents ud USING (document_id)
+             WHERE ud.owner_user_id = %s AND pj.status = 'failed'
+        """,
+    }
+    summary: dict[str, int] = {}
+    for key, sql in queries.items():
+        params = (user_id, user_id) if key == "invites" else (user_id,)
+        cur.execute(sql, params)
+        row = cur.fetchone()
+        summary[key] = int(row[0]) if row else 0
+    return summary
 
 
 ALL_API_ROUTERS = [

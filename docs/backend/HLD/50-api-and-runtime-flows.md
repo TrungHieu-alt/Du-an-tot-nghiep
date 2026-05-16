@@ -28,9 +28,9 @@ Candidate CV flow:
 register/login
   -> upload CV
   -> parse job async
-  -> review parsed resume
+  -> review parsed resume fields and save corrections
   -> activate resume
-  -> search/match published jobs
+  -> Job Market search or match published jobs from one selected active CV
   -> apply or respond to invite
 ```
 
@@ -38,12 +38,13 @@ Recruiter JD flow:
 
 ```text
 register/login
-  -> create organization/profile
+  -> choose organization, create organization, or use predefined Independent org
+  -> create recruiter profile
   -> upload or create JD
   -> parse job async
-  -> review parsed job
+  -> review parsed job fields and save corrections
   -> publish job
-  -> search/match active resumes
+  -> Talent Market search or match active resumes from one selected published JD
   -> invite candidate or manage applications
 ```
 
@@ -52,6 +53,8 @@ Matching flow:
 ```text
 validate auth and role
   -> validate anchor visibility
+  -> candidate anchor: active owned resume, rendered in Job Market
+  -> recruiter anchor: published owned job, rendered in Talent Market
   -> retrieve eligible opposite pool
   -> apply hard filters
   -> score and optional rerank
@@ -75,9 +78,19 @@ candidate apply OR accepted invite
 - Upload endpoints must document MIME type and file-size limits.
 - Parse status endpoints expose `queued`, `processing`, `succeeded`, and
   `failed`.
+- Parse job detail endpoints expose the reviewed parsed-field payload, extracted
+  text reference, parser metadata, embedding metadata, and linked target
+  `resume_id` or `job_id` required by the frontend review form.
+- Job list/search responses include linked organization display fields
+  (`organization_name`, `organization_logo_url`, `organization_slug`) to avoid
+  per-row organization fetches.
 - Matching responses include rank, final score, component scores, exact skill
   overlap, and reasoning.
 - Application and invite endpoints document allowed status transitions.
+- Application and invite list/detail responses include denormalized linked
+  job/resume summaries and timestamps for production frontend tables.
+- The predefined Independent organization used by the recruiter `Khác` option is
+  documented as seed data and exposed through organization lookup.
 
 ## Current Runtime Compatibility
 

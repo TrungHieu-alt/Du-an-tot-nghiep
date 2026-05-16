@@ -263,6 +263,10 @@ file, but implementation tables must preserve these semantics.
 - employer profile for recruiter-owned jobs.
 - Required fields: ID, name.
 - Optional display fields: slug, logo URL, about.
+- MVP seed data must include one predefined Independent organization used by
+  the recruiter onboarding `Khác` option for independent, freelance, or agency
+  recruiters. This is a shared marketplace profile bucket, not tenant/company
+  isolation.
 
 `recruiter_profiles`:
 
@@ -617,9 +621,17 @@ Required contract rules:
 - File upload endpoints must document accepted MIME types and max size.
 - Parse status endpoints must expose `queued`, `processing`, `succeeded`, and
   `failed`.
+- Parse detail endpoints must expose parsed normalized fields, extracted text or
+  extracted text reference, parser metadata, embedding metadata, warnings when
+  available, and linked target IDs required for user review.
+- Job list/search responses must include organization display fields needed by
+  job cards, including organization name and logo URL when available.
 - Matching responses must include score breakdown and reasoning.
 - Application/invite mutation endpoints must document allowed status
   transitions.
+- Application and invite list/detail responses must include linked job/resume
+  display summaries and relevant timestamps so frontend lists do not need
+  per-row follow-up fetches.
 - API changes must be classified as breaking or non-breaking in implementation
   handoff notes.
 

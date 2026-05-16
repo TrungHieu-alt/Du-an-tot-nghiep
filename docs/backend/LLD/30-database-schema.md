@@ -115,6 +115,18 @@ CREATE TABLE organizations (
 );
 ```
 
+Seed data:
+
+- The production seed/migration must create exactly one predefined Independent
+  organization row for recruiter onboarding option `Khác`.
+- Recommended canonical values:
+  - `name = 'Independent'`
+  - `slug = 'independent'`
+  - `logo_url = NULL`
+- Frontend and services must discover this row by config/bootstrap or lookup;
+  they must not hard-code an environment-specific `organization_id`.
+- This seed row is a shared marketplace profile bucket, not tenant isolation.
+
 ### `recruiter_profiles`
 
 ```sql

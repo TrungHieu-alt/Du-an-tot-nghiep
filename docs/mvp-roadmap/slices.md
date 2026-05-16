@@ -8,7 +8,7 @@ explicitly records why Docker is unavailable.
 
 ## Slice 0: Baseline Contract Audit
 
-Status: `not_started`
+Status: `done`
 
 Goal: create the exact implementation backlog from the current backend against
 the product and API contract docs.
@@ -61,7 +61,7 @@ Handoff checklist:
 
 ## Slice 1: Auth, Session, And `/api/me`
 
-Status: `not_started`
+Status: `done`
 
 Goal: make auth and current-user bootstrap stable enough for frontend and
 protected backend workflows.
@@ -114,7 +114,7 @@ Handoff checklist:
 
 ## Slice 2: Ownership And Authorization
 
-Status: `not_started`
+Status: `done`
 
 Goal: close role and ownership gaps before marketplace actions are trusted.
 
@@ -166,7 +166,7 @@ Handoff checklist:
 
 ## Slice 3: API Contract Drift Cleanup
 
-Status: `not_started`
+Status: `done`
 
 Goal: align existing CRUD, list, and detail endpoints with the target contract
 before frontend depends on them.
@@ -222,7 +222,7 @@ Handoff checklist:
 
 ## Slice 4: Document Upload Foundation
 
-Status: `not_started`
+Status: `done`
 
 Goal: implement the real upload contract and file persistence boundary.
 
@@ -281,7 +281,7 @@ Handoff checklist:
 
 ## Slice 5: Parse Worker V1
 
-Status: `not_started`
+Status: `done`
 
 Goal: make upload-to-draft-entity run end to end with deterministic local
 behavior.
@@ -339,7 +339,7 @@ Handoff checklist:
 
 ## Slice 6: LLM Parser Adapter
 
-Status: `not_started`
+Status: `done`
 
 Goal: add production-style structured parsing behind an adapter while keeping
 local development runnable.
@@ -453,8 +453,8 @@ Risk sweep update (2026-05-16):
   embeddings.
 - Parse-job creation/retry and worker success metadata persist the active
   embedding provider version instead of hard-coded `hash-v1`.
-- Go for Slice 8 with condition: carry application lifecycle transition graph
-  and terminal-lock drift as P2 backlog outside Slice 7.
+- Go for Slice 8. Application lifecycle transition graph and terminal-state
+  lock moved to Slice 9 tracking and are no longer Slice 7 backlog.
 
 ## Slice 8: Matching Production Hardening
 
@@ -485,7 +485,6 @@ Impacted paths:
 - `backend/src/jobconnect/modules/api/router.py`
 - `backend/tests/`
 - `docs/matching-v2-scenario-test-cases.md`
-- `docs/scenario-matrix.md`
 
 Dependencies: Slices 2, 3, and 7.
 
@@ -728,20 +727,25 @@ Handoff checklist:
 
 ## Slice 13: Frontend Design Direction
 
-Status: `not_started`
+Status: `review`
 
 Goal: define a simple, implementable frontend direction without resurrecting the
 removed prototype.
 
-Why now: team wants UI progress in parallel, but current `docs/frontend/*` files
-are archived reference only.
+Why now: team wants UI progress in parallel, with a concrete flow for
+upload/parse review before full frontend runtime implementation.
 
 In scope:
 
 - Select external recruiting/ATS/product references for layout inspiration.
 - Define simple screen flow for Auth, Workspace Home, Jobs Library, CVs Library,
-  Upload Wizard, Detail pages, Matching Workspace, Applications/Invites,
+  Upload + Parse Review, Detail pages, Matching Workspace, Applications/Invites,
   Notifications, and Admin minimal pages.
+- Define the screen-to-API/state matrix and Vietnamese UI copy contract while
+  keeping planning documentation in English.
+- Define Upload + Parse Review screen contract for both CV and JD modes.
+- Define mandatory hard-filter confirmation rule in review step before
+  activation/publish-ready usage when upload path is used.
 - Decide low-polish visual baseline focused on data correctness.
 - Document what must wait for backend contract readiness.
 
@@ -764,13 +768,18 @@ DoD:
 
 - Screen inventory exists.
 - Each screen maps to backend APIs or explicit mock data.
-- Archived frontend docs are labeled reference only.
+- `docs/frontend/screen/*` is established as the active Slice 13 design brief.
+- Upload + Parse Review flow is explicitly documented as a dedicated page.
+- Hard-filter confirmation rule is explicit in the design brief.
+- Archived prototype-adjacent frontend docs remain labeled reference only.
 - Style level is intentionally simple and data-first.
 
 Verification evidence required:
 
 - Design reference notes.
 - Screen-to-API map.
+- Vietnamese UI copy/state coverage for production-like error, empty,
+  authorization, and lifecycle states.
 
 Handoff checklist:
 
@@ -804,7 +813,6 @@ Impacted paths:
 - future `frontend/`
 - `docker-compose.yml`
 - `README.md`
-- `docs/mvp-roadmap/path-map.md`
 
 Dependencies: Slices 1-3 and Slice 13.
 

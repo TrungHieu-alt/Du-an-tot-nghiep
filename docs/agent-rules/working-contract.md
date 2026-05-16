@@ -1,13 +1,15 @@
 # Working Contract
 
-Purpose: operational behavior contract. Canonical rule priority, hard stops, intake artifacts, and handoff template live in `AGENTS.md`.
+Purpose: operational behavior contract. Canonical rule priority, hard stops,
+runtime policy, intake artifacts, escalation rules, and handoff template live in
+`AGENTS.md`.
 
 ## 1) Execution Principles
 - Be explicit: no hidden assumptions.
 - Be reproducible: verification is command-backed.
 - Be contract-safe: backend API changes are controlled and documented.
 - Be incremental: prefer small, verifiable deltas.
-- Follow runtime command policy from `AGENTS.md` (`Runtime Execution Rule (Canonical)`).
+- Follow canonical runtime policy from `AGENTS.md`.
 
 ## 2) Decision Logging
 For non-trivial decisions, record:
@@ -18,8 +20,8 @@ For non-trivial decisions, record:
 
 ## 3) API and OpenAPI Contract
 - OpenAPI is source of truth for frontend-backend wiring.
-- Follow `AGENTS.md` Documentation Synchronization Gate for API contract notes,
-  compatibility notes, and roadmap/status sync.
+- Follow canonical documentation-sync and compatibility-note requirements from
+  `AGENTS.md`.
 
 ## 4) Code and Data Safety
 - Do not weaken auth/security behavior silently.
@@ -28,10 +30,7 @@ For non-trivial decisions, record:
 
 ## 5) Verification Responsibility
 - Definition of Done gates in `definition-of-done.md` are mandatory.
-- Missing command-backed evidence means incomplete task.
+- Missing required verification evidence means incomplete task.
 
 ## 6) Escalation Triggers
-Escalate immediately when:
-- Requirements conflict.
-- Repo state contains unexpected same-file changes affecting your task.
-- Critical assumptions cannot be validated safely.
+Use the canonical Conflict and Escalation Protocol in `AGENTS.md`.

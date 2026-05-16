@@ -188,7 +188,6 @@ Legacy docs:
 - `docs/backend/HLD/legacy/legacy-matching-pipeline.md`
 - `docs/backend/HLD/legacy/legacy-data-and-storage.md`
 - `docs/backend/HLD/legacy/legacy-api-and-runtime-flows.md`
-- `docs/matching-v2-scenario-dataset.md`
 - `docs/matching-v2-scenario-test-cases.md`
 
 Rule for agents:
@@ -201,12 +200,31 @@ Rule for agents:
 
 ## 7) Frontend Planning Notes
 
-Reference-only notes:
+Active screen specs:
 
-- all files under `docs/frontend/`
+- `docs/frontend/screen/auth-screen.md`
+- `docs/frontend/screen/candidate-profile-setup.md`
+- `docs/frontend/screen/recruiter-profile-setup.md`
+- `docs/frontend/screen/upload-parse-review.md`
+- `docs/frontend/screen/job-market.md`
+- `docs/frontend/screen/talent-market.md`
+- `docs/frontend/screen/job-detail.md`
+- `docs/frontend/screen/resume-detail.md`
+- `docs/frontend/screen/records-management.md`
+- `docs/frontend/screen/invite-application-flow.md`
+- `docs/frontend/screen/account-settings.md`
+
+Archived reference notes:
+
+- `docs/frontend/design-system.md`
+- `docs/frontend/screen-specifications.md`
+- `docs/frontend/user-flows.md`
+- `docs/frontend/figma-implementation-guide.md`
+- `docs/frontend/ATTRIBUTIONS.md`
 
 No frontend runtime code is present. Follow `README.md` Frontend Planning Rule;
-`docs/frontend/` is archived reference only.
+screen specs under `docs/frontend/screen/` are the active Slice 13 design
+source.
 
 ## 8) Integration Boundary
 

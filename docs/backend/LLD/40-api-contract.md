@@ -155,6 +155,9 @@ Standard status meanings:
 {
   "job_id": 201,
   "organization_id": 10,
+  "organization_name": "Example Tech",
+  "organization_logo_url": "https://example.com/logo.png",
+  "organization_slug": "example-tech",
   "title": "Backend Engineer",
   "location": "ha_noi",
   "job_type": "remote",
@@ -166,6 +169,26 @@ Standard status meanings:
   "published_at": "2026-05-14T10:00:00Z"
 }
 ```
+
+`organization_name`, `organization_logo_url`, and `organization_slug` are
+included in job list/search/semantic responses so frontend job cards do not need
+per-row organization detail fetches. `organization_logo_url` and
+`organization_slug` are optional and may be `null`.
+
+`ApplicationSummary`
+
+Application list/detail responses include:
+`application_id`, `job_id`, `candidate_user_id`, `resume_id`, `status`,
+`applied_at`, `updated_at`, `job_summary`, and `resume_summary`.
+The linked summaries are read models for FE table stability and must respect the
+same role/privacy rules as the linked resource endpoints.
+
+`InviteSummary`
+
+Invite list/detail responses include:
+`invite_id`, `job_id`, `resume_id`, `candidate_user_id`, `recruiter_user_id`,
+`status`, `message`, `created_at`, `updated_at`, `job_summary`, and
+`resume_summary`.
 
 ## Auth And Current User
 
@@ -455,6 +478,16 @@ Errors: `401`, `403`, `404`, `422`.
 
 Side effects: upserts `recruiter_profiles`.
 
+Independent organization rule:
+
+- Recruiter onboarding supports a visible `Khác` / independent option.
+- That option maps to one predefined `organizations` row for independent,
+  freelance, or agency recruiters who do not belong to a named employer.
+- The frontend must discover the real `organization_id` through bootstrap/config
+  or organization lookup. It must not hard-code an environment-specific ID.
+- If the predefined row is missing, the API should expose an operational setup
+  error rather than accepting an invalid `organization_id`.
+
 ### `GET /api/organizations`
 
 Roles: authenticated.
@@ -464,6 +497,10 @@ Purpose: browse organizations for recruiter profile setup and job display.
 Query: `q?`, `limit`, `offset`.
 
 Response `200`: paginated organization summaries.
+
+The predefined Independent organization must be returned by this endpoint and
+must be searchable by its canonical name/slug and by the Vietnamese UI label
+`Khác` when the implementation supports alias search.
 
 Errors: `401`, `422`.
 
@@ -524,6 +561,11 @@ Query: `status?`, `location?`, `job_type?`, `seniority?`, `q?`, `limit`,
 `offset`.
 
 Response `200`: paginated `JobPostSummary`.
+
+Every item must include `organization_name`, `organization_logo_url`, and
+`organization_slug` from the linked organization. This is an additive response
+contract used by `Job Market`, records tables, and application/invite summary
+cards.
 
 Errors: `401`, `422`.
 
@@ -647,8 +689,8 @@ Response `201`:
     "parse_job_id": 401,
     "document_id": 301,
     "target_entity_type": "candidate_resume",
-    "created_entity_type": null,
-    "created_entity_id": null,
+    "resume_id": null,
+    "job_id": null,
     "status": "queued",
     "error_message": null
   }
@@ -710,7 +752,8 @@ Errors: `401`, `403`, `404`.
 
 Roles: owner, admin.
 
-Purpose: read a specific parse job and actionable failure details.
+Purpose: read a specific parse job, actionable failure details, and parse review
+payload when parsing succeeds.
 
 Response `200`:
 
@@ -718,14 +761,48 @@ Response `200`:
 {
   "parse_job_id": 401,
   "document_id": 301,
+  "target_entity_type": "candidate_resume",
+  "resume_id": 101,
+  "job_id": null,
   "status": "succeeded",
   "error_message": null,
-  "created_entity_type": "candidate_resume",
-  "created_entity_id": 101,
+  "parser_version": "local-v1",
+  "embedding_version_requested": "hash-v1",
+  "extracted_text": "Candidate resume text...",
+  "extracted_text_url": null,
+  "review_payload": {
+    "normalized_fields": {},
+    "hard_filter_fields": {},
+    "embedding_fields": {},
+    "warnings": []
+  },
   "created_at": "2026-05-14T10:00:00Z",
   "updated_at": "2026-05-14T10:01:00Z"
 }
 ```
+
+For `target_entity_type = candidate_resume`, `review_payload.normalized_fields`
+uses the CV schema: `title`, `summary`, `experience`, `skills`, `location`,
+`job_type`, `seniority`, `education`, and `certifications`.
+
+For `target_entity_type = job_post`, `review_payload.normalized_fields` uses
+the job schema: `title`, `requirement`, `skills`, `location`, `job_type`,
+`seniority`, `education`, and `required_certifications`. The `embedding_fields`
+targets are `title`, `skills`, and `requirement`.
+
+`review_payload` also includes:
+
+- `hard_filter_fields`: the subset requiring user confirmation.
+- `embedding_fields`: target groups and embedding version/status metadata.
+- `warnings`: parser warnings or confidence notes when available.
+
+Review save path:
+
+- CV review saves user corrections through
+  `PATCH /api/candidate/resumes/{resume_id}`.
+- JD review saves user corrections through `PATCH /api/jobs/{job_id}`.
+- Activation and publishing remain separate lifecycle actions on the detail
+  screens; saving review data must not automatically activate or publish.
 
 Errors: `401`, `403`, `404`.
 
@@ -763,6 +840,10 @@ or search private recruiter contact fields.
 
 Response `200`: paginated `JobPostSummary`.
 
+For job-list UIs, include `organization_name`, `organization_logo_url`, and
+`organization_slug` when available so company branding can be rendered directly
+in search results without N+1 organization fetches.
+
 Errors: `401`, `403`, `422`.
 
 ### `POST /api/jobs/semantic-search`
@@ -794,6 +875,10 @@ Response `200`:
     {
       "job": {
         "job_id": 201,
+        "organization_id": 10,
+        "organization_name": "Example Tech",
+        "organization_logo_url": "https://example.com/logo.png",
+        "organization_slug": "example-tech",
         "title": "Backend Engineer",
         "location": "ha_noi",
         "job_type": "remote",
@@ -870,6 +955,11 @@ Roles: recruiter, admin.
 
 Purpose: anchor a published job and rank active candidate resumes.
 
+Frontend integration: recruiter-facing matching results are rendered in
+`Talent Market`. Job detail and records screens launch this endpoint by
+redirecting to `Talent Market` with `match_job_id`; they do not render a
+separate matching result page.
+
 Request:
 
 ```json
@@ -943,6 +1033,12 @@ Roles: candidate, admin.
 
 Purpose: anchor an active resume and rank published jobs.
 
+Frontend integration: candidate-facing matching results are rendered in
+`Job Market`. Resume detail and records screens launch this endpoint by
+redirecting to `Job Market` with `match_resume_id`; they do not render a
+separate matching result page. A candidate must select one active owned resume
+before this endpoint is called.
+
 Request: same shape as job-anchor matching.
 
 Response `200`: same shape as job-anchor matching with `anchor.type = resume`
@@ -965,7 +1061,10 @@ own applications. Recruiters see applications for their jobs. Admins see all.
 
 Query: `status?`, `job_id?`, `resume_id?`, `limit`, `offset`.
 
-Response `200`: paginated application summaries.
+Response `200`: paginated `ApplicationSummary` rows. List responses must include
+linked `job_summary` and `resume_summary` display fields plus `applied_at` and
+`updated_at`. The frontend must not fetch every linked job and resume row by row
+to render application tables.
 
 Errors: `401`, `403`, `422`.
 
@@ -984,19 +1083,7 @@ Request:
 }
 ```
 
-Response `201`:
-
-```json
-{
-  "application_id": 501,
-  "job_id": 201,
-  "resume_id": 101,
-  "candidate_user_id": 1,
-  "status": "submitted",
-  "applied_at": "2026-05-14T10:00:00Z",
-  "updated_at": "2026-05-14T10:00:00Z"
-}
-```
+Response `201`: `ApplicationSummary`.
 
 Errors: `400`, `401`, `403`, `404`, `409`, `422`.
 
@@ -1011,7 +1098,8 @@ Roles: candidate, recruiter, admin.
 
 Purpose: read application detail and event history.
 
-Response `200`: application detail with events.
+Response `200`: application detail with the same linked summaries as
+`ApplicationSummary` plus `events`.
 
 Errors: `401`, `403`, `404`.
 
@@ -1039,7 +1127,15 @@ Request:
 }
 ```
 
-Response `200`: application detail with latest status.
+Response `200`: application detail with latest status, linked summaries, and
+event history after refresh.
+
+Invalid transition behavior:
+
+- role-disallowed target status returns `403 forbidden`.
+- state-disallowed target status returns `409 invalid_transition`.
+- terminal statuses `rejected`, `hired`, and `withdrawn` never transition
+  further.
 
 Errors: `400`, `401`, `403`, `404`, `409`, `422`.
 
@@ -1058,7 +1154,9 @@ invites sent to their resumes. Recruiters see invites they sent. Admins see all.
 
 Query: `status?`, `job_id?`, `resume_id?`, `limit`, `offset`.
 
-Response `200`: paginated invite summaries.
+Response `200`: paginated `InviteSummary` rows. List responses must include
+linked `job_summary` and `resume_summary` display fields plus `created_at` and
+`updated_at`.
 
 Errors: `401`, `403`, `422`.
 
@@ -1078,20 +1176,7 @@ Request:
 }
 ```
 
-Response `201`:
-
-```json
-{
-  "invite_id": 601,
-  "job_id": 201,
-  "resume_id": 101,
-  "recruiter_user_id": 2,
-  "candidate_user_id": 1,
-  "status": "pending",
-  "message": "We think this role may fit your backend experience.",
-  "created_at": "2026-05-14T10:00:00Z"
-}
-```
+Response `201`: `InviteSummary`.
 
 Errors: `400`, `401`, `403`, `404`, `409`, `422`.
 
@@ -1105,7 +1190,7 @@ Roles: candidate, recruiter, admin.
 
 Purpose: read invite detail.
 
-Response `200`: invite detail.
+Response `200`: invite detail with linked job/resume summaries.
 
 Errors: `401`, `403`, `404`.
 
@@ -1115,20 +1200,7 @@ Roles: candidate.
 
 Purpose: accept a pending recruiter invite.
 
-Response `200`:
-
-```json
-{
-  "invite": {
-    "invite_id": 601,
-    "status": "accepted"
-  },
-  "application": {
-    "application_id": 501,
-    "status": "submitted"
-  }
-}
-```
+Response `200`: `{ "invite": InviteSummary, "application": ApplicationSummary }`.
 
 Errors: `400`, `401`, `403`, `404`, `409`.
 
@@ -1158,7 +1230,7 @@ Request:
 }
 ```
 
-Response `200`: invite detail with `status = rejected`.
+Response `200`: invite detail with `status = rejected` and linked summaries.
 
 Errors: `400`, `401`, `403`, `404`, `409`.
 
@@ -1233,6 +1305,29 @@ Roles: admin.
 Purpose: read user detail with profile links and operational summary.
 
 Response `200`: admin user detail.
+
+```json
+{
+  "user": {
+    "user_id": 1,
+    "email": "candidate@example.com",
+    "role": "candidate",
+    "status": "active",
+    "created_at": "2026-05-14T10:00:00Z"
+  },
+  "candidate_profile": null,
+  "recruiter_profile": null,
+  "organization": null,
+  "ops_summary": {
+    "resumes": 0,
+    "jobs": 0,
+    "applications": 0,
+    "invites": 0,
+    "documents": 0,
+    "parse_failures": 0
+  }
+}
+```
 
 Errors: `401`, `403`, `404`.
 
@@ -1331,7 +1426,8 @@ Recruiter JD flow:
 ```text
 register/login
   -> PUT /api/recruiter/profile
-  -> POST /api/organizations
+  -> GET /api/organizations (or use predefined Independent organization)
+  -> POST /api/organizations when creating a new employer profile
   -> POST /api/documents OR POST /api/jobs
   -> GET /api/documents/{document_id}/parse-jobs/{parse_job_id}
   -> PATCH /api/jobs/{job_id}
@@ -1349,7 +1445,8 @@ GET /api/candidate/resumes/search
 POST /api/candidate/resumes/semantic-search
 GET /api/jobs/{job_id}
 GET /api/candidate/resumes/{resume_id}
-POST /api/matching/*
+POST /api/matching/resumes/{resume_id}/run -> render in Job Market
+POST /api/matching/jobs/{job_id}/run -> render in Talent Market
 ```
 
 ## OpenAPI Implementation Checklist
@@ -1358,9 +1455,17 @@ POST /api/matching/*
 - Canonical enum values are declared as reusable schema components.
 - Bearer JWT security scheme is attached to every protected route.
 - Upload limits and MIME types are documented on `POST /api/documents`.
+- Parse job detail exposes parsed review payload, extracted text reference,
+  parser metadata, embedding metadata, and target entity linkage.
+- Job list/search/semantic schemas include organization name/logo/slug for
+  direct card rendering.
 - Matching responses include rank, final score, score breakdown, exact skill
   overlap, hard-filter notes, missing embedding notes, reasoning, and runtime.
 - Application and invite mutation endpoints document allowed status
   transitions.
+- Application and invite list/detail schemas include linked job/resume display
+  summaries and timestamps for production frontend table rendering.
+- Recruiter onboarding documents the predefined Independent organization used
+  by the `Khác` option.
 - Production `/api/*` rollout includes a breaking migration note from
   `/api/v2/prototype/*`.

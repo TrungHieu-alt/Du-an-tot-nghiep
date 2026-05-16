@@ -41,6 +41,9 @@ documentation and is not an executable migration.
   public pool behavior.
 - `is_primary` is a display/default-selection hint and does not control pool
   visibility.
+- Recruiter onboarding includes one predefined Independent organization used by
+  the visible `Khác` option for freelance, agency, or independent recruiters.
+  This row is seed data, not a hidden tenant boundary.
 
 ## Application And Invite Invariants
 
@@ -51,6 +54,10 @@ documentation and is not an executable migration.
   exist.
 - Rejected invite creates no application.
 - Every application status change appends an `application_events` record.
+- Application and invite API responses denormalize linked job/resume display
+  summaries and timestamps for frontend list/detail rendering. These are read
+  models over the canonical tables, not duplicated persisted application/invite
+  columns.
 
 ## Embedding Contract
 

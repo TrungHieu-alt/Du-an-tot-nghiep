@@ -224,6 +224,54 @@ class TransitionGuardTests(unittest.TestCase):
             )
         self.assertEqual(resp.status_code, 409, resp.text)
 
+    def test_candidate_can_withdraw_shortlisted_application(self) -> None:
+        token = _token(10, "candidate")
+        script = [
+            (10, "c@example.com", "candidate", "active"),
+            (8, 5, 10, 7, "shortlisted"),
+            (8, 5, 10, 7, "withdrawn"),
+            None,  # application_events insert
+            None,  # notification insert
+            None,  # audit insert
+        ]
+        with patch.object(api_router, "get_connection", _fake_get_connection(script)):
+            resp = self.client.post(
+                "/api/applications/8/status",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"status": "withdrawn"},
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertEqual(resp.json()["status"], "withdrawn")
+
+    def test_recruiter_cannot_change_terminal_application(self) -> None:
+        token = _token(10, "recruiter")
+        script = [
+            (10, "r@example.com", "recruiter", "active"),
+            (8, 5, 99, 7, "rejected"),
+        ]
+        with patch.object(api_router, "get_connection", _fake_get_connection(script)):
+            resp = self.client.post(
+                "/api/applications/8/status",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"status": "hired"},
+            )
+        self.assertEqual(resp.status_code, 409, resp.text)
+        self.assertEqual(resp.json()["error"]["code"], "invalid_transition")
+
+    def test_recruiter_cannot_withdraw_application(self) -> None:
+        token = _token(10, "recruiter")
+        script = [
+            (10, "r@example.com", "recruiter", "active"),
+            (8, 5, 99, 7, "submitted"),
+        ]
+        with patch.object(api_router, "get_connection", _fake_get_connection(script)):
+            resp = self.client.post(
+                "/api/applications/8/status",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"status": "withdrawn"},
+            )
+        self.assertEqual(resp.status_code, 403, resp.text)
+
 
 class NotificationsReadAllTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -271,6 +319,36 @@ class DuplicateInviteTests(unittest.TestCase):
         self.assertEqual(resp.json()["error"]["code"], "duplicate_invite")
 
 
+class AdminMonitoringTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.client = TestClient(app, raise_server_exceptions=False)
+
+    def test_admin_user_detail_includes_profile_and_ops_summary(self) -> None:
+        token = _token(1, "admin")
+        script = [
+            (1, "admin@example.com", "admin", "active"),
+            None,  # audit insert
+            (10, "candidate@example.com", "candidate", "active", "2026-05-16T00:00:00+00:00"),
+            (10, "Nguyen An", None, "ha_noi", 3, "Backend engineer"),
+            (2,),  # resumes
+            (0,),  # jobs
+            (1,),  # applications
+            (3,),  # invites
+            (4,),  # documents
+            (1,),  # parse_failures
+        ]
+        with patch.object(api_router, "get_connection", _fake_get_connection(script)):
+            resp = self.client.get(
+                "/api/admin/users/10",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertEqual(body["user"]["role"], "candidate")
+        self.assertEqual(body["candidate_profile"]["full_name"], "Nguyen An")
+        self.assertEqual(body["ops_summary"]["parse_failures"], 1)
+
+
 class OpenAPIShapeTests(unittest.TestCase):
     """Schema-level checks that don't need DB."""
 
@@ -281,6 +359,7 @@ class OpenAPIShapeTests(unittest.TestCase):
         schema = self.client.get("/openapi.json").json()
         components = schema["components"]["schemas"]
         for name in (
+            "AdminUserDetail",
             "ResumeUpdateRequest",
             "JobUpdateRequest",
             "ApplicationEvent",
@@ -312,6 +391,20 @@ class OpenAPIShapeTests(unittest.TestCase):
         schema = self.client.get("/openapi.json").json()
         params = {p["name"] for p in schema["paths"]["/api/organizations"]["get"]["parameters"]}
         self.assertIn("q", params)
+
+    def test_admin_endpoints_expose_monitoring_filters(self) -> None:
+        schema = self.client.get("/openapi.json").json()
+        expected = {
+            "/api/admin/documents": {"document_type", "parse_status", "owner_user_id", "limit", "offset"},
+            "/api/admin/parse-jobs": {"status", "document_type", "limit", "offset"},
+            "/api/admin/applications": {"status", "job_id", "resume_id", "limit", "offset"},
+            "/api/admin/invites": {"status", "job_id", "resume_id", "limit", "offset"},
+            "/api/admin/notifications": {"status", "user_id", "limit", "offset"},
+            "/api/admin/audit-logs": {"actor_user_id", "target_type", "target_id", "event_type", "limit", "offset"},
+        }
+        for path, names in expected.items():
+            params = {p["name"] for p in schema["paths"][path]["get"]["parameters"]}
+            self.assertTrue(names.issubset(params), f"{path} missing {names - params}")
 
 
 if __name__ == "__main__":
