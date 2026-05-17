@@ -1,0 +1,83 @@
+\chapter*{Mở đầu}
+\addcontentsline{toc}{chapter}{Mở đầu}
+
+\section*{Lý do chọn đề tài}
+\addcontentsline{toc}{section}{Lý do chọn đề tài}
+
+Trong nhiều doanh nghiệp, tuyển dụng không chỉ là hoạt động đăng tin và nhận hồ sơ, mà là một chuỗi xử lý dữ liệu có nhiều trạng thái: ứng viên tạo hồ sơ, nhà tuyển dụng công bố nhu cầu, hệ thống phân tích CV/JD, hai phía tìm kiếm lẫn nhau, kết quả phù hợp được giải thích, sau đó mới phát sinh ứng tuyển hoặc lời mời. Nếu chuỗi này chỉ được xử lý bằng bảng tính, email thủ công hoặc các form nhập liệu đơn giản, chất lượng matching phụ thuộc rất lớn vào kinh nghiệm cá nhân của người vận hành. Điều này tạo ra ba vấn đề chính: dữ liệu không đồng nhất, khó kiểm soát trạng thái nghiệp vụ và khó giải thích vì sao một ứng viên phù hợp hoặc không phù hợp với một vị trí.
+
+Dự án JobConnect MVP được xây dựng để giải quyết nhóm vấn đề trên ở mức sản phẩm khả dụng tối thiểu. Theo đặc tả sản phẩm \cite{requirements}, hệ thống không còn là một prototype chạy riêng chức năng matching, mà là một recruiting marketplace có luồng ATS-lite. Ứng viên có thể upload một hoặc nhiều CV, review dữ liệu đã parse và kích hoạt resume vào public pool. Nhà tuyển dụng có thể tạo tổ chức, tạo hoặc upload job description, publish job vào public pool, chạy matching từ job sang active resumes, gửi lời mời và quản lý ứng tuyển. Admin theo dõi người dùng, nội dung, parse jobs, matching activity, notifications và audit events.
+
+Điểm đáng chú ý của bài toán là dữ liệu đầu vào thường là văn bản phi cấu trúc. CV và JD có thể viết bằng tiếng Việt, tiếng Anh hoặc trộn cả hai. Một kỹ năng như ``ReactJS'', ``React.js'' và ``React'' cần được chuẩn hóa về cùng một nhãn; một bằng cấp như ``Master of Science in CS'' cần ánh xạ về enum \texttt{thac\_si}; một vị trí ``Senior Developer'' cần ánh xạ về \texttt{senior}. Nếu chỉ lưu văn bản thô và tìm kiếm bằng từ khóa, hệ thống khó tận dụng thông tin ngữ nghĩa. Nếu chỉ dùng LLM không có schema và rule, hệ thống dễ sinh nhãn không hợp lệ, khó kiểm soát và khó debug. Vì vậy JobConnect chọn hướng kết hợp: lưu dữ liệu nghiệp vụ có cấu trúc trong PostgreSQL, lưu embedding semantic bằng pgvector, dùng rule hard filter rõ ràng, dùng scoring deterministic và chỉ cho phép LLM reasoning khi reasoning bám vào score breakdown \cite{hld-matching}.
+
+\section*{Mục tiêu của khóa luận}
+\addcontentsline{toc}{section}{Mục tiêu của khóa luận}
+
+Khóa luận này đặt mục tiêu mô tả và đánh giá quá trình xây dựng JobConnect MVP ở mức có thể chuyển thành sản phẩm thực tế. Báo cáo không chỉ nói rằng dự án ``dùng Python'', mà chỉ rõ backend đang dùng FastAPI \texttt{0.115.6}, Pydantic \texttt{2.11.7}, psycopg \texttt{3.2.3}, PostgreSQL, pgvector, JWT, Python multipart upload, pypdf cho trích xuất PDF và sentence-transformers cho local rerank. Báo cáo cũng chỉ rõ các module runtime nằm dưới \texttt{backend/src/jobconnect}, gồm \texttt{auth}, \texttt{users}, \texttt{organizations}, \texttt{jobs}, \texttt{resumes}, \texttt{documents}, \texttt{matching}, \texttt{applications}, \texttt{invites}, \texttt{notifications}, \texttt{admin} và \texttt{system}.
+
+Các mục tiêu cụ thể gồm:
+
+\begin{itemize}
+  \item Phân tích yêu cầu sản phẩm của một shared-pool recruiting marketplace với ba vai trò \texttt{candidate}, \texttt{recruiter} và \texttt{admin}.
+  \item Mô hình hóa dữ liệu CV/JD, trạng thái resume/job, parse job, application, invite, notification và audit log theo schema PostgreSQL cụ thể.
+  \item Thiết kế pipeline xử lý tài liệu từ upload file đến dữ liệu chuẩn hóa và embedding.
+  \item Trình bày thuật toán matching hai chiều với hard filters, công thức scoring, tie-break deterministic, optional rerank và reasoning có căn cứ.
+  \item Đối chiếu hiện trạng triển khai với target API contract để chỉ ra phần đã aligned, phần partial và các rủi ro còn lại.
+\end{itemize}
+
+\section*{Đối tượng và phạm vi nghiên cứu}
+\addcontentsline{toc}{section}{Đối tượng và phạm vi nghiên cứu}
+
+Đối tượng nghiên cứu của khóa luận là hệ thống backend JobConnect MVP và các tài liệu thiết kế đi kèm trong repository. Phạm vi tập trung vào backend production API, data model, parse/matching pipeline và workflow nghiệp vụ. Frontend runtime chưa phải phần code hoạt động trong repository; các tài liệu frontend hiện tại chỉ được xem là planning notes, không phải source of truth cho triển khai hiện tại \cite{readme}. Do đó, báo cáo có nhắc đến các màn hình như Job Market, Talent Market hoặc parse review page ở mức luồng sử dụng và yêu cầu dữ liệu, nhưng không trình bày như một frontend production đã hoàn thiện.
+
+Theo yêu cầu sản phẩm \cite{requirements}, MVP có các phần nằm ngoài phạm vi: tenant/company isolation, billing, quota, scheduling phỏng vấn đầy đủ, offer approval, onboarding, CRM campaign, destructive admin moderation, salary/language/visa/notice period như hard filter, knowledge graph cho job titles/skills, BM25 hybrid retrieval và quyết định reject/advance hoàn toàn tự động bằng AI. Việc loại bỏ các scope này giúp hệ thống tập trung vào lõi: public pool, structured profiles, two-way matching, application lifecycle, notification và auditability.
+
+\section*{Phương pháp thực hiện}
+\addcontentsline{toc}{section}{Phương pháp thực hiện}
+
+Phương pháp thực hiện gồm bốn bước. Bước thứ nhất là đọc và chuẩn hóa yêu cầu từ \texttt{docs/REQUIREMENTS.md}. Đây là tài liệu xác định sản phẩm cần xây gì, vì sao, dữ liệu nào là canonical, trạng thái nào hợp lệ, matching formula ra sao và các acceptance criteria chính. Bước thứ hai là phân tích các tài liệu HLD/LLD để hiểu kiến trúc backend, ingestion, data storage, matching, runtime flow, security và API contract. Bước thứ ba là đối chiếu với code layout và ma trận hiện trạng triển khai để xác định những phần đã có trong runtime, ví dụ API namespaces dưới \texttt{/api/*}, migration \texttt{001\_production\_mvp.sql}, provider boundaries cho LLM/embedding/storage/rerank và các test hiện có. Bước cuối cùng là tổng hợp thành một báo cáo LaTeX có bố cục khóa luận, có bảng, công thức, phụ lục và traceability từ nội dung báo cáo về nguồn tài liệu.
+
+\begin{table}[H]
+\caption{Nguồn tài liệu chính dùng trong báo cáo}
+\centering
+\begin{tabularx}{\textwidth}{p{0.32\textwidth}X}
+\toprule
+\textbf{Nguồn} & \textbf{Vai trò trong báo cáo}\\
+\midrule
+\texttt{docs/REQUIREMENTS.md} & Định nghĩa product goal, scope, enum, user flows, data model, matching formula và API namespaces.\\
+\texttt{docs/backend/HLD/*} & Mô tả kiến trúc, ingestion, data storage, matching/search, runtime flow, security, notification và audit.\\
+\texttt{docs/backend/LLD/*} & Chi tiết schema PostgreSQL/pgvector, API contract và implementation matrix hiện tại.\\
+\texttt{README.md} & Xác nhận baseline runtime, layout backend, cách setup Docker cho backend và tình trạng frontend.\\
+\texttt{backend/requirements.txt} & Xác nhận dependency cụ thể như FastAPI, Pydantic, psycopg, pypdf và sentence-transformers.\\
+\texttt{report/knowledge/01-04} & Quy định bố cục, giọng viết, mapping nội dung cũ và rule sử dụng knowledge pack.\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section*{Đóng góp của khóa luận}
+\addcontentsline{toc}{section}{Đóng góp của khóa luận}
+
+Khóa luận có ba đóng góp chính. Thứ nhất, báo cáo hệ thống hóa bài toán tuyển dụng thành một mô hình dữ liệu và workflow rõ ràng thay vì chỉ mô tả matching ở mức thuật toán. Điều này thể hiện qua việc phân tách resume/job/document/parse job/application/invite/notification/audit log thành các thực thể riêng, mỗi thực thể có trạng thái và invariant cụ thể.
+
+Thứ hai, khóa luận mô tả một pipeline matching có thể giải thích. Các cặp JD-CV trước hết phải qua hard filters về \texttt{job\_type}, \texttt{location}, \texttt{seniority}, \texttt{education} và \texttt{certifications}. Sau đó score được tính bằng công thức explicit:
+
+\begin{equation}
+\begin{split}
+final\_score = &\ 0.35 \times title\_sim + 0.35 \times skills\_sim \\
+& + 0.20 \times req\_exp\_sim + 0.10 \times req\_summary\_sim \\
+& + bonus\_exact\_skill - penalty\_missing\_required
+\end{split}
+\end{equation}
+
+Trong đó:
+
+\begin{equation}
+skills\_sim = 0.6 \times semantic\_skills + 0.4 \times exact\_overlap\_ratio
+\end{equation}
+
+Thứ ba, khóa luận chỉ ra ranh giới giữa target architecture và hiện trạng implementation. Ví dụ, upload documents đã có adapter storage local và parse jobs, nhưng parse job detail vẫn còn thin so với target review payload; notification rows đã có trạng thái email queued, nhưng email provider thực sự là future work; frontend runtime chưa active, nên báo cáo không tuyên bố đã có production frontend.
+
+\section*{Bố cục báo cáo}
+\addcontentsline{toc}{section}{Bố cục báo cáo}
+
+Báo cáo được tổ chức theo bốn chương nội dung. Chương 1 giới thiệu bối cảnh, bài toán, mục tiêu và các khái niệm nền tảng. Chương 2 trình bày các kỹ thuật và mô hình nền tảng được sử dụng, gồm FastAPI, PostgreSQL, pgvector, ingestion pipeline, LLM parser, embedding provider và matching pipeline. Chương 3 phân tích và thiết kế hệ thống JobConnect MVP, từ kiến trúc module, data model đến API/runtime flows. Chương 4 trình bày cài đặt, môi trường, kiểm thử, ma trận hiện trạng triển khai và đánh giá. Phần Kết luận tổng hợp kết quả, hạn chế và hướng phát triển.

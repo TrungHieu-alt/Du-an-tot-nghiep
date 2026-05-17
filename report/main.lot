@@ -1,0 +1,26 @@
+\contentsline {table}{\numberline {2}{\ignorespaces Nguồn tài liệu chính dùng trong báo cáo}}{4}{table.caption.10}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {1.1}{\ignorespaces Vai trò người dùng và năng lực chính}}{7}{table.caption.11}%
+\contentsline {table}{\numberline {1.2}{\ignorespaces MVP scope và non-goals}}{9}{table.1.2}%
+\contentsline {table}{\numberline {1.3}{\ignorespaces Enum canonical trong JobConnect MVP}}{11}{table.1.3}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {2.1}{\ignorespaces Nhóm bảng chính trong schema JobConnect}}{16}{table.caption.13}%
+\contentsline {table}{\numberline {2.2}{\ignorespaces Cấu hình embedding provider}}{18}{table.caption.15}%
+\contentsline {table}{\numberline {2.3}{\ignorespaces Hard filters trong matching}}{19}{table.2.3}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {3.1}{\ignorespaces Mapping thư mục backend sang trách nhiệm kiến trúc}}{22}{table.3.1}%
+\contentsline {table}{\numberline {3.2}{\ignorespaces Feature modules và API namespace liên quan}}{24}{table.caption.16}%
+\contentsline {table}{\numberline {3.3}{\ignorespaces Production API namespaces}}{26}{table.3.3}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {4.1}{\ignorespaces Dependency backend cụ thể trong dự án}}{31}{table.4.1}%
+\contentsline {table}{\numberline {4.2}{\ignorespaces Một số invariant database quan trọng}}{34}{table.caption.19}%
+\contentsline {table}{\numberline {4.3}{\ignorespaces Các bước matching trong runtime}}{35}{table.caption.20}%
+\contentsline {table}{\numberline {4.4}{\ignorespaces Các nhóm test hiện có trong backend}}{37}{table.4.4}%
+\contentsline {table}{\numberline {4.5}{\ignorespaces Tóm tắt đối chiếu hiện trạng triển khai}}{38}{table.4.5}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {A.1}{\ignorespaces API endpoint summary theo nhóm chức năng}}{49}{table.A.1}%
+\contentsline {table}{\numberline {A.2}{\ignorespaces Tóm tắt entity và field chính}}{53}{table.A.2}%
+\contentsline {table}{\numberline {A.3}{\ignorespaces Score component trong matching}}{55}{table.A.3}%
+\contentsline {table}{\numberline {A.4}{\ignorespaces Reasoning content tối thiểu}}{56}{table.A.4}%
+\contentsline {table}{\numberline {A.5}{\ignorespaces Traceability từ nội dung báo cáo về source docs}}{57}{table.A.5}%
+\contentsline {table}{\numberline {A.6}{\ignorespaces Checklist kiểm tra nội dung báo cáo}}{58}{table.A.6}%

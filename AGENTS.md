@@ -180,6 +180,22 @@ Required behavior:
 - For any task that requires runtime execution (for example: running tests, starting app services, smoke checks, or commands that depend on live backend/frontend processes), use Docker Compose runtime instead of host-local runtimes.
 - Default execution path is `docker compose` with repository-defined services.
 - Host-local runtime commands are allowed only when Docker-based execution is unavailable or explicitly requested by the user, and this exception must be documented in the handoff note.
+- LaTeX report workflows are an explicit local-runtime exception: for tasks under `report/` (for example `latexmk`, `xelatex`, `pdflatex`, `biber`, `bibtex`, `makeindex`), run on host-local environment and do not use Docker/container execution unless the user explicitly requests containerized LaTeX.
+
+## LaTeX Knowledge Pack Rule (Canonical)
+Applies to report-authoring tasks that use files under `report/`.
+
+Required behavior:
+1. Treat `report/knowledge/01-structure-blueprint.md` as the structure source-of-truth.
+2. Treat `report/knowledge/02-writing-style-guide.md` as the writing/citation source-of-truth.
+3. Use `report/knowledge/03-legacy-content-map.md` only as idea/mapping input; do not copy long verbatim passages from legacy report content.
+4. Do not reopen large DOCX sources by default once Knowledge Pack exists. Reopen DOCX only when:
+   - a required section/rule is missing in Knowledge Pack, or
+   - visual/layout fidelity must be verified, or
+   - exact quotation verification is explicitly required.
+5. If source DOCX files in `report/` change, regenerate Knowledge Pack before further writing using:
+   - `python3 report/tools/extract_docx_knowledge.py --layout report/Bo-cuc-khoa-luan.docx --legacy "report/Dự án khoa học.docx" --out report/knowledge`
+6. For report writing handoffs, include a short note confirming which Knowledge Pack files were used and whether DOCX reopen was required.
 
 ## AI Guardrails Doc Change Gate
 Applies when editing `AGENTS.md` or any file under `docs/agent-rules/`.

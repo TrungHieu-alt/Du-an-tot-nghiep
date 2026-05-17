@@ -1,0 +1,200 @@
+\chapter{Phụ lục API, schema và traceability}
+
+\section{Tóm tắt API contract}
+
+Phụ lục này gom các bảng kỹ thuật để khi đọc báo cáo có thể tra nhanh endpoint, entity, enum và nguồn tài liệu. Nội dung được tổng hợp từ \texttt{docs/backend/LLD/40-api-contract.md}, \texttt{docs/backend/LLD/30-database-schema.md}, \texttt{docs/backend/LLD/50-current-api-implementation-matrix.md} và các HLD liên quan.
+
+\begin{longtable}{p{0.17\textwidth}p{0.25\textwidth}p{0.20\textwidth}p{0.28\textwidth}}
+\caption{API endpoint summary theo nhóm chức năng}\\
+\toprule
+\textbf{Nhóm} & \textbf{Endpoint} & \textbf{Vai trò} & \textbf{Ghi chú}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Nhóm} & \textbf{Endpoint} & \textbf{Vai trò} & \textbf{Ghi chú}\\
+\midrule
+\endhead
+Auth & \texttt{POST /api/auth/register} & Public & Tạo user, hash password, issue JWT.\\
+Auth & \texttt{POST /api/auth/login} & Public & Verify password, block disabled user, issue JWT.\\
+Auth & \texttt{POST /api/auth/logout} & Authenticated & Stateless logout, client discard token.\\
+User & \texttt{GET /api/me} & Authenticated & User summary + role-specific bootstrap.\\
+Candidate profile & \texttt{GET /api/candidate/profile} & Candidate & Đọc profile hiện tại.\\
+Candidate profile & \texttt{PUT /api/candidate/profile} & Candidate & Upsert candidate profile.\\
+Recruiter profile & \texttt{GET /api/recruiter/profile} & Recruiter & Đọc recruiter profile.\\
+Recruiter profile & \texttt{PUT /api/recruiter/profile} & Recruiter & Upsert profile sau organization check.\\
+Organizations & \texttt{GET /api/organizations} & Authenticated & List/search organization với \texttt{q}, limit, offset.\\
+Organizations & \texttt{POST /api/organizations} & Recruiter/Admin runtime & Tạo organization, audit event.\\
+Organizations & \texttt{GET /api/organizations/\{id\}} & Authenticated & Detail organization.\\
+Organizations & \texttt{PATCH /api/organizations/\{id\}} & Recruiter/Admin & Update organization với membership check.\\
+Resumes & \texttt{GET /api/candidate/resumes} & Candidate/Admin & List resumes theo owner hoặc all admin.\\
+Resumes & \texttt{POST /api/candidate/resumes} & Candidate & Create draft resume, upsert embeddings.\\
+Resumes & \texttt{GET /api/candidate/resumes/search} & Recruiter/Admin & Search active resumes theo q/filters.\\
+Resumes & \texttt{POST /api/candidate/resumes/semantic-search} & Recruiter/Admin & Semantic search resume relevance.\\
+Resumes & \texttt{GET /api/candidate/resumes/\{id\}} & Candidate/Recruiter/Admin & Owner/all/active visibility.\\
+Resumes & \texttt{PATCH /api/candidate/resumes/\{id\}} & Candidate & Partial update và refresh embeddings.\\
+Resumes & \texttt{POST /api/candidate/resumes/\{id\}/activate} & Candidate & Draft/archived -> active; audit event.\\
+Resumes & \texttt{POST /api/candidate/resumes/\{id\}/archive} & Candidate & Draft/active -> archived; audit event.\\
+Jobs & \texttt{GET /api/jobs} & Authenticated active & List jobs với filters.\\
+Jobs & \texttt{POST /api/jobs} & Recruiter/Admin runtime & Create draft job, upsert embeddings.\\
+Jobs & \texttt{GET /api/jobs/search} & Authenticated active & Search title/skills/organization name.\\
+Jobs & \texttt{POST /api/jobs/semantic-search} & Authenticated active & Semantic job search theo requirement embeddings.\\
+Jobs & \texttt{GET /api/jobs/\{id\}} & Authenticated active & Candidate sees published, recruiter owns, admin all.\\
+Jobs & \texttt{PATCH /api/jobs/\{id\}} & Recruiter/Admin & Partial update và refresh embeddings.\\
+Jobs & \texttt{POST /api/jobs/\{id\}/publish} & Recruiter/Admin & Draft -> published, set \texttt{published\_at}.\\
+Jobs & \texttt{POST /api/jobs/\{id\}/close} & Recruiter/Admin & Draft/published -> closed.\\
+Documents & \texttt{POST /api/documents} & Authenticated active & Multipart upload, storage write, parse job queued.\\
+Documents & \texttt{GET /api/documents} & Authenticated active & List visible documents.\\
+Documents & \texttt{GET /api/documents/\{id\}} & Owner/Admin & Document detail + parse jobs.\\
+Documents & \texttt{GET /api/documents/\{id\}/download-url} & Owner/Admin & Storage adapter URL.\\
+Documents & \texttt{GET /api/documents/\{id\}/parse-jobs/\{pid\}} & Owner/Admin & Parse job detail.\\
+Documents & \texttt{POST /api/documents/\{id\}/parse-jobs} & Owner/Admin & Retry parse job, audit event.\\
+Matching & \texttt{POST /api/matching/jobs/\{id\}/run} & Recruiter/Admin & Published job anchor -> active resumes.\\
+Matching & \texttt{POST /api/matching/resumes/\{id\}/run} & Candidate/Admin & Active resume anchor -> published jobs.\\
+Applications & \texttt{GET /api/applications} & Candidate/Recruiter/Admin & Role-scoped application listing.\\
+Applications & \texttt{POST /api/applications} & Candidate & Candidate apply, event, notification, audit.\\
+Applications & \texttt{GET /api/applications/\{id\}} & Candidate/Recruiter/Admin & Detail + event history.\\
+Applications & \texttt{POST /api/applications/\{id\}/status} & Authenticated active & Role-specific transition graph.\\
+Invites & \texttt{GET /api/invites} & Candidate/Recruiter/Admin & Role-scoped invite listing.\\
+Invites & \texttt{POST /api/invites} & Recruiter & Create pending invite, duplicate guard.\\
+Invites & \texttt{GET /api/invites/\{id\}} & Candidate/Recruiter/Admin & Detail invite.\\
+Invites & \texttt{POST /api/invites/\{id\}/accept} & Candidate & Accept and create/return application.\\
+Invites & \texttt{POST /api/invites/\{id\}/reject} & Candidate & Reject, no application.\\
+Notifications & \texttt{GET /api/notifications} & Authenticated active & List notifications.\\
+Notifications & \texttt{POST /api/notifications/\{id\}/read} & Owner & Mark one notification read.\\
+Notifications & \texttt{POST /api/notifications/read-all} & Authenticated active & Mark unread notifications read, return count.\\
+Admin & \texttt{GET /api/admin/users} & Admin & User monitoring.\\
+Admin & \texttt{GET /api/admin/users/\{id\}} & Admin & User detail + profile context + ops summary.\\
+Admin & \texttt{GET /api/admin/documents} & Admin & Document monitoring filters.\\
+Admin & \texttt{GET /api/admin/parse-jobs} & Admin & Parse job monitoring filters.\\
+Admin & \texttt{GET /api/admin/applications} & Admin & Application monitoring filters.\\
+Admin & \texttt{GET /api/admin/invites} & Admin & Invite monitoring filters.\\
+Admin & \texttt{GET /api/admin/notifications} & Admin & Notification monitoring filters.\\
+Admin & \texttt{GET /api/admin/audit-logs} & Admin & Audit log filters.\\
+\bottomrule
+\end{longtable}
+
+\section{Entity summary}
+
+\begin{longtable}{p{0.24\textwidth}p{0.28\textwidth}p{0.38\textwidth}}
+\caption{Tóm tắt entity và field chính}\\
+\toprule
+\textbf{Entity} & \textbf{Field chính} & \textbf{Invariant}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Entity} & \textbf{Field chính} & \textbf{Invariant}\\
+\midrule
+\endhead
+\texttt{users} & \texttt{user\_id}, \texttt{email}, \texttt{password\_hash}, \texttt{role}, \texttt{status} & Email unique; password chỉ lưu hash; disabled user bị chặn active actions.\\
+\texttt{candidate\_profiles} & \texttt{user\_id}, \texttt{full\_name}, \texttt{current\_location}, \texttt{headline} & Một row cho candidate; total experience chỉ là display metadata.\\
+\texttt{recruiter\_profiles} & \texttt{user\_id}, \texttt{organization\_id}, \texttt{full\_name}, \texttt{title} & Một row cho recruiter; organization kiểm soát recruiting context.\\
+\texttt{organizations} & \texttt{organization\_id}, \texttt{name}, \texttt{slug}, \texttt{logo\_url} & Có predefined Independent organization cho lựa chọn ``Khác''.\\
+\texttt{candidate\_resumes} & \texttt{resume\_id}, \texttt{candidate\_user\_id}, \texttt{title}, \texttt{skills}, \texttt{status} & Chỉ \texttt{active} vào public pool; \texttt{is\_primary} không điều khiển visibility.\\
+\texttt{job\_posts} & \texttt{job\_id}, \texttt{organization\_id}, \texttt{recruiter\_user\_id}, \texttt{title}, \texttt{status} & Chỉ \texttt{published} vào public pool; \texttt{published\_at} set khi publish.\\
+\texttt{uploaded\_documents} & \texttt{document\_id}, \texttt{owner\_user\_id}, \texttt{document\_type}, \texttt{object\_key}, \texttt{mime\_type} & File gốc nằm trong object storage; DB lưu metadata/reference.\\
+\texttt{parse\_jobs} & \texttt{parse\_job\_id}, \texttt{document\_id}, \texttt{status}, \texttt{parser\_version}, \texttt{error\_code} & Failed parse không xóa file; succeeded phải link đúng target entity.\\
+\texttt{candidate\_resume\_embeddings} & \texttt{resume\_id}, \texttt{emb\_title}, \texttt{emb\_skills}, \texttt{emb\_summary}, \texttt{emb\_experience} & Vector 384 chiều; missing vector score component 0.\\
+\texttt{job\_post\_embeddings} & \texttt{job\_id}, \texttt{emb\_title}, \texttt{emb\_skills}, \texttt{emb\_requirement} & Có \texttt{embedding\_version} để backfill.\\
+\texttt{applications} & \texttt{application\_id}, \texttt{job\_id}, \texttt{resume\_id}, \texttt{status} & Unique \texttt{(job\_id, resume\_id)}; matching không tạo application.\\
+\texttt{application\_events} & \texttt{application\_id}, \texttt{from\_status}, \texttt{to\_status}, \texttt{actor\_user\_id} & Append-only status history.\\
+\texttt{recruiter\_invites} & \texttt{invite\_id}, \texttt{job\_id}, \texttt{resume\_id}, \texttt{status} & Pending invite không tạo application; accepted invite tạo/reuse application.\\
+\texttt{notifications} & \texttt{notification\_id}, \texttt{recipient\_user\_id}, \texttt{type}, \texttt{status} & Email failure không rollback business transaction.\\
+\texttt{audit\_logs} & \texttt{actor\_user\_id}, \texttt{event\_type}, \texttt{target\_type}, \texttt{metadata} & Business event trail cho lifecycle actions.\\
+\bottomrule
+\end{longtable}
+
+\section{Matching formula và hard filter details}
+
+\begin{longtable}{p{0.25\textwidth}p{0.25\textwidth}p{0.40\textwidth}}
+\caption{Score component trong matching}\\
+\toprule
+\textbf{Component} & \textbf{Weight} & \textbf{Ý nghĩa}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Component} & \textbf{Weight} & \textbf{Ý nghĩa}\\
+\midrule
+\endhead
+\texttt{title\_sim} & 0.35 & Mức tương đồng giữa title/resume title hoặc định danh nghề nghiệp.\\
+\texttt{skills\_sim} & 0.35 & Kết hợp semantic skills và exact overlap ratio.\\
+\texttt{req\_exp\_sim} & 0.20 & Tương đồng giữa yêu cầu JD và kinh nghiệm CV.\\
+\texttt{req\_summary\_sim} & 0.10 & Tương đồng giữa requirement và summary.\\
+\texttt{bonus\_exact\_skill} & 0 hiện tại & Dự phòng cho measured rule sau này.\\
+\texttt{penalty\_missing\_required} & 0 hiện tại & Dự phòng; hard filters đã loại pair thiếu điều kiện.\\
+\bottomrule
+\end{longtable}
+
+\begin{longtable}{p{0.25\textwidth}p{0.65\textwidth}}
+\caption{Reasoning content tối thiểu}\\
+\toprule
+\textbf{Nội dung} & \textbf{Mục đích}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Nội dung} & \textbf{Mục đích}\\
+\midrule
+\endhead
+Strongest components & Cho người dùng biết score cao nhờ title, skills, experience hay summary.\\
+Exact skill overlap & Giải thích kỹ năng trùng khớp cụ thể giữa CV và JD.\\
+Hard-filter pass notes & Xác nhận seniority, location, education, certifications có pass không.\\
+Missing embedding notes & Nếu vector field thiếu và component bị 0, reasoning phải nêu rõ.\\
+Warnings metadata & Nêu rerank fallback hoặc provider unavailable nếu có.\\
+\bottomrule
+\end{longtable}
+
+\section{Source traceability}
+
+\begin{longtable}{p{0.28\textwidth}p{0.30\textwidth}p{0.32\textwidth}}
+\caption{Traceability từ nội dung báo cáo về source docs}\\
+\toprule
+\textbf{Nội dung báo cáo} & \textbf{Nguồn chính} & \textbf{Ghi chú sử dụng}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Nội dung báo cáo} & \textbf{Nguồn chính} & \textbf{Ghi chú sử dụng}\\
+\midrule
+\endhead
+Product goal và user roles & \texttt{docs/REQUIREMENTS.md} & Candidate, recruiter, admin; shared-pool marketplace.\\
+MVP scope/non-goals & \texttt{docs/REQUIREMENTS.md} & Tránh claim tenant isolation, billing, scheduling, benchmark quality.\\
+Canonical enums & \texttt{docs/REQUIREMENTS.md}, API LLD & Dùng cho API/persistence validation.\\
+Ingestion pipeline & HLD ingestion & Upload -> storage -> parse -> review -> embedding.\\
+LLM parser boundary & HLD ingestion & \texttt{integrations/llm/base.py}, local/openai adapters.\\
+Embedding provider & HLD matching & Local hash/OpenAI \texttt{text-embedding-3-small}, 384 dimensions.\\
+Data model & HLD data, DB LLD & Entity tables, constraints, indexes, invariants.\\
+Matching hard filters & Requirements, HLD matching & Job type, location, seniority, education, certifications.\\
+Scoring formula & Requirements, HLD matching & \texttt{final\_score} và \texttt{skills\_sim}.\\
+Runtime flows & HLD API/runtime & Candidate flow, recruiter flow, matching flow, application flow.\\
+Security/privacy & HLD security & JWT, disabled user, role/ownership, contact data privacy.\\
+Notifications/audit & Requirements, HLD security & Notification types, email failure, audit events.\\
+API namespaces & Requirements, API LLD & Production \texttt{/api/*}, no prototype aliases.\\
+Implementation status & Current API Implementation Matrix & Aligned/partial/gap analysis.\\
+Backend layout & README, codemap, file tree & App/core/common/integrations/modules.\\
+Dependencies & \texttt{backend/requirements.txt} & Versioned runtime packages.\\
+Report structure & \texttt{report/knowledge/01-04} & Bố cục khóa luận, giọng viết, no DOCX reopen by default.\\
+\bottomrule
+\end{longtable}
+
+\section{Checklist dùng lại khi tiếp tục phát triển báo cáo}
+
+\begin{longtable}{p{0.08\textwidth}p{0.82\textwidth}}
+\caption{Checklist kiểm tra nội dung báo cáo}\\
+\toprule
+\textbf{STT} & \textbf{Tiêu chí}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{STT} & \textbf{Tiêu chí}\\
+\midrule
+\endhead
+1 & Mở đầu và Kết luận không đánh số chương.\\
+2 & Bốn chương nội dung tương ứng đúng vai trò: bối cảnh, kỹ thuật, thiết kế, thực nghiệm.\\
+3 & Mọi mô tả công nghệ phải gắn với file/version/module cụ thể khi có trong repo.\\
+4 & Không dùng mô tả công nghệ dạng chung chung; mọi công nghệ phải gắn với version, module hoặc file nguồn khi có dữ liệu.\\
+5 & Matching phải có hard filters, công thức score, tie-break và reasoning.\\
+6 & Data model phải nêu rõ public pool visibility: active resumes, published jobs.\\
+7 & API phải dùng namespace production \texttt{/api/*}, không dùng prototype route.\\
+8 & Các claim về implementation status phải bám implementation matrix.\\
+9 & Những gì chưa biết hoặc chưa có trong docs phải để placeholder hoặc nêu là future work.\\
+10 & Nếu DOCX nguồn thay đổi, regenerate Knowledge Pack trước khi viết tiếp.\\
+\bottomrule
+\end{longtable}
