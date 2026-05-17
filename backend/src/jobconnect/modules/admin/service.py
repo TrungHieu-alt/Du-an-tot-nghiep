@@ -323,3 +323,44 @@ def admin_audit_logs(
             for r in cur.fetchall()
         ]
     return Paginated(items=items, total=total, limit=limit, offset=offset)
+
+
+def update_user_status(
+    target_user_id: int,
+    new_status: UserStatus,
+    admin_user: CurrentUser,
+) -> Any:
+    """Admin sets a user's status (active/invited/disabled). Writes audit row.
+
+    Prevents an admin from disabling themselves to avoid lockout.
+    """
+    if target_user_id == admin_user.user_id and new_status == "disabled":
+        raise business_error(
+            400, "self_disable_forbidden", "Admins cannot disable their own account."
+        )
+    with _api().get_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT user_id, status FROM users WHERE user_id = %s",
+            (target_user_id,),
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise business_error(404, "not_found", "User not found.")
+        previous_status = row[1]
+        cur.execute(
+            "UPDATE users SET status = %s WHERE user_id = %s RETURNING user_id, email, role, status, created_at",
+            (new_status, target_user_id),
+        )
+        updated = cur.fetchone()
+        audit(
+            cur,
+            admin_user.user_id,
+            "admin_user_status_changed",
+            "user",
+            target_user_id,
+            metadata={
+                "from_status": previous_status,
+                "to_status": new_status,
+            },
+        )
+    return user_summary(updated)

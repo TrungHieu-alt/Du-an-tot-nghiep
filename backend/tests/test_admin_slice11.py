@@ -516,5 +516,83 @@ class TestAdminAuditLogs(unittest.TestCase):
         self.assertEqual(resp.status_code, 200, resp.text)
 
 
+# ---------------------------------------------------------------------------
+# 10. PATCH /api/admin/users/{user_id} — admin can enable/disable users
+# ---------------------------------------------------------------------------
+
+
+class TestAdminUpdateUser(unittest.TestCase):
+    def setUp(self) -> None:
+        self.client = TestClient(app, raise_server_exceptions=False)
+
+    def test_admin_can_disable_another_user(self) -> None:
+        token = _token(99, "admin")
+        factory = _fake_conn([
+            _user_row(99, "admin"),                                          # current_user
+            (10, "active"),                                                  # SELECT user_id, status
+            (10, "u10@example.com", "candidate", "disabled", _NOW),          # UPDATE RETURNING
+            None,                                                            # INSERT audit_logs
+        ])
+        with patch.object(api_router, "get_connection", factory):
+            resp = self.client.patch(
+                "/api/admin/users/10",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"status": "disabled"},
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertEqual(resp.json()["status"], "disabled")
+        all_sql = " | ".join(sql for c in factory.cursors for sql, _ in c.executed).lower()
+        self.assertIn("audit_logs", all_sql)
+
+    def test_admin_cannot_disable_self(self) -> None:
+        token = _token(99, "admin")
+        factory = _fake_conn([_user_row(99, "admin")])
+        with patch.object(api_router, "get_connection", factory):
+            resp = self.client.patch(
+                "/api/admin/users/99",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"status": "disabled"},
+            )
+        self.assertEqual(resp.status_code, 400, resp.text)
+        self.assertEqual(resp.json()["error"]["code"], "self_disable_forbidden")
+
+    def test_admin_update_missing_user_returns_404(self) -> None:
+        token = _token(99, "admin")
+        factory = _fake_conn([
+            _user_row(99, "admin"),
+            None,    # SELECT user → not found
+        ])
+        with patch.object(api_router, "get_connection", factory):
+            resp = self.client.patch(
+                "/api/admin/users/999",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"status": "active"},
+            )
+        self.assertEqual(resp.status_code, 404, resp.text)
+
+    def test_non_admin_patch_user_returns_403(self) -> None:
+        token = _token(10, "candidate")
+        factory = _fake_conn([_user_row(10, "candidate")])
+        with patch.object(api_router, "get_connection", factory):
+            resp = self.client.patch(
+                "/api/admin/users/20",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"status": "disabled"},
+            )
+        self.assertEqual(resp.status_code, 403, resp.text)
+
+    def test_patch_user_without_status_returns_400(self) -> None:
+        token = _token(99, "admin")
+        factory = _fake_conn([_user_row(99, "admin")])
+        with patch.object(api_router, "get_connection", factory):
+            resp = self.client.patch(
+                "/api/admin/users/10",
+                headers={"Authorization": f"Bearer {token}"},
+                json={},
+            )
+        self.assertEqual(resp.status_code, 400, resp.text)
+        self.assertEqual(resp.json()["error"]["code"], "no_fields")
+
+
 if __name__ == "__main__":
     unittest.main()

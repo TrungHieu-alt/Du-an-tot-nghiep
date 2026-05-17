@@ -5,7 +5,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, Query
 
 from jobconnect.modules.admin import service
-from jobconnect.modules.admin.schemas import AdminUserDetail
+from jobconnect.modules.admin.schemas import AdminUserDetail, AdminUserUpdateRequest
 from jobconnect.modules.api.shared import (
     ApplicationStatus,
     CurrentUser,
@@ -15,8 +15,10 @@ from jobconnect.modules.api.shared import (
     ParseStatus,
     Role,
     UserStatus,
+    business_error,
     require_roles,
 )
+from jobconnect.modules.auth.schemas import UserSummary
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -36,6 +38,17 @@ def admin_users(
 @router.get("/users/{user_id}", response_model=AdminUserDetail)
 def admin_user_detail(user_id: int, user: CurrentUser = Depends(require_roles("admin"))):
     return service.admin_user_detail(user_id, user)
+
+
+@router.patch("/users/{user_id}", response_model=UserSummary)
+def admin_update_user(
+    user_id: int,
+    request: AdminUserUpdateRequest,
+    user: CurrentUser = Depends(require_roles("admin")),
+):
+    if request.status is None:
+        raise business_error(400, "no_fields", "No updatable fields provided.")
+    return service.update_user_status(user_id, request.status, user)
 
 
 @router.get("/documents", response_model=Paginated)
