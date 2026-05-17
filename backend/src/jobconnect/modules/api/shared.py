@@ -449,56 +449,6 @@ def audit(
     )
 
 
-def dispatch_email(notification_id: int) -> None:
-    """Attempt to send an email for a committed notification row.
-
-    Uses a separate DB connection so any failure cannot affect the caller's
-    already-committed business transaction. All exceptions are swallowed and
-    logged — email delivery is best-effort.
-    """
-    if notification_id <= 0:
-        return
-    import logging as _logging
-    _log = _logging.getLogger(__name__)
-    try:
-        from jobconnect.integrations.email import get_email_sender
-        from jobconnect.modules.api import router as _api
-
-        with _api.get_connection() as conn, conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT n.recipient_user_id, n.title, n.body,
-                       u.email
-                  FROM notifications n
-                  JOIN users u ON u.user_id = n.recipient_user_id
-                 WHERE n.notification_id = %s
-                """,
-                (notification_id,),
-            )
-            row = cur.fetchone()
-        if row is None:
-            return
-        _recipient_id, title, body, to_email = row
-        sender = get_email_sender()
-        sender.send_email(to_email, title, body)
-        with _api.get_connection() as conn, conn.cursor() as cur:
-            cur.execute(
-                "UPDATE notifications SET email_delivery_status = 'sent', updated_at = now() WHERE notification_id = %s",
-                (notification_id,),
-            )
-    except Exception:
-        _log.exception("Email dispatch failed for notification_id=%d", notification_id)
-        try:
-            from jobconnect.modules.api import router as _api2
-            with _api2.get_connection() as conn, conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE notifications SET email_delivery_status = 'failed', updated_at = now() WHERE notification_id = %s",
-                    (notification_id,),
-                )
-        except Exception:
-            _log.exception("Could not mark email_delivery_status=failed for notification_id=%d", notification_id)
-
-
 def admin_filters(**kwargs):
     where = []
     params = []

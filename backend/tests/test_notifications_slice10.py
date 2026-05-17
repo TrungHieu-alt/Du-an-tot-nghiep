@@ -5,8 +5,7 @@ Covers DoD per slices.md §10:
 - Email attempts are recorded (email_delivery_status updated to 'sent'/'failed').
 - Email failure does not roll back business transactions.
 - LocalLogEmailSender logs and completes without raising.
-- dispatch_email() swallows all exceptions from email sender.
-- notify() returns a valid notification_id (RETURNING).
+- notify() writes notification + email_attempt + audit inline.
 - Audit rows exist for key business events.
 """
 from __future__ import annotations
@@ -28,7 +27,7 @@ from jobconnect.integrations.email import (
 )
 from jobconnect.main import app
 from jobconnect.modules.api import router as api_router
-from jobconnect.modules.api.shared import dispatch_email, notify
+from jobconnect.modules.api.shared import notify
 
 
 # ---------------------------------------------------------------------------
@@ -189,76 +188,7 @@ class TestNotifyBehavior(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 3. dispatch_email() — success path updates status to 'sent'
-# ---------------------------------------------------------------------------
-
-
-class TestDispatchEmailSuccess(unittest.TestCase):
-    def test_dispatch_email_calls_sender_and_marks_sent(self) -> None:
-        # notification row: recipient_id, title, body, email
-        notif_row = (5, "App submitted", "A candidate applied.", "recruiter@example.com")
-        factory = _fake_conn([
-            notif_row,   # SELECT notifications JOIN users
-            None,        # UPDATE email_delivery_status = 'sent'
-        ])
-        sent_calls: list[tuple] = []
-
-        class CaptureSender(LocalLogEmailSender):
-            def send_email(self, to, subject, body, metadata=None) -> EmailSendResult:
-                sent_calls.append((to, subject, body))
-                return EmailSendResult(status="sent", provider="local")
-
-        with patch.object(api_router, "get_connection", factory), \
-             patch("jobconnect.integrations.email.get_email_sender", return_value=CaptureSender()):
-            dispatch_email(42)
-
-        self.assertEqual(len(sent_calls), 1)
-        self.assertEqual(sent_calls[0][0], "recruiter@example.com")
-        self.assertEqual(sent_calls[0][1], "App submitted")
-
-        all_sql = " | ".join(sql for c in factory.cursors for sql, _ in c.executed).lower()
-        self.assertIn("email_delivery_status", all_sql)
-        self.assertIn("sent", all_sql)
-
-    def test_dispatch_email_skips_when_notification_not_found(self) -> None:
-        factory = _fake_conn([None])  # SELECT returns None
-        with patch.object(api_router, "get_connection", factory):
-            dispatch_email(999)  # Should not raise
-
-
-# ---------------------------------------------------------------------------
-# 4. dispatch_email() — failure path updates status to 'failed'
-# ---------------------------------------------------------------------------
-
-
-class TestDispatchEmailFailure(unittest.TestCase):
-    def test_email_send_failure_marks_failed_and_does_not_raise(self) -> None:
-        notif_row = (5, "Title", "Body", "user@example.com")
-        factory = _fake_conn([
-            notif_row,  # SELECT notifications JOIN users
-            None,       # UPDATE email_delivery_status = 'failed'
-        ])
-
-        class BrokenSender(LocalLogEmailSender):
-            def send_email(self, to, subject, body, metadata=None) -> EmailSendResult:
-                raise RuntimeError("SMTP connection refused")
-
-        with patch.object(api_router, "get_connection", factory), \
-             patch("jobconnect.integrations.email.get_email_sender", return_value=BrokenSender()):
-            # Must not raise
-            dispatch_email(42)
-
-        all_sql = " | ".join(sql for c in factory.cursors for sql, _ in c.executed).lower()
-        self.assertIn("failed", all_sql)
-
-    def test_dispatch_email_with_minus_one_id_does_not_crash(self) -> None:
-        # notification_id=-1 means no notification was created (e.g. allow_existing path)
-        # dispatch_email returns early without any DB call when id <= 0
-        dispatch_email(-1)  # Should not raise, no DB call needed
-
-
-# ---------------------------------------------------------------------------
-# 5. Email failure does not affect business transaction
+# 3. Email failure does not affect business transaction
 # ---------------------------------------------------------------------------
 
 
