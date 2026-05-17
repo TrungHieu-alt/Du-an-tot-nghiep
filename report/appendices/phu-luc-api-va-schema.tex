@@ -4,7 +4,8 @@
 
 Phụ lục này gom các bảng kỹ thuật để khi đọc báo cáo có thể tra nhanh endpoint, entity, enum và nguồn tài liệu. Nội dung được tổng hợp từ \texttt{docs/backend/LLD/40-api-contract.md}, \texttt{docs/backend/LLD/30-database-schema.md}, \texttt{docs/backend/LLD/50-current-api-implementation-matrix.md} và các HLD liên quan.
 
-\begin{longtable}{p{0.17\textwidth}p{0.25\textwidth}p{0.20\textwidth}p{0.28\textwidth}}
+{\small
+\begin{longtable}{p{0.14\textwidth}p{0.30\textwidth}p{0.20\textwidth}p{0.24\textwidth}}
 \caption{API endpoint summary theo nhóm chức năng}\\
 \toprule
 \textbf{Nhóm} & \textbf{Endpoint} & \textbf{Vai trò} & \textbf{Ghi chú}\\
@@ -14,68 +15,70 @@ Phụ lục này gom các bảng kỹ thuật để khi đọc báo cáo có th�
 \textbf{Nhóm} & \textbf{Endpoint} & \textbf{Vai trò} & \textbf{Ghi chú}\\
 \midrule
 \endhead
-Auth & \texttt{POST /api/auth/register} & Public & Tạo user, hash password, issue JWT.\\
-Auth & \texttt{POST /api/auth/login} & Public & Verify password, block disabled user, issue JWT.\\
-Auth & \texttt{POST /api/auth/logout} & Authenticated & Stateless logout, client discard token.\\
-User & \texttt{GET /api/me} & Authenticated & User summary + role-specific bootstrap.\\
-Candidate profile & \texttt{GET /api/candidate/profile} & Candidate & Đọc profile hiện tại.\\
-Candidate profile & \texttt{PUT /api/candidate/profile} & Candidate & Upsert candidate profile.\\
-Recruiter profile & \texttt{GET /api/recruiter/profile} & Recruiter & Đọc recruiter profile.\\
-Recruiter profile & \texttt{PUT /api/recruiter/profile} & Recruiter & Upsert profile sau organization check.\\
-Organizations & \texttt{GET /api/organizations} & Authenticated & List/search organization với \texttt{q}, limit, offset.\\
-Organizations & \texttt{POST /api/organizations} & Recruiter/Admin runtime & Tạo organization, audit event.\\
-Organizations & \texttt{GET /api/organizations/\{id\}} & Authenticated & Detail organization.\\
-Organizations & \texttt{PATCH /api/organizations/\{id\}} & Recruiter/Admin & Update organization với membership check.\\
-Resumes & \texttt{GET /api/candidate/resumes} & Candidate/Admin & List resumes theo owner hoặc all admin.\\
-Resumes & \texttt{POST /api/candidate/resumes} & Candidate & Create draft resume, upsert embeddings.\\
-Resumes & \texttt{GET /api/candidate/resumes/search} & Recruiter/Admin & Search active resumes theo q/filters.\\
-Resumes & \texttt{POST /api/candidate/resumes/semantic-search} & Recruiter/Admin & Semantic search resume relevance.\\
-Resumes & \texttt{GET /api/candidate/resumes/\{id\}} & Candidate/Recruiter/Admin & Owner/all/active visibility.\\
-Resumes & \texttt{PATCH /api/candidate/resumes/\{id\}} & Candidate & Partial update và refresh embeddings.\\
-Resumes & \texttt{POST /api/candidate/resumes/\{id\}/activate} & Candidate & Draft/archived -> active; audit event.\\
-Resumes & \texttt{POST /api/candidate/resumes/\{id\}/archive} & Candidate & Draft/active -> archived; audit event.\\
-Jobs & \texttt{GET /api/jobs} & Authenticated active & List jobs với filters.\\
-Jobs & \texttt{POST /api/jobs} & Recruiter/Admin runtime & Create draft job, upsert embeddings.\\
-Jobs & \texttt{GET /api/jobs/search} & Authenticated active & Search title/skills/organization name.\\
-Jobs & \texttt{POST /api/jobs/semantic-search} & Authenticated active & Semantic job search theo requirement embeddings.\\
-Jobs & \texttt{GET /api/jobs/\{id\}} & Authenticated active & Candidate sees published, recruiter owns, admin all.\\
-Jobs & \texttt{PATCH /api/jobs/\{id\}} & Recruiter/Admin & Partial update và refresh embeddings.\\
-Jobs & \texttt{POST /api/jobs/\{id\}/publish} & Recruiter/Admin & Draft -> published, set \texttt{published\_at}.\\
-Jobs & \texttt{POST /api/jobs/\{id\}/close} & Recruiter/Admin & Draft/published -> closed.\\
-Documents & \texttt{POST /api/documents} & Authenticated active & Multipart upload, storage write, parse job queued.\\
-Documents & \texttt{GET /api/documents} & Authenticated active & List visible documents.\\
-Documents & \texttt{GET /api/documents/\{id\}} & Owner/Admin & Document detail + parse jobs.\\
-Documents & \texttt{GET /api/documents/\{id\}/download-url} & Owner/Admin & Storage adapter URL.\\
-Documents & \texttt{GET /api/documents/\{id\}/parse-jobs/\{pid\}} & Owner/Admin & Parse job detail.\\
-Documents & \texttt{POST /api/documents/\{id\}/parse-jobs} & Owner/Admin & Retry parse job, audit event.\\
-Matching & \texttt{POST /api/matching/jobs/\{id\}/run} & Recruiter/Admin & Published job anchor -> active resumes.\\
-Matching & \texttt{POST /api/matching/resumes/\{id\}/run} & Candidate/Admin & Active resume anchor -> published jobs.\\
-Applications & \texttt{GET /api/applications} & Candidate/Recruiter/Admin & Role-scoped application listing.\\
-Applications & \texttt{POST /api/applications} & Candidate & Candidate apply, event, notification, audit.\\
-Applications & \texttt{GET /api/applications/\{id\}} & Candidate/Recruiter/Admin & Detail + event history.\\
-Applications & \texttt{POST /api/applications/\{id\}/status} & Authenticated active & Role-specific transition graph.\\
-Invites & \texttt{GET /api/invites} & Candidate/Recruiter/Admin & Role-scoped invite listing.\\
-Invites & \texttt{POST /api/invites} & Recruiter & Create pending invite, duplicate guard.\\
-Invites & \texttt{GET /api/invites/\{id\}} & Candidate/Recruiter/Admin & Detail invite.\\
-Invites & \texttt{POST /api/invites/\{id\}/accept} & Candidate & Accept and create/return application.\\
-Invites & \texttt{POST /api/invites/\{id\}/reject} & Candidate & Reject, no application.\\
-Notifications & \texttt{GET /api/notifications} & Authenticated active & List notifications.\\
-Notifications & \texttt{POST /api/notifications/\{id\}/read} & Owner & Mark one notification read.\\
-Notifications & \texttt{POST /api/notifications/read-all} & Authenticated active & Mark unread notifications read, return count.\\
-Admin & \texttt{GET /api/admin/users} & Admin & User monitoring.\\
-Admin & \texttt{GET /api/admin/users/\{id\}} & Admin & User detail + profile context + ops summary.\\
-Admin & \texttt{GET /api/admin/documents} & Admin & Document monitoring filters.\\
-Admin & \texttt{GET /api/admin/parse-jobs} & Admin & Parse job monitoring filters.\\
-Admin & \texttt{GET /api/admin/applications} & Admin & Application monitoring filters.\\
-Admin & \texttt{GET /api/admin/invites} & Admin & Invite monitoring filters.\\
-Admin & \texttt{GET /api/admin/notifications} & Admin & Notification monitoring filters.\\
-Admin & \texttt{GET /api/admin/audit-logs} & Admin & Audit log filters.\\
+Auth & \texttt{POST} \path{/api/auth/register} & Public & Tạo user, hash password, issue JWT.\\
+Auth & \texttt{POST} \path{/api/auth/login} & Public & Verify password, block disabled user, issue JWT.\\
+Auth & \texttt{POST} \path{/api/auth/logout} & Authenticated & Stateless logout, client discard token.\\
+User & \texttt{GET} \path{/api/me} & Authenticated & User summary + role-specific bootstrap.\\
+Candidate profile & \texttt{GET} \path{/api/candidate/profile} & Candidate & Đọc profile hiện tại.\\
+Candidate profile & \texttt{PUT} \path{/api/candidate/profile} & Candidate & Upsert candidate profile.\\
+Recruiter profile & \texttt{GET} \path{/api/recruiter/profile} & Recruiter & Đọc recruiter profile.\\
+Recruiter profile & \texttt{PUT} \path{/api/recruiter/profile} & Recruiter & Upsert profile sau organization check.\\
+Organizations & \texttt{GET} \path{/api/organizations} & Authenticated & List/search organization với \texttt{q}, limit, offset.\\
+Organizations & \texttt{POST} \path{/api/organizations} & Recruiter/Admin runtime & Tạo organization, audit event.\\
+Organizations & \texttt{GET} \path{/api/organizations/\{id\}} & Authenticated & Detail organization.\\
+Organizations & \texttt{PATCH} \path{/api/organizations/\{id\}} & Recruiter/Admin & Update organization với membership check.\\
+Resumes & \texttt{GET} \path{/api/candidate/resumes} & Candidate/Admin & List resumes theo owner hoặc all admin.\\
+Resumes & \texttt{POST} \path{/api/candidate/resumes} & Candidate & Create draft resume, upsert embeddings.\\
+Resumes & \texttt{GET} \path{/api/candidate/resumes/search} & Recruiter/Admin & Search active resumes theo q/filters.\\
+Resumes & \texttt{POST} \path{/api/candidate/resumes/semantic-search} & Recruiter/Admin & Semantic search resume relevance.\\
+Resumes & \texttt{GET} \path{/api/candidate/resumes/\{id\}} & Candidate/Recruiter/Admin & Owner/all/active visibility.\\
+Resumes & \texttt{PATCH} \path{/api/candidate/resumes/\{id\}} & Candidate & Partial update và refresh embeddings.\\
+Resumes & \texttt{POST} \path{/api/candidate/resumes/\{id\}/activate} & Candidate & Draft/archived -> active; audit event.\\
+Resumes & \texttt{POST} \path{/api/candidate/resumes/\{id\}/archive} & Candidate & Draft/active -> archived; audit event.\\
+Jobs & \texttt{GET} \path{/api/jobs} & Authenticated active & List jobs với filters.\\
+Jobs & \texttt{POST} \path{/api/jobs} & Recruiter/Admin runtime & Create draft job, upsert embeddings.\\
+Jobs & \texttt{GET} \path{/api/jobs/search} & Authenticated active & Search title/skills/organization name.\\
+Jobs & \texttt{POST} \path{/api/jobs/semantic-search} & Authenticated active & Semantic job search theo requirement embeddings.\\
+Jobs & \texttt{GET} \path{/api/jobs/\{id\}} & Authenticated active & Candidate sees published, recruiter owns, admin all.\\
+Jobs & \texttt{PATCH} \path{/api/jobs/\{id\}} & Recruiter/Admin & Partial update và refresh embeddings.\\
+Jobs & \texttt{POST} \path{/api/jobs/\{id\}/publish} & Recruiter/Admin & Draft -> published, set \texttt{published\_at}.\\
+Jobs & \texttt{POST} \path{/api/jobs/\{id\}/close} & Recruiter/Admin & Draft/published -> closed.\\
+Documents & \texttt{POST} \path{/api/documents} & Authenticated active & Multipart upload, storage write, parse job queued.\\
+Documents & \texttt{GET} \path{/api/documents} & Authenticated active & List visible documents.\\
+Documents & \texttt{GET} \path{/api/documents/\{id\}} & Owner/Admin & Document detail + parse jobs.\\
+Documents & \texttt{GET} \path{/api/documents/\{id\}/download-url} & Owner/Admin & Storage adapter URL.\\
+Documents & \texttt{GET} \path{/api/documents/\{id\}/parse-jobs/\{pid\}} & Owner/Admin & Parse job detail.\\
+Documents & \texttt{POST} \path{/api/documents/\{id\}/parse-jobs} & Owner/Admin & Retry parse job, audit event.\\
+Matching & \texttt{POST} \path{/api/matching/jobs/\{id\}/run} & Recruiter/Admin & Published job anchor -> active resumes.\\
+Matching & \texttt{POST} \path{/api/matching/resumes/\{id\}/run} & Candidate/Admin & Active resume anchor -> published jobs.\\
+Applications & \texttt{GET} \path{/api/applications} & Candidate/Recruiter/Admin & Role-scoped application listing.\\
+Applications & \texttt{POST} \path{/api/applications} & Candidate & Candidate apply, event, notification, audit.\\
+Applications & \texttt{GET} \path{/api/applications/\{id\}} & Candidate/Recruiter/Admin & Detail + event history.\\
+Applications & \texttt{POST} \path{/api/applications/\{id\}/status} & Authenticated active & Role-specific transition graph.\\
+Invites & \texttt{GET} \path{/api/invites} & Candidate/Recruiter/Admin & Role-scoped invite listing.\\
+Invites & \texttt{POST} \path{/api/invites} & Recruiter & Create pending invite, duplicate guard.\\
+Invites & \texttt{GET} \path{/api/invites/\{id\}} & Candidate/Recruiter/Admin & Detail invite.\\
+Invites & \texttt{POST} \path{/api/invites/\{id\}/accept} & Candidate & Accept and create/return application.\\
+Invites & \texttt{POST} \path{/api/invites/\{id\}/reject} & Candidate & Reject, no application.\\
+Notifications & \texttt{GET} \path{/api/notifications} & Authenticated active & List notifications.\\
+Notifications & \texttt{POST} \path{/api/notifications/\{id\}/read} & Owner & Mark one notification read.\\
+Notifications & \texttt{POST} \path{/api/notifications/read-all} & Authenticated active & Mark unread notifications read, return count.\\
+Admin & \texttt{GET} \path{/api/admin/users} & Admin & User monitoring.\\
+Admin & \texttt{GET} \path{/api/admin/users/\{id\}} & Admin & User detail + profile context + ops summary.\\
+Admin & \texttt{GET} \path{/api/admin/documents} & Admin & Document monitoring filters.\\
+Admin & \texttt{GET} \path{/api/admin/parse-jobs} & Admin & Parse job monitoring filters.\\
+Admin & \texttt{GET} \path{/api/admin/applications} & Admin & Application monitoring filters.\\
+Admin & \texttt{GET} \path{/api/admin/invites} & Admin & Invite monitoring filters.\\
+Admin & \texttt{GET} \path{/api/admin/notifications} & Admin & Notification monitoring filters.\\
+Admin & \texttt{GET} \path{/api/admin/audit-logs} & Admin & Audit log filters.\\
 \bottomrule
 \end{longtable}
+}% end small
 
 \section{Entity summary}
 
-\begin{longtable}{p{0.24\textwidth}p{0.28\textwidth}p{0.38\textwidth}}
+{\footnotesize
+\begin{longtable}{p{0.37\textwidth}p{0.27\textwidth}p{0.26\textwidth}}
 \caption{Tóm tắt entity và field chính}\\
 \toprule
 \textbf{Entity} & \textbf{Field chính} & \textbf{Invariant}\\
@@ -102,10 +105,12 @@ Admin & \texttt{GET /api/admin/audit-logs} & Admin & Audit log filters.\\
 \texttt{audit\_logs} & \texttt{actor\_user\_id}, \texttt{event\_type}, \texttt{target\_type}, \texttt{metadata} & Business event trail cho lifecycle actions.\\
 \bottomrule
 \end{longtable}
+}% end footnotesize
 
 \section{Matching formula và hard filter details}
 
-\begin{longtable}{p{0.25\textwidth}p{0.25\textwidth}p{0.40\textwidth}}
+{\small
+\begin{longtable}{p{0.33\textwidth}p{0.18\textwidth}p{0.39\textwidth}}
 \caption{Score component trong matching}\\
 \toprule
 \textbf{Component} & \textbf{Weight} & \textbf{Ý nghĩa}\\
@@ -123,6 +128,7 @@ Admin & \texttt{GET /api/admin/audit-logs} & Admin & Audit log filters.\\
 \texttt{penalty\_missing\_required} & 0 hiện tại & Dự phòng; hard filters đã loại pair thiếu điều kiện.\\
 \bottomrule
 \end{longtable}
+}% end small
 
 \begin{longtable}{p{0.25\textwidth}p{0.65\textwidth}}
 \caption{Reasoning content tối thiểu}\\
@@ -144,7 +150,8 @@ Warnings metadata & Nêu rerank fallback hoặc provider unavailable nếu có.\
 
 \section{Source traceability}
 
-\begin{longtable}{p{0.28\textwidth}p{0.30\textwidth}p{0.32\textwidth}}
+{\footnotesize
+\begin{longtable}{p{0.27\textwidth}p{0.33\textwidth}p{0.30\textwidth}}
 \caption{Traceability từ nội dung báo cáo về source docs}\\
 \toprule
 \textbf{Nội dung báo cáo} & \textbf{Nguồn chính} & \textbf{Ghi chú sử dụng}\\
@@ -173,6 +180,7 @@ Dependencies & \texttt{backend/requirements.txt} & Versioned runtime packages.\\
 Report structure & \texttt{report/knowledge/01-04} & Bố cục khóa luận, giọng viết, no DOCX reopen by default.\\
 \bottomrule
 \end{longtable}
+}% end footnotesize
 
 \section{Checklist dùng lại khi tiếp tục phát triển báo cáo}
 

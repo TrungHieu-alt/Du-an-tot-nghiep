@@ -10,7 +10,7 @@
 \contentsline {section}{Đối tượng và phạm vi nghiên cứu}{3}{section*.9}%
 \contentsline {section}{Phương pháp thực hiện}{3}{section*.9}%
 \contentsline {section}{Đóng góp của khóa luận}{4}{table.caption.10}%
-\contentsline {section}{Bố cục báo cáo}{5}{equation.0.0.2}%
+\contentsline {section}{Bố cục báo cáo}{5}{equation.0.2}%
 \contentsline {chapter}{\numberline {1}Giới thiệu chung và cơ sở bài toán}{6}{chapter.1}%
 \contentsline {section}{\numberline {1.1}Bối cảnh tuyển dụng số}{6}{section.1.1}%
 \contentsline {section}{\numberline {1.2}Nhóm người dùng và nhu cầu}{7}{section.1.2}%
@@ -66,19 +66,19 @@
 \contentsline {section}{\numberline {4.9}Đối chiếu hiện trạng với target contract}{38}{section.4.9}%
 \contentsline {section}{\numberline {4.10}Đánh giá theo yêu cầu sản phẩm}{39}{section.4.10}%
 \contentsline {subsection}{\numberline {4.10.1}Điểm đáp ứng tốt}{39}{subsection.4.10.1}%
-\contentsline {subsection}{\numberline {4.10.2}Điểm còn partial}{40}{subsection.4.10.2}%
+\contentsline {subsection}{\numberline {4.10.2}Điểm còn partial}{39}{subsection.4.10.2}%
 \contentsline {subsection}{\numberline {4.10.3}Rủi ro kỹ thuật}{40}{subsection.4.10.3}%
 \contentsline {section}{\numberline {4.11}Kịch bản thực nghiệm đề xuất}{40}{section.4.11}%
 \contentsline {section}{\numberline {4.12}Nhận xét chương}{41}{section.4.12}%
-\contentsline {chapter}{Kết luận}{43}{chapter*.21}%
-\contentsline {section}{Kết quả đạt được}{43}{section*.22}%
-\contentsline {section}{Hạn chế}{44}{section*.22}%
-\contentsline {section}{Hướng phát triển}{45}{section*.22}%
-\contentsline {section}{Kết luận chung}{46}{section*.22}%
-\contentsline {chapter}{Tài liệu tham khảo}{47}{chapter*.23}%
-\contentsline {chapter}{\numberline {A}Phụ lục API, schema và traceability}{49}{appendix.A}%
-\contentsline {section}{\numberline {A.1}Tóm tắt API contract}{49}{section.A.1}%
-\contentsline {section}{\numberline {A.2}Entity summary}{53}{section.A.2}%
-\contentsline {section}{\numberline {A.3}Matching formula và hard filter details}{55}{section.A.3}%
-\contentsline {section}{\numberline {A.4}Source traceability}{56}{section.A.4}%
-\contentsline {section}{\numberline {A.5}Checklist dùng lại khi tiếp tục phát triển báo cáo}{58}{section.A.5}%
+\contentsline {chapter}{Kết luận}{42}{chapter*.21}%
+\contentsline {section}{Kết quả đạt được}{42}{section*.22}%
+\contentsline {section}{Hạn chế}{43}{section*.22}%
+\contentsline {section}{Hướng phát triển}{44}{section*.22}%
+\contentsline {section}{Kết luận chung}{45}{section*.22}%
+\contentsline {chapter}{Tài liệu tham khảo}{46}{chapter*.23}%
+\contentsline {chapter}{\numberline {A}Phụ lục API, schema và traceability}{48}{chapter.A}%
+\contentsline {section}{\numberline {A.1}Tóm tắt API contract}{48}{section.A.1}%
+\contentsline {section}{\numberline {A.2}Entity summary}{51}{section.A.2}%
+\contentsline {section}{\numberline {A.3}Matching formula và hard filter details}{53}{section.A.3}%
+\contentsline {section}{\numberline {A.4}Source traceability}{54}{section.A.4}%
+\contentsline {section}{\numberline {A.5}Checklist dùng lại khi tiếp tục phát triển báo cáo}{55}{section.A.5}%

@@ -6,6 +6,7 @@ JobConnect được thiết kế như một backend production MVP có module bo
 
 Backend layout chính nằm dưới \texttt{backend/src/jobconnect}. Cấu trúc này có bốn vùng: \texttt{core} cho config, database, security, exceptions, logging; \texttt{common} cho dependencies, pagination, responses, utils, constants; \texttt{integrations} cho storage, LLM, embedding, rerank, pgvector; và \texttt{modules} cho từng feature domain. Cách tổ chức này cho phép mỗi nghiệp vụ có router, schemas và service riêng mà không lẫn với hạ tầng.
 
+{\small
 \begin{longtable}{p{0.30\textwidth}p{0.60\textwidth}}
 \caption{Mapping thư mục backend sang trách nhiệm kiến trúc}\\
 \toprule
@@ -27,6 +28,7 @@ Backend layout chính nằm dưới \texttt{backend/src/jobconnect}. Cấu trúc
 \texttt{modules/*/} & Domain routers, schemas và services cho từng feature.\\
 \bottomrule
 \end{longtable}
+}% end small
 
 \section{Thiết kế module nghiệp vụ}
 
@@ -35,7 +37,8 @@ Feature modules trong \texttt{backend/src/jobconnect/modules} phản ánh trực
 \begin{table}[H]
 \caption{Feature modules và API namespace liên quan}
 \centering
-\begin{tabularx}{\textwidth}{p{0.25\textwidth}p{0.28\textwidth}X}
+{\small
+\begin{tabularx}{\textwidth}{p{0.20\textwidth}p{0.38\textwidth}X}
 \toprule
 \textbf{Module} & \textbf{Namespace} & \textbf{Vai trò}\\
 \midrule
@@ -51,6 +54,7 @@ Feature modules trong \texttt{backend/src/jobconnect/modules} phản ánh trực
 \texttt{admin} & \texttt{/api/admin/*} & Read-only monitoring.\\
 \bottomrule
 \end{tabularx}
+}% end small
 \end{table}
 
 Thiết kế module này giúp báo cáo và code có cùng ngôn ngữ. Khi nói về ``candidate resume lifecycle'', ta có thể chỉ thẳng vào module \texttt{resumes}; khi nói về ``parse worker'', ta chỉ vào module \texttt{documents}; khi nói về ``ranking explainability'', ta chỉ vào module \texttt{matching}. Điều này giảm rủi ro viết báo cáo ở mức trừu tượng xa code.
@@ -95,7 +99,8 @@ applications/invites/parse failures -> notifications + audit\_logs
 
 Base path production là \texttt{/api}. Đây là breaking replacement cho prototype-only routes dưới \texttt{/api/v2/prototype/*}. API contract quy định ID là JSON number đại diện cho BIGINT, timestamp là ISO 8601 có timezone, request/response schema explicit và unknown request fields bị reject trừ endpoint cho phép metadata JSON \cite{lld-api}.
 
-\begin{longtable}{p{0.29\textwidth}p{0.61\textwidth}}
+{\small
+\begin{longtable}{p{0.38\textwidth}p{0.52\textwidth}}
 \caption{Production API namespaces}\\
 \toprule
 \textbf{Namespace} & \textbf{Mục đích}\\
@@ -120,6 +125,7 @@ Base path production là \texttt{/api}. Đây là breaking replacement cho proto
 \texttt{/api/admin/*} & Admin monitoring users/documents/parse jobs/applications/invites/notifications/audit logs.\\
 \bottomrule
 \end{longtable}
+}% end small
 
 Một điểm thiết kế đáng chú ý là response list/detail cho frontend cần denormalized display summaries ở các nơi phù hợp. Ví dụ job list/search responses target cần \texttt{organization\_name}, \texttt{organization\_logo\_url}, \texttt{organization\_slug} để job cards không phải fetch organization từng row. Application/Invite summaries target cần \texttt{job\_summary} và \texttt{resume\_summary} để table/detail ổn định \cite{hld-api,lld-api}.
 

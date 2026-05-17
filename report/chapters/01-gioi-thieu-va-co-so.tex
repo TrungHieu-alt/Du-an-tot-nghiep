@@ -103,6 +103,7 @@ Explainable matching trong JobConnect không chỉ trả điểm tổng. Kết q
 
 Hệ thống validate enum ở API và persistence boundary. Các enum này không chỉ là giá trị hiển thị, mà quyết định visibility, lifecycle và matching eligibility.
 
+{\footnotesize
 \begin{longtable}{p{0.30\textwidth}p{0.60\textwidth}}
 \caption{Enum canonical trong JobConnect MVP}\\
 \toprule
@@ -127,6 +128,7 @@ Hệ thống validate enum ở API và persistence boundary. Các enum này khô
 \texttt{education} & \texttt{lop\_9}, \texttt{lop\_12}, \texttt{dai\_hoc}, \texttt{thac\_si}, \texttt{tien\_si}\\
 \bottomrule
 \end{longtable}
+}% end footnotesize
 
 Hai visibility rule là then chốt: \texttt{candidate\_resumes.status = active} mới vào public candidate pool, và \texttt{job\_posts.status = published} mới vào public job pool. Các trạng thái \texttt{draft}, \texttt{archived}, \texttt{closed} bị loại khỏi public search và matching. Quy tắc này làm cho matching có tính dự đoán và tránh việc dữ liệu chưa review bị đưa vào kết quả.
 

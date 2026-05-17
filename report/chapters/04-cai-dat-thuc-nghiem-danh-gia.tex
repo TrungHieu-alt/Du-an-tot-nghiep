@@ -6,6 +6,7 @@ Repository JobConnect hiện tập trung vào backend FastAPI. Theo README, back
 
 Các dependency runtime cụ thể được lấy từ \texttt{backend/requirements.txt}:
 
+{\small
 \begin{longtable}{p{0.30\textwidth}p{0.20\textwidth}p{0.40\textwidth}}
 \caption{Dependency backend cụ thể trong dự án}\\
 \toprule
@@ -27,6 +28,7 @@ Các dependency runtime cụ thể được lấy từ \texttt{backend/requireme
 \texttt{sentence-transformers} & \texttt{3.0.1} & Local multilingual cross-encoder reranker.\\
 \bottomrule
 \end{longtable}
+}% end small
 
 Bảng trên cho thấy phần cài đặt không dừng ở mức ``ngôn ngữ Python''. Mỗi dependency đều gắn với một boundary cụ thể: FastAPI/Pydantic cho API contract, psycopg cho PostgreSQL, python-multipart cho upload, pypdf cho extraction, sentence-transformers cho rerank. Điều này quan trọng vì báo cáo kỹ thuật cần phản ánh đúng sản phẩm đang có, không dùng mô tả chung có thể áp dụng cho bất kỳ dự án nào.
 
@@ -137,7 +139,8 @@ Audit runtime được dùng cho nhiều lifecycle actions: organization create/
 
 Thư mục \texttt{backend/tests} cung cấp test coverage cho các phần then chốt: app surface, auth, authorization, API contract, documents, embedding provider, LLM parser, matching helpers, matching Slice 8, parse worker và rerank provider. Dù chưa phải full E2E suite, bộ test này phản ánh các rủi ro chính của MVP.
 
-\begin{longtable}{p{0.34\textwidth}p{0.56\textwidth}}
+{\small
+\begin{longtable}{p{0.40\textwidth}p{0.50\textwidth}}
 \caption{Các nhóm test hiện có trong backend}\\
 \toprule
 \textbf{File test} & \textbf{Ý nghĩa}\\
@@ -160,6 +163,7 @@ Thư mục \texttt{backend/tests} cung cấp test coverage cho các phần then 
 \texttt{test\_rerank\_provider.py} & Kiểm tra local reranker provider behavior.\\
 \bottomrule
 \end{longtable}
+}% end small
 
 Theo rule repository, runtime/API verification khi sửa backend phải chạy qua Docker Compose. Tuy nhiên trong phạm vi báo cáo này, không có code backend bị thay đổi; vì vậy verification chính là build LaTeX, page count và content QA. Các test backend được báo cáo như bằng chứng coverage hiện có, không chạy lại như một phần bắt buộc của artifact LaTeX.
 
@@ -167,6 +171,7 @@ Theo rule repository, runtime/API verification khi sửa backend phải chạy q
 
 Implementation matrix chia status thành \texttt{Aligned}, \texttt{Partial}, \texttt{Drift} và \texttt{Runtime-only}. Tại thời điểm tài liệu hiện tại, runtime đã cover toàn bộ named endpoints trong target contract surface ở mức path-level; không có endpoint hoàn toàn missing theo matrix. Tuy vậy còn nhiều coverage gaps server-side hoặc response-shape.
 
+{\small
 \begin{longtable}{p{0.26\textwidth}p{0.32\textwidth}p{0.32\textwidth}}
 \caption{Tóm tắt đối chiếu hiện trạng triển khai}\\
 \toprule
@@ -187,6 +192,7 @@ Notifications/email & In-app rows, read/read-all, email delivery status queued. 
 Admin monitoring & Nhiều endpoint read-heavy và filter đã aligned. & Audit consistency cho mọi admin read cần quyết định chính sách.\\
 \bottomrule
 \end{longtable}
+}% end small
 
 Nhận xét quan trọng là hệ thống đã đi xa hơn prototype matching đơn lẻ. Nó có route surface production, schema migration, upload foundation, provider boundary và lifecycle modules. Nhưng để gọi là production-ready hoàn toàn, các phần provider thực, parse review payload, email delivery, frontend integration và benchmark vẫn cần hoàn thiện.
 
