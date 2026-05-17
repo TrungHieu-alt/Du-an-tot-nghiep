@@ -58,6 +58,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile.dev
     container_name: jobmatcher-frontend
+    command: sh -c "npm install --no-audit --no-fund && npm run dev"
     ports:
       - "5173:5173"
     environment:
