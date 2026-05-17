@@ -19,6 +19,12 @@ docker compose up -d
 
 # 3. Apply database migrations (first time, or after reset)
 docker compose exec backend python db/apply_migrations.py
+
+# 4. (Optional) Install SQLAlchemy seed tooling dependency once per running container
+docker compose exec backend pip install -r db/seeds/requirements-seed.txt
+
+# 5. Seed demo data (ORM SQLAlchemy, separate from migrations)
+docker compose exec backend python -m db.seeds.cli seed --profile demo
 ```
 
 Services:
@@ -56,6 +62,18 @@ API health + OpenAPI:
 ```bash
 curl http://localhost:8000/api/health
 curl http://localhost:8000/openapi.json
+```
+
+Seed tooling checks:
+
+```bash
+# idempotent run (execute twice, should not duplicate seed rows)
+docker compose exec backend python -m db.seeds.cli seed --profile demo
+docker compose exec backend python -m db.seeds.cli seed --profile demo
+
+# scoped reset and reseed for jobs + related records
+docker compose exec backend python -m db.seeds.cli reset --target jobs --with-related
+docker compose exec backend python -m db.seeds.cli reseed --target jobs --profile demo --with-related
 ```
 
 Frontend TypeScript check:

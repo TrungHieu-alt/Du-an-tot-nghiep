@@ -1,179 +1,384 @@
 \chapter{Phân tích và thiết kế hệ thống đề xuất}
 
-\section{Tổng quan kiến trúc JobConnect MVP}
+\section{Thiết kế theo tư duy decision architecture}
 
-JobConnect được thiết kế như một backend production MVP có module boundaries rõ ràng. Repository không còn tập trung vào prototype route \texttt{/api/v2/prototype/*}; runtime hiện exposing production namespaces dưới \texttt{/api/*}. Theo README và HLD overview, legacy prototype code đã được loại khỏi runtime, còn legacy docs chỉ dùng như tài liệu tham chiếu migration \cite{readme,hld-overview}.
+Sau khi thiết lập nền phương pháp ở Chương 2, Chương 3 chuyển trọng tâm sang decision architecture: mỗi quyết định thiết kế phải trả lời rõ bốn câu hỏi \textit{(bài toán gì, chọn gì, loại gì, đánh đổi gì)}. Cách tiếp cận này giúp kiến trúc không bị xem như tập hợp công nghệ rời rạc, mà là một chuỗi quyết định kỹ thuật có khả năng kiểm chứng và truy vết.
 
-Backend layout chính nằm dưới \texttt{backend/src/jobconnect}. Cấu trúc này có bốn vùng: \texttt{core} cho config, database, security, exceptions, logging; \texttt{common} cho dependencies, pagination, responses, utils, constants; \texttt{integrations} cho storage, LLM, embedding, rerank, pgvector; và \texttt{modules} cho từng feature domain. Cách tổ chức này cho phép mỗi nghiệp vụ có router, schemas và service riêng mà không lẫn với hạ tầng.
+Trong bối cảnh JobConnect MVP, decision architecture cần giải đồng thời hai mâu thuẫn: (i) muốn tăng chất lượng matching nhưng vẫn giữ chi phí vận hành chấp nhận được, và (ii) muốn tăng tự động hóa nhưng không làm mất khả năng giải trình trong các quyết định tuyển dụng. Do đó, các lựa chọn ở chương này ưu tiên tính module hóa, kiểm soát failure mode, và khả năng rollback theo tầng.
 
-{\small
-\begin{longtable}{p{0.30\textwidth}p{0.60\textwidth}}
-\caption{Mapping thư mục backend sang trách nhiệm kiến trúc}\\
-\toprule
-\textbf{Đường dẫn} & \textbf{Trách nhiệm}\\
-\midrule
-\endfirsthead
-\toprule
-\textbf{Đường dẫn} & \textbf{Trách nhiệm}\\
-\midrule
-\endhead
-\texttt{backend/src/jobconnect/main.py} & FastAPI app entrypoint.\\
-\texttt{backend/src/jobconnect/app.py} & App metadata và router registration.\\
-\texttt{core/} & Config, database connection, security, exceptions, logging.\\
-\texttt{common/} & Shared dependencies, pagination, response helpers, constants, utils.\\
-\texttt{integrations/storage/} & Local/cloud object storage boundary.\\
-\texttt{integrations/llm/} & Local/OpenAI-compatible parser boundary.\\
-\texttt{integrations/embedding/} & Local hash/OpenAI embedding provider boundary.\\
-\texttt{integrations/rerank/} & Local cross-encoder reranker boundary.\\
-\texttt{modules/*/} & Domain routers, schemas và services cho từng feature.\\
-\bottomrule
-\end{longtable}
-}% end small
+\section{Bối cảnh ràng buộc và yêu cầu thiết kế}
 
-\section{Thiết kế module nghiệp vụ}
+\subsection{Ràng buộc dữ liệu}
 
-Feature modules trong \texttt{backend/src/jobconnect/modules} phản ánh trực tiếp sản phẩm. Module \texttt{auth} xử lý register/login/logout, password hashing và JWT issuance. Module \texttt{users} phục vụ current user bootstrap. Module \texttt{organizations} quản lý employer organization, bao gồm predefined Independent organization dùng cho lựa chọn ``Khác''. Module \texttt{resumes} và \texttt{jobs} là hai matching entities chính. Module \texttt{documents} xử lý upload, parse jobs, extraction/preprocessing và worker. Module \texttt{matching} chứa hard filters, scoring, reasoning, embedding helper và vector search. Module \texttt{applications}, \texttt{invites}, \texttt{notifications} và \texttt{admin} triển khai workflow ATS-lite và monitoring.
+Dữ liệu CV/JD là dữ liệu nửa cấu trúc với độ nhiễu cao: parser có thể thiếu trường, mô tả kỹ năng không nhất quán, và nhiều biến thể ngôn ngữ. Ràng buộc dữ liệu này đòi hỏi kiến trúc phải chấp nhận ``không chắc chắn có cấu trúc'', tức là mỗi bước xử lý cần có trạng thái chất lượng và đường thoát khi độ tin cậy giảm.
+
+\subsection{Ràng buộc vận hành}
+
+Hệ thống cần phục vụ các thao tác có tần suất cao (tìm kiếm, so khớp, cập nhật trạng thái), vì vậy độ trễ và độ ổn định quan trọng ngang chất lượng xếp hạng. Một kiến trúc chỉ tối ưu chất lượng offline nhưng thiếu observability và cơ chế suy giảm mềm sẽ khó vận hành thực tế.
+
+\subsection{Ràng buộc tổ chức và governance}
+
+Quyết định tuyển dụng có tác động cao đến ứng viên và nhà tuyển dụng, nên hệ thống phải hỗ trợ giải thích ở mức nghiệp vụ và lưu dấu vết quyết định. Điều này buộc kiến trúc tách biệt rõ ``khuyến nghị'' khỏi ``quyết định cuối cùng'' để tránh tự động hóa quá mức không kiểm soát.
+
+\section{Thiết kế tổng thể theo lớp trách nhiệm}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox[c][5.4cm][c]{0.9\textwidth}{\centering
+TODO: upload image\\
+\textbf{Hình 3.1.} Kiến trúc tổng thể JobConnect MVP theo lớp trách nhiệm
+}}
+\caption{Placeholder sơ đồ kiến trúc tổng thể để thay bằng hình chuẩn dự án}
+\label{fig:jobconnect-architecture-placeholder}
+\end{figure}
+
+Kiến trúc được tách thành sáu lớp chính:
+
+\begin{itemize}
+  \item \textbf{API Contract Layer}: chuẩn hóa đầu vào/đầu ra và lỗi nghiệp vụ.
+  \item \textbf{Identity \& Access Layer}: xác thực, phân vai, giới hạn hành động theo trạng thái.
+  \item \textbf{Document Processing Layer}: ingest, parse, normalize, review.
+  \item \textbf{Matching Layer}: candidate generation, hard filter, scoring, reranking, explanation.
+  \item \textbf{ATS Workflow Layer}: ứng tuyển, lời mời, chuyển trạng thái, notification hooks.
+  \item \textbf{Observability \& Audit Layer}: logging có cấu trúc, metric, audit trail, cảnh báo.
+\end{itemize}
+
+Cách tách lớp này tạo lợi ích quan trọng: thay đổi trong matching logic không bắt buộc sửa workflow semantics; thay đổi UI/consumer không buộc rewrite pipeline xử lý tài liệu.
+
+\section{Design Decision Log (DDL)}
 
 \begin{table}[H]
-\caption{Feature modules và API namespace liên quan}
+\caption{Design Decision Log cho kiến trúc JobConnect MVP}
 \centering
-{\small
-\begin{tabularx}{\textwidth}{p{0.20\textwidth}p{0.38\textwidth}X}
+\begin{tabularx}{\textwidth}{p{0.07\textwidth}p{0.28\textwidth}p{0.25\textwidth}X}
 \toprule
-\textbf{Module} & \textbf{Namespace} & \textbf{Vai trò}\\
+\textbf{ID} & \textbf{Bài toán} & \textbf{Lựa chọn} & \textbf{Trade-off chính}\
+\\
 \midrule
-\texttt{auth} & \texttt{/api/auth/*} & Đăng ký, đăng nhập, logout, phát JWT.\\
-\texttt{users} & \texttt{/api/me} & Bootstrap thông tin user và role-specific profile.\\
-\texttt{organizations} & \texttt{/api/organizations/*} & Employer profile và Independent organization lookup.\\
-\texttt{resumes} & \texttt{/api/candidate/resumes/*} & Resume CRUD, activate/archive, search, semantic search.\\
-\texttt{jobs} & \texttt{/api/jobs/*} & Job CRUD, publish/close, search, semantic search.\\
-\texttt{documents} & \texttt{/api/documents/*} & Upload file, download URL, parse job status/retry.\\
-\texttt{matching} & \texttt{/api/matching/*} & Run job->resume và resume->job matching.\\
-\texttt{applications} & \texttt{/api/applications/*} & Apply và status transition.\\
-\texttt{invites} & \texttt{/api/invites/*} & Recruiter invite, candidate accept/reject.\\
-\texttt{admin} & \texttt{/api/admin/*} & Read-only monitoring.\\
+D1 & Chuẩn giao tiếp giữa module & Contract-first API & Tăng công thiết kế schema ban đầu, đổi lại giảm coupling dài hạn.\\
+D2 & Đưa dữ liệu parser vào matching khi nào & Parse-review-publish 3 trạng thái & Tăng một bước vận hành, đổi lại giảm lỗi lan truyền.\\
+D3 & Cách lọc ứng viên & Hard filter trước semantic score & Có thể loại sớm vài trường hợp biên, đổi lại tăng tính nhất quán nghiệp vụ.\\
+D4 & Cách sinh candidate & Hybrid lexical+dense & Tăng phức tạp chỉ mục, đổi lại tăng độ phủ ngữ nghĩa.\\
+D5 & Cách giải thích kết quả & Explanation theo thành phần & Ít chi tiết mô hình sâu, đổi lại dễ hiểu với người nghiệp vụ.\\
+D6 & Ranh giới matching/workflow & Tách khuyến nghị khỏi quyết định & Giảm tự động hóa toàn phần, tăng kiểm soát và auditability.\\
+D7 & Xử lý lỗi pipeline & Retry theo bước + dead-letter state & Tăng số trạng thái hệ thống, đổi lại tăng khả năng phục hồi.\\
+D8 & Quan sát vận hành & Structured logs + metric theo tầng & Tăng chi phí telemetry, đổi lại rút ngắn thời gian điều tra lỗi.\\
+D9 & Nâng cấp thuật toán theo thời gian & Progressive enhancement theo lớp & Tốc độ đạt SOTA chậm hơn, đổi lại giảm rủi ro big-bang refactor.\\
+D10 & Governance quyết định tuyển dụng & Human-in-the-loop bắt buộc & Giảm mức tự động, đổi lại phù hợp yêu cầu trách nhiệm giải trình.\\
 \bottomrule
 \end{tabularx}
-}% end small
 \end{table}
 
-Thiết kế module này giúp báo cáo và code có cùng ngôn ngữ. Khi nói về ``candidate resume lifecycle'', ta có thể chỉ thẳng vào module \texttt{resumes}; khi nói về ``parse worker'', ta chỉ vào module \texttt{documents}; khi nói về ``ranking explainability'', ta chỉ vào module \texttt{matching}. Điều này giảm rủi ro viết báo cáo ở mức trừu tượng xa code.
-
-\section{Thiết kế dữ liệu}
-
-Thiết kế dữ liệu JobConnect dựa trên ba nhóm invariant. Nhóm đầu tiên là invariant định danh và profile: một user có role, status và profile tương ứng. Nhóm thứ hai là invariant public pool: resume active và job published mới được search/match. Nhóm thứ ba là invariant lifecycle: apply/invite/status change phải tạo event, notification và audit tùy flow.
-
-\subsection{Identity và organization}
-
-\texttt{users} lưu email unique, password hash, role, status và timestamps. Password không bao giờ lưu plain text. \texttt{candidate\_profiles} chứa full name, phone, current location, total experience years và headline; \texttt{total\_experience\_years} chỉ là display metadata, không phải hard filter hoặc score input trong MVP \cite{requirements}. \texttt{recruiter\_profiles} liên kết recruiter user với organization. \texttt{organizations} có name, slug, logo URL và about; migration/seed phải tạo một row Independent có slug \texttt{independent} cho lựa chọn ``Khác''.
-
-\subsection{Resume và job}
-
-\texttt{candidate\_resumes} là matching entity phía CV. Các field required gồm \texttt{title}, \texttt{summary}, \texttt{experience}, \texttt{skills}, \texttt{location}, \texttt{job\_type}, \texttt{seniority}, \texttt{education}, \texttt{certifications}, \texttt{is\_primary}, \texttt{status}. \texttt{job\_posts} là matching entity phía JD, gồm \texttt{title}, \texttt{requirement}, \texttt{skills}, \texttt{location}, \texttt{job\_type}, \texttt{seniority}, \texttt{education}, \texttt{required\_certifications}, \texttt{status}, \texttt{published\_at}, \texttt{expires\_at}. Hai bảng này có GIN indexes cho skills/certifications và partial indexes cho public pool \cite{lld-schema}.
-
-\subsection{Documents, parse jobs và embeddings}
-
-\texttt{uploaded\_documents} lưu metadata file gốc: owner, document type, object key/file URL, original filename, MIME type, size và link đến resume/job nếu có. \texttt{parse\_jobs} lưu status, extracted text hoặc object key, parser version, embedding version requested, error code/message và timestamps. Parse job có thể chưa có \texttt{resume\_id} hoặc \texttt{job\_id} khi queued/processing; succeeded parse job phải link đúng một target entity \cite{lld-schema}.
-
-Embedding tables tách riêng khỏi business entity để hỗ trợ versioning và backfill. \texttt{candidate\_resume\_embeddings} có \texttt{emb\_title}, \texttt{emb\_skills}, \texttt{emb\_summary}, \texttt{emb\_experience}; \texttt{job\_post\_embeddings} có \texttt{emb\_title}, \texttt{emb\_skills}, \texttt{emb\_requirement}. Mỗi row có \texttt{embedding\_version}. Khi provider/model thay đổi, operator có thể tìm rows cần re-embedding bằng điều kiện \texttt{WHERE embedding\_version <> '<new>'}.
-
-\subsection{Applications, invites, notifications và audit}
-
-\texttt{applications} có unique constraint trên \texttt{(job\_id, resume\_id)}. Điều này đảm bảo một resume không apply trùng cùng một job. \texttt{application\_events} append-only status history. \texttt{recruiter\_invites} lưu lời mời từ recruiter cho một resume vào một job, với status \texttt{pending/accepted/rejected}. \texttt{notifications} lưu thông báo in-app và email delivery status. \texttt{audit\_logs} lưu business events quan trọng.
+\section{Thiết kế chi tiết pipeline dữ liệu CV--JD}
 
 \begin{figure}[H]
 \centering
-\fbox{\begin{minipage}{0.90\textwidth}
-\centering
-users -> candidate\_profiles -> candidate\_resumes -> candidate\_resume\_embeddings\\
-users -> recruiter\_profiles -> organizations -> job\_posts -> job\_post\_embeddings\\
-uploaded\_documents -> parse\_jobs -> resume/job draft fields\\
-job\_posts + candidate\_resumes -> applications / recruiter\_invites\\
-applications/invites/parse failures -> notifications + audit\_logs
-\end{minipage}}
-\caption{Quan hệ logic giữa các nhóm entity}
-\docsrc{\cite{hld-storage,lld-schema}.}
+\fbox{\parbox[c][5.2cm][c]{0.9\textwidth}{\centering
+TODO: upload image\\
+\textbf{Hình 3.2.} Pipeline parse/normalize: ingest $\rightarrow$ parse $\rightarrow$ review $\rightarrow$ publish
+}}
+\caption{Placeholder pipeline chuẩn hóa dữ liệu phục vụ matching}
+\label{fig:pipeline-parse-normalize-placeholder}
 \end{figure}
 
-\section{Thiết kế API}
+\subsection{Ingest và metadata capture}
 
-Base path production là \texttt{/api}. Đây là breaking replacement cho prototype-only routes dưới \texttt{/api/v2/prototype/*}. API contract quy định ID là JSON number đại diện cho BIGINT, timestamp là ISO 8601 có timezone, request/response schema explicit và unknown request fields bị reject trừ endpoint cho phép metadata JSON \cite{lld-api}.
+Bước ingest ghi nhận tài liệu thô, loại tài liệu, nguồn nộp, thời điểm và người thực hiện. Mục tiêu là tạo ngữ cảnh truy vết tối thiểu để mọi lỗi downstream có thể quay ngược về nguồn.
 
-{\small
-\begin{longtable}{p{0.38\textwidth}p{0.52\textwidth}}
-\caption{Production API namespaces}\\
+\subsection{Parse và chuẩn hóa trường}
+
+Bước parse tạo biểu diễn bán cấu trúc (skills, experience spans, education, role signals). Chuẩn hóa trường áp dụng mapping đồng nghĩa và kiểm tra nhất quán nội bộ (ví dụ năm kinh nghiệm âm, trường bắt buộc trống, định dạng thời gian không hợp lệ).
+
+\subsection{Review gate trước publish}
+
+Review gate là điểm kiểm soát chất lượng bắt buộc ở MVP. Nếu độ tin cậy dưới ngưỡng, hồ sơ được giữ ở trạng thái chờ hiệu chỉnh thay vì đưa thẳng vào matching. Quyết định này giảm sai lệch khó phát hiện ở downstream và bảo toàn niềm tin người dùng.
+
+\section{Thiết kế matching hai tầng và hợp nhất điểm}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox[c][5.2cm][c]{0.9\textwidth}{\centering
+TODO: upload image\\
+\textbf{Hình 3.3.} Luồng matching 2 tầng: điều kiện bắt buộc $\rightarrow$ chấm điểm ngữ nghĩa
+}}
+\caption{Placeholder sơ đồ matching hai tầng của JobConnect}
+\label{fig:two-stage-matching-placeholder}
+\end{figure}
+
+\subsection{Tầng hard filter}
+
+Hard filter kiểm tra các ràng buộc bất khả thương lượng (eligibility constraints). Ở mức hệ thống, hard filter tạo ``vành đai an toàn'' để semantic model không kéo các cặp không khả thi vào top-$k$.
+
+\subsection{Tầng semantic scoring}
+
+Sau hard filter, semantic scoring xử lý tương đồng ngữ nghĩa đa trường. Thay vì dùng một điểm ``opaque'', JobConnect lưu điểm thành phần để phục vụ explanation và calibration theo miền vị trí.
+
+\subsection{Weighted fusion và calibration}
+
+Điểm hợp nhất được tính bằng trọng số động theo cấu hình vị trí hoặc domain. Cơ chế calibration được đặt tách rời khỏi core scorer để tránh hard-code chính sách chấm điểm vào mô hình biểu diễn.
+
+\section{Pseudo-code cho hard-filter + scoring + explanation}
+
+\begin{lstlisting}[language={},caption={Pseudo-code lõi quyết định matching có giải thích},label={lst:core-matching-decision}]
+INPUT: anchor a, candidates C, constraints K, weights W
+OUTPUT: ranked list with explanation payload
+
+function CORE_MATCH(a, C, K, W):
+    valid <- []
+    for c in C:
+        hf <- evaluate_hard_filters(a, c, K)
+        if hf.pass == false:
+            continue
+
+        s_lex <- score_lexical(a, c)
+        s_dense <- score_dense(a, c)
+        s_rule <- score_rule_adjustment(a, c)
+
+        s_final <- W.lex*s_lex + W.dense*s_dense + W.rule*s_rule
+
+        exp <- {
+            "hard_filters": hf.details,
+            "component_scores": {
+                "lexical": s_lex,
+                "dense": s_dense,
+                "rule_adjustment": s_rule
+            },
+            "summary": summarize_reasoning(hf, s_lex, s_dense, s_rule),
+            "risk_flags": detect_data_risk(a, c)
+        }
+
+        valid.append((c, s_final, exp))
+
+    return sort_desc(valid, by="s_final")
+\end{lstlisting}
+
+Pseudo-code này minh họa nguyên tắc ``explanation-by-construction'': giải thích được sinh cùng lúc với điểm, không phải vá bổ sung sau khi xếp hạng xong.
+
+\section{Thiết kế explainability và risk flags}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox[c][4.8cm][c]{0.9\textwidth}{\centering
+TODO: upload image\\
+\textbf{Hình 3.4.} Explainability breakdown: hard constraints, component scores, risk flags
+}}
+\caption{Placeholder sơ đồ bóc tách giải thích kết quả}
+\label{fig:explainability-breakdown-placeholder}
+\end{figure}
+
+Explainability payload gồm bốn phần:
+
+\begin{itemize}
+  \item \textbf{Hard-filter verdict}: điều kiện nào đạt/không đạt.
+  \item \textbf{Component scores}: đóng góp từng thành phần điểm.
+  \item \textbf{Narrative summary}: diễn giải ngắn cho người nghiệp vụ.
+  \item \textbf{Risk flags}: cảnh báo dữ liệu thiếu, parser uncertainty, trường mâu thuẫn.
+\end{itemize}
+
+Cấu trúc này phục vụ hai đối tượng khác nhau: recruiter cần lý do hành động; đội kỹ thuật cần tín hiệu chẩn đoán chất lượng dữ liệu và scorer behavior.
+
+\section{Thiết kế ATS state machine và orchestration}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox[c][5.0cm][c]{0.9\textwidth}{\centering
+TODO: upload image\\
+\textbf{Hình 3.5.} State machine ứng tuyển/invite và các chuyển trạng thái chính
+}}
+\caption{Placeholder state machine cho ATS-lite workflow}
+\label{fig:state-machine-placeholder}
+\end{figure}
+
+State machine được thiết kế theo nguyên tắc ``explicit transition contract'': mỗi chuyển trạng thái đều cần actor hợp lệ, precondition rõ, và side effect được ghi audit. Cách tiếp cận này giảm lỗi ``nhảy trạng thái'' và tạo cơ sở phân tích chất lượng quy trình tuyển dụng.
+
+\section{Fault isolation và failure modes}
+
+Để vận hành bền vững, hệ thống cần tách failure mode theo lớp thay vì ``một trạng thái lỗi chung''. Bốn failure mode chính:
+
+\begin{itemize}
+  \item \textbf{FM1 -- Parse degradation}: dữ liệu văn bản khó trích xuất hoặc mất trường quan trọng.
+  \item \textbf{FM2 -- Retrieval drift}: truy vấn mới lệch phân bố khiến candidate generation suy giảm.
+  \item \textbf{FM3 -- Scoring instability}: điểm thành phần dao động bất thường giữa các lần chạy gần nhau.
+  \item \textbf{FM4 -- Workflow inconsistency}: chuyển trạng thái nghiệp vụ vi phạm precondition.
+\end{itemize}
+
+Mỗi failure mode được gắn cơ chế phản ứng riêng: retry, fallback, quarantine state, hoặc human review escalation. Thiết kế này giúp giảm MTTR và tránh lan lỗi giữa các lớp.
+
+\section{Contract-first API, observability và audit trail}
+
+Contract-first được dùng như lớp cách ly thay đổi: khi chỉnh scorer/explanation internals, API contract vẫn giữ ổn định để consumer không bị gãy luồng. Đây là điều kiện quan trọng để phát triển song song backend và lớp tiêu thụ dữ liệu \cite{hld-api,lld-api}.
+
+Ở lớp observability, hệ thống ghi metric theo tầng (ingest, parse, retrieval, scoring, workflow) và log cấu trúc theo request correlation id. Audit trail lưu actor, thời điểm, hành động và trạng thái trước/sau. Kết hợp ba lớp này cho phép vừa giám sát vận hành, vừa phục vụ kiểm tra hậu kiểm.
+
+\section{Phân tích lựa chọn thay thế và lý do loại trừ}
+
+\subsection{Alternative A: monolithic end-to-end model}
+
+\textbf{Ưu điểm}: đơn giản bề mặt kiến trúc, có thể tăng chất lượng top-$k$ nếu huấn luyện tốt.\
+\textbf{Lý do loại trừ}: khó giải thích, khó rollback từng phần, khó chẩn đoán lỗi theo lớp.
+
+\subsection{Alternative B: rule-based heavy system}
+
+\textbf{Ưu điểm}: dễ kiểm soát và dễ audit.\
+\textbf{Lý do loại trừ}: kém khả năng tổng quát ngữ nghĩa, chi phí bảo trì rule tăng nhanh theo domain.
+
+\subsection{Alternative C: KG-heavy + multi-agent from day one}
+
+\textbf{Ưu điểm}: tiềm năng suy luận giàu ngữ cảnh và mở rộng tri thức.\
+\textbf{Lý do loại trừ}: độ phức tạp mô hình hóa và orchestration quá cao so với vòng lặp MVP hiện tại.
+
+\section{Phân rã failure mode theo lớp và chiến lược phục hồi}
+
+Để kiến trúc có thể vận hành liên tục, mỗi lớp cần một chiến lược phản ứng lỗi độc lập thay vì phụ thuộc một cơ chế chung. Bảng dưới đây mô tả các failure mode chính và cơ chế phản hồi tương ứng.
+
+\begin{table}[H]
+\caption{Failure mode và chiến lược phục hồi theo lớp kiến trúc}
+\centering
+\begin{tabularx}{\textwidth}{p{0.16\textwidth}p{0.26\textwidth}p{0.24\textwidth}X}
 \toprule
-\textbf{Namespace} & \textbf{Mục đích}\\
+\textbf{Lớp} & \textbf{Failure mode} & \textbf{Phản ứng tức thời} & \textbf{Phản ứng dài hạn}\\
 \midrule
-\endfirsthead
-\toprule
-\textbf{Namespace} & \textbf{Mục đích}\\
-\midrule
-\endhead
-\texttt{/api/auth/*} & Register, login, logout, JWT session.\\
-\texttt{/api/me} & Current account và role-specific bootstrap data.\\
-\texttt{/api/candidate/profile} & Candidate profile read/upsert.\\
-\texttt{/api/candidate/resumes/*} & Resume CRUD, activation/archive, search, semantic search.\\
-\texttt{/api/recruiter/profile} & Recruiter profile read/upsert.\\
-\texttt{/api/organizations/*} & Organization create/update/list/detail.\\
-\texttt{/api/jobs/*} & Job CRUD, publish/close, search, semantic search.\\
-\texttt{/api/documents/*} & Multipart upload, document detail, download URL, parse jobs.\\
-\texttt{/api/matching/*} & Job anchor và resume anchor matching.\\
-\texttt{/api/applications/*} & Candidate apply, list/detail, status transition.\\
-\texttt{/api/invites/*} & Recruiter invite, candidate accept/reject.\\
-\texttt{/api/notifications/*} & Notification list/read/read-all.\\
-\texttt{/api/admin/*} & Admin monitoring users/documents/parse jobs/applications/invites/notifications/audit logs.\\
+Document Processing & Parser timeout, OCR lỗi, thiếu trường bắt buộc & Retry có giới hạn, chuyển trạng thái review-required & Cải thiện template parser, thêm kiểm tra tiền xử lý đầu vào.\\
+Retrieval & Candidate set rỗng bất thường, index lệch phiên bản & Fallback sang lexical-only hoặc dense-light & Chuẩn hóa quy trình phát hành index, thêm drift alert theo truy vấn.\\
+Hard Filter & Logic constraint sai phiên bản policy & Block transition và ghi audit cảnh báo & Thiết kế versioned business rules và regression suite cho constraint.\\
+Scoring/Rerank & Điểm dao động mạnh giữa lần chạy gần nhau & Khoá rerank depth, hạ về cấu hình ổn định hơn & Hiệu chỉnh normalization và tách tuning theo domain.\\
+Explanation & Payload thiếu thành phần hoặc narrative sai ngữ cảnh & Trả explanation tối thiểu + risk flag & Đồng bộ schema explanation với pipeline scoring bằng contract test.\\
+Workflow & Nhảy trạng thái không hợp lệ, race condition thao tác & Từ chối chuyển trạng thái, yêu cầu retry có điều kiện & Thiết kế optimistic lock/version check cho entity trạng thái.\\
+Observability & Thiếu log correlation hoặc metric gián đoạn & Gắn correlation id bắt buộc ở gateway & Chuẩn hóa telemetry contract và health checks cho pipeline quan sát.\\
 \bottomrule
-\end{longtable}
-}% end small
+\end{tabularx}
+\end{table}
 
-Một điểm thiết kế đáng chú ý là response list/detail cho frontend cần denormalized display summaries ở các nơi phù hợp. Ví dụ job list/search responses target cần \texttt{organization\_name}, \texttt{organization\_logo\_url}, \texttt{organization\_slug} để job cards không phải fetch organization từng row. Application/Invite summaries target cần \texttt{job\_summary} và \texttt{resume\_summary} để table/detail ổn định \cite{hld-api,lld-api}.
+Cách phân rã này giúp cô lập lỗi theo tầng, rút ngắn thời gian điều tra và giảm xác suất ``chữa nhầm lớp''. Trong thực tế, khả năng khoanh vùng lỗi nhanh thường quyết định độ tin cậy hệ thống không kém chất lượng mô hình.
 
-\section{Thiết kế luồng runtime}
+\section{Khung testability cho decision architecture}
 
-\subsection{Candidate CV flow}
+Một kiến trúc đúng chỉ có giá trị khi kiểm thử được. Với JobConnect, testability được thiết kế theo ba trục:
 
-Luồng candidate bắt đầu từ register/login, sau đó candidate tạo profile, upload CV hoặc tạo resume thủ công. Upload CV tạo document và parse job. Khi parse succeeded, candidate review parsed fields và save corrections vào draft resume. Resume chỉ vào public pool khi candidate gọi activate. Sau đó candidate có thể search Job Market hoặc run matching từ một active resume để tìm published jobs. Apply tạo application với status \texttt{submitted}; responding invite có thể accept hoặc reject.
+\begin{itemize}
+  \item \textbf{Contract test}: kiểm tra tính ổn định API và explanation schema khi thay scorer.
+  \item \textbf{Scenario test}: kiểm tra chuỗi nghiệp vụ từ ingest đến workflow action.
+  \item \textbf{Resilience test}: kiểm tra hành vi hệ thống khi từng lớp suy giảm cục bộ.
+\end{itemize}
+
+\begin{lstlisting}[language={},caption={Pseudo-code kiểm thử resilience theo lớp},label={lst:resilience-test-harness}]
+function RUN_RESILIENCE_TEST(test_case):
+    setup_seed_data(test_case.data_profile)
+    inject_fault(test_case.layer, test_case.fault_type)
+
+    result <- execute_end_to_end_flow(test_case.flow)
+
+    assert result.system_alive == true
+    assert result.fallback_triggered in test_case.allowed_fallbacks
+    assert result.audit_trail_complete == true
+    assert result.state_consistency == true
+
+    collect_metrics(result)
+    rollback_fault_injection()
+\end{lstlisting}
+
+Khung này bảo đảm các quyết định ở Design Decision Log không chỉ tồn tại trên tài liệu mà có thể kiểm chứng bằng bằng chứng chạy thực tế.
+
+\section{Bổ sung thiết kế dữ liệu quan sát (observability data model)}
+
+Ngoài dữ liệu nghiệp vụ chính, hệ thống cần một lớp dữ liệu quan sát có cấu trúc. Mỗi sự kiện quan trọng được ghi với tối thiểu các trường: \texttt{event\_time}, \texttt{actor}, \texttt{entity\_type}, \texttt{entity\_id}, \texttt{stage}, \texttt{action}, \texttt{status\_before}, \texttt{status\_after}, \texttt{error\_code}, \texttt{model\_version}, \texttt{index\_version}, \texttt{trace\_id}.
+
+Thiết kế này tạo ba năng lực:
+
+\begin{itemize}
+  \item Truy vết toàn tuyến cho một quyết định tuyển dụng.
+  \item So sánh hành vi trước/sau khi nâng cấp mô hình hoặc chỉ mục.
+  \item Phân tích nguyên nhân gốc khi xuất hiện drift hoặc khiếu nại kết quả.
+\end{itemize}
+
+Nếu thiếu observability data model, hệ thống dễ rơi vào trạng thái ``có log nhưng không có bằng chứng'', khiến việc hậu kiểm phụ thuộc suy đoán thay vì dữ liệu.
+
+\section{Kiến trúc mở rộng theo từng pha mà không phá vỡ lõi}
+
+Decision architecture của JobConnect được thiết kế theo hướng mở rộng dần:
+
+\begin{itemize}
+  \item \textbf{Pha 1}: củng cố pipeline hiện tại, hoàn thiện telemetry, chuẩn hóa explanation.
+  \item \textbf{Pha 2}: thêm reranking sâu có kiểm soát và calibration theo nhóm vị trí.
+  \item \textbf{Pha 3}: thử nghiệm KG augmentation hoặc attribution nâng cao trên domain hẹp.
+\end{itemize}
 
 \begin{figure}[H]
 \centering
-\fbox{\begin{minipage}{0.92\textwidth}
-\centering
-register/login -> profile -> upload CV -> parse job -> review -> activate resume\\
--> search/match published jobs -> apply hoặc respond invite
-\end{minipage}}
-\caption{Luồng candidate từ CV đến ứng tuyển}
-\docsrc{\cite{hld-api}.}
+\fbox{\parbox[c][4.8cm][c]{0.9\textwidth}{\centering
+TODO: upload image\\
+\textbf{Hình 3.7.} Lộ trình mở rộng kiến trúc theo pha (không phá vỡ core contract)
+}}
+\caption{Placeholder lộ trình mở rộng kiến trúc theo pha}
+\label{fig:architecture-phased-evolution-placeholder}
 \end{figure}
 
-\subsection{Recruiter JD flow}
+Lợi ích của lộ trình này là giảm rủi ro thay đổi đồng loạt. Mỗi pha chỉ tăng độ phức tạp ở phạm vi có thể quan sát và rollback, giữ ổn định cho lớp workflow và API đã chạy sản phẩm.
 
-Recruiter đăng ký, chọn organization, tạo recruiter profile, tạo hoặc upload JD. JD upload cũng tạo document và parse job. Sau khi review parsed job fields, recruiter publish job để đưa vào public job pool. Recruiter chạy Talent Market search hoặc matching từ published job để tìm active resumes. Nếu phù hợp, recruiter tạo invite. Invite pending không tạo application; accept mới tạo application nếu chưa tồn tại.
+\section{Chiến lược versioning policy--model--index và rollback an toàn}
 
-\subsection{Matching flow}
+Một rủi ro lớn của hệ thống matching thực chiến là bất đồng bộ phiên bản giữa policy nghiệp vụ, mô hình embedding và chỉ mục truy hồi. Khi ba thành phần thay đổi không đồng bộ, cùng một truy vấn có thể sinh quyết định khác nhau mà không truy vết được nguyên nhân.
 
-Matching flow bắt đầu bằng auth và role validation. Với job anchor, recruiter phải sở hữu published job hoặc admin bypass; với resume anchor, candidate phải sở hữu active resume hoặc admin bypass. Hệ thống lấy opposite pool theo visibility, apply hard filters, score, optional rerank, rồi trả ranked results với reasoning. Matching không có side effect tạo application/invite.
+Vì vậy, JobConnect cần chiến lược ``triple-version contract'':
+\begin{itemize}
+  \item \textbf{Policy version}: phiên bản luật lọc cứng, workflow constraint, và ngưỡng quyết định.
+  \item \textbf{Model version}: phiên bản embedding/scoring model được áp dụng.
+  \item \textbf{Index version}: phiên bản chỉ mục lexical/dense được publish.
+\end{itemize}
 
-\subsection{Application và invite flow}
+Mỗi kết quả matching phải mang bộ ba phiên bản này trong metadata. Khi có khiếu nại hoặc regression, hệ thống có thể tái chạy với đúng bộ phiên bản để xác định sai khác nằm ở đâu.
 
-Application flow có side effects rõ: candidate apply hoặc accepted invite tạo application, append application event, create notification và write audit event. Status update cũng append event, notify candidate hoặc recruiter theo flow và write audit. Email failure không rollback business transaction, chỉ log để retry hoặc operational review \cite{hld-security}.
+\begin{table}[H]
+\caption{Luật kích hoạt rollback theo tín hiệu suy giảm}
+\centering
+\begin{tabularx}{\textwidth}{p{0.26\textwidth}p{0.18\textwidth}X}
+\toprule
+\textbf{Tín hiệu quan sát} & \textbf{Rollback scope} & \textbf{Hành động}\\
+\midrule
+Latency P95 vượt ngưỡng nhiều chu kỳ & Index/serving config & Giảm rerank depth, tạm khóa cấu hình nặng, quay về profile ổn định.\\
+Tỷ lệ vi phạm hard constraints tăng & Policy version & Rollback policy về phiên bản trước và mở audit so sánh rule diff.\\
+Độ ổn định ranking suy giảm mạnh sau deploy & Model version & Rollback model embedding và đánh dấu lần chạy cần tái hiệu chỉnh calibration.\\
+Explanation thiếu thành phần bắt buộc & API contract + scorer & Khóa publish phiên bản mới, trả response fallback có risk flag, sửa scorer pipeline.\\
+\bottomrule
+\end{tabularx}
+\end{table}
 
-\section{Thiết kế bảo mật và quyền truy cập}
+Thiết kế này làm tăng chi phí ghi nhận metadata ban đầu, nhưng giảm mạnh thời gian xử lý sự cố và tăng khả năng kiểm chứng quyết định khi cần audit.
 
-Thiết kế bảo mật của JobConnect đặt trọng tâm vào role, ownership và visibility. Candidate chỉ quản lý tài nguyên của mình; recruiter chỉ quản lý job và recruiting actions được phép; admin read-only monitoring. Disabled users bị chặn khỏi các active marketplace actions. Hệ thống không có tenant isolation trong MVP, nên không được thêm logic private workspace ẩn làm sai product model.
+\section{Anti-pattern kiến trúc cần tránh trong hệ matching tuyển dụng}
 
-Privacy của candidate là điểm cần lưu ý. Recruiters có thể search/match active resumes, nhưng candidate contact fields không nên hiển thị rộng rãi nếu chưa có application hoặc invite flow cần thiết. Điều này cần được thể hiện ở response DTO, không chỉ ở frontend. Nếu runtime dùng cùng \texttt{ResumeDetail} cho candidate và recruiter mà chưa tách privacy DTO, đây là điểm cần hardening trong các phiên bản sau.
+Ngoài các phương án thay thế đã phân tích, cần nêu rõ các anti-pattern triển khai thường gây thất bại:
 
-\section{Thiết kế observability}
+\begin{itemize}
+  \item \textbf{Over-coupled pipeline}: retrieval, filter, scoring và explanation nằm chung một khối logic khó kiểm thử.
+  \item \textbf{Silent fallback}: hệ thống fallback nhưng không đánh dấu trong response/audit, gây hiểu nhầm chất lượng.
+  \item \textbf{Policy hidden in code}: luật nghiệp vụ nằm rải rác trong hàm scoring, khó cập nhật khi quy trình tuyển dụng đổi.
+  \item \textbf{Metric myopia}: tối ưu một metric ranking đơn lẻ mà bỏ qua latency, stability và thao tác vận hành.
+\end{itemize}
 
-Minimum operational signals gồm parse queue state, parse failure reasons, matching request count/latency, notification creation, email delivery failures, application/invite lifecycle events và API error rates cho auth/upload/parse/matching/application flows \cite{hld-security}. Trong MVP, audit log và notification table đóng vai trò nền tảng để quan sát business events. Runtime metrics trong matching gồm \texttt{total\_ms}, \texttt{retrieval\_ms}, \texttt{filter\_ms}, \texttt{scoring\_ms}, \texttt{rerank\_ms}, candidate counts before/after hard filters, rerank-applied flag và warnings \cite{hld-matching}.
+Các anti-pattern này đặc biệt nguy hiểm trong ATS-lite vì người dùng kỳ vọng quyết định có thể giải thích được ở cấp thao tác. Một pipeline chỉ ``đúng thuật toán'' nhưng ``không đúng vận hành'' vẫn thất bại khi đưa vào quy trình tuyển dụng thật.
 
-Thiết kế observability này có ý nghĩa thực tế. Nếu matching trả ít kết quả, hệ thống cần biết do candidate pool nhỏ, hard filters quá chặt, embedding thiếu hay min score quá cao. Nếu parse job failed nhiều, operator cần phân biệt lỗi extraction, LLM parse hay embedding. Nếu email không gửi được, business transaction vẫn thành công nhưng operational review cần thấy \texttt{email\_delivery\_status}.
+\section{Khung ownership và trách nhiệm vận hành theo lớp}
 
-\section{Điểm sáng tạo và khác biệt của mô hình đề xuất}
+Để tránh vùng xám trách nhiệm, decision architecture cần gắn với ownership rõ theo lớp:
 
-Điểm sáng tạo của JobConnect không nằm ở việc dùng một model AI duy nhất, mà nằm ở cách kết hợp rule nghiệp vụ, structured data và semantic representation. Hệ thống không giao toàn bộ quyết định cho LLM. LLM/parser chỉ chuyển text thành field canonical; hard filters quyết định eligibility; vector retrieval tạo candidate set; deterministic formula tính score; reranker chỉ là lớp tăng chất lượng tùy chọn; reasoning phải grounded. Thiết kế này giúp hệ thống vừa tận dụng ngữ nghĩa của CV/JD, vừa giữ được tính kiểm soát và khả năng giải thích.
+\begin{table}[H]
+\caption{Phân tách ownership cho lớp kỹ thuật và lớp nghiệp vụ}
+\centering
+\begin{tabularx}{\textwidth}{p{0.2\textwidth}p{0.22\textwidth}X}
+\toprule
+\textbf{Lớp} & \textbf{Owner chính} & \textbf{Trách nhiệm}\\
+\midrule
+Ingestion/Parsing & Data engineering & Đảm bảo chất lượng dữ liệu đầu vào, phát hiện thiếu trường trọng yếu, kiểm soát parser drift.\\
+Retrieval/Ranking & ML/IR engineering & Hiệu chỉnh candidate generation, fusion, rerank; theo dõi chất lượng và độ trễ.\\
+Workflow/Policy & Product + backend & Quản trị trạng thái nghiệp vụ, ngưỡng quyết định, và tính hợp lệ chuyển trạng thái.\\
+Observability/Audit & Platform/ops & Duy trì telemetry contract, cảnh báo suy giảm, hỗ trợ truy vết sự cố và kiểm toán.\\
+\bottomrule
+\end{tabularx}
+\end{table}
 
-Khác biệt thứ hai là mô hình two-way marketplace. Nhiều hệ thống chỉ tối ưu job-to-candidate matching cho recruiter. JobConnect yêu cầu cả candidate anchor và recruiter anchor: candidate dùng active resume để tìm published jobs, recruiter dùng published job để tìm active resumes. Điều này ảnh hưởng trực tiếp đến API, authorization, visibility và tie-break: resume anchor sort tie theo \texttt{job\_id ASC}, job anchor sort tie theo \texttt{resume\_id ASC}.
+Khi ownership rõ, quá trình nâng cấp theo pha có thể thực hiện song song mà không phá vỡ contract tổng thể. Đây cũng là điều kiện thực tế để roadmap Chương 4 khả thi.
 
-Khác biệt thứ ba là thiết kế rõ future provider boundaries. Local deterministic parser, local hash embedding và local reranker giúp dev/test chạy không cần credential. OpenAI-compatible parser và embedding provider sẵn sàng dùng khi có credential. Storage adapter mặc định local filesystem, nhưng cloud adapter có thể slot in qua protocol. Cách này giảm rủi ro vendor lock-in và giúp MVP vẫn chạy được trong môi trường phát triển.
+\section{Kết luận chương}
+
+Chương 3 đã cụ thể hóa khung lý thuyết thành hệ quyết định kiến trúc có thể kiểm chứng. Điểm cốt lõi của thiết kế là tách lớp trách nhiệm, kiểm soát failure mode, và tạo explainability ngay trong lõi quyết định. Cấu trúc này cho phép JobConnect vận hành ổn định ở MVP, đồng thời để mở đường nâng cấp dần về thuật toán mà không phá vỡ workflow và contract đã có.

@@ -47,6 +47,9 @@ integrations, and feature modules. The module folders now include
 `router.py/schemas.py/service.py` scaffolds for API split work; runtime behavior
 is still driven by the current legacy API core implementation.
 
+Runtime data access uses `psycopg` + raw SQL in module services. SQLAlchemy ORM
+is currently used only for seed/reset tooling under `backend/db/seeds/*`.
+
 ## Runtime
 
 ```bash
@@ -59,6 +62,23 @@ Apply schema migrations:
 
 ```bash
 docker compose exec backend python db/apply_migrations.py
+```
+
+Apply demo seed data (SQLAlchemy ORM tooling, separate from migrations):
+
+```bash
+# install tooling dependency for the running backend container
+docker compose exec backend pip install -r db/seeds/requirements-seed.txt
+
+# seed profile
+docker compose exec backend python -m db.seeds.cli seed --profile demo
+
+# scoped reset + reseed (table changed + related records)
+docker compose exec backend python -m db.seeds.cli reset --target jobs --with-related
+docker compose exec backend python -m db.seeds.cli reseed --target jobs --profile demo --with-related
+
+# dry-run without commit
+docker compose exec backend python -m db.seeds.cli dry-run --mode seed --profile demo --target all
 ```
 
 ## Tests

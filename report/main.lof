@@ -1,9 +1,19 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {2.1}{\ignorespaces Kiến trúc runtime tổng quát của JobConnect}}{14}{figure.caption.12}%
-\contentsline {figure}{\numberline {2.2}{\ignorespaces Pipeline xử lý CV/JD từ file đến public pool}}{16}{figure.caption.14}%
+\contentsline {figure}{\numberline {2.1}{\ignorespaces Placeholder tổng quan related work theo cụm phương pháp}}{15}{figure.caption.11}%
+\contentsline {figure}{\numberline {2.2}{\ignorespaces Placeholder kiến trúc retrieval lai dùng cho thuyết minh Chương 2}}{15}{figure.caption.12}%
+\contentsline {figure}{\numberline {2.3}{\ignorespaces Placeholder khung giải thích kết quả so khớp}}{15}{figure.caption.13}%
+\contentsline {figure}{\numberline {2.4}{\ignorespaces Placeholder chu trình phát hiện drift, hiệu chỉnh cấu hình và xác nhận hồi quy}}{23}{figure.caption.17}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {3.1}{\ignorespaces Quan hệ logic giữa các nhóm entity}}{26}{figure.caption.17}%
-\contentsline {figure}{\numberline {3.2}{\ignorespaces Luồng candidate từ CV đến ứng tuyển}}{27}{figure.caption.18}%
+\contentsline {figure}{\numberline {3.1}{\ignorespaces Placeholder sơ đồ kiến trúc tổng thể để thay bằng hình chuẩn dự án}}{26}{figure.caption.18}%
+\contentsline {figure}{\numberline {3.2}{\ignorespaces Placeholder pipeline chuẩn hóa dữ liệu phục vụ matching}}{29}{figure.caption.20}%
+\contentsline {figure}{\numberline {3.3}{\ignorespaces Placeholder sơ đồ matching hai tầng của JobConnect}}{30}{figure.caption.21}%
+\contentsline {figure}{\numberline {3.4}{\ignorespaces Placeholder sơ đồ bóc tách giải thích kết quả}}{32}{figure.caption.22}%
+\contentsline {figure}{\numberline {3.5}{\ignorespaces Placeholder state machine cho ATS-lite workflow}}{33}{figure.caption.23}%
+\contentsline {figure}{\numberline {3.6}{\ignorespaces Placeholder lộ trình mở rộng kiến trúc theo pha}}{38}{figure.caption.25}%
 \addvspace {10\p@ }
+\contentsline {figure}{\numberline {4.1}{\ignorespaces Placeholder sơ đồ luồng thực nghiệm end-to-end}}{42}{figure.caption.28}%
+\contentsline {figure}{\numberline {4.2}{\ignorespaces Placeholder sơ đồ roadmap nâng cấp theo giai đoạn}}{49}{figure.caption.31}%
+\contentsline {figure}{\numberline {4.3}{\ignorespaces Placeholder sơ đồ ablation framework cho pipeline nhiều tầng}}{52}{figure.caption.34}%
+\contentsline {figure}{\numberline {4.4}{\ignorespaces Placeholder bản đồ lỗi hệ thống và ưu tiên xử lý theo giai đoạn}}{55}{figure.caption.37}%
 \addvspace {10\p@ }

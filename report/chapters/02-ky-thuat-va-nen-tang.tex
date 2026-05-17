@@ -1,186 +1,379 @@
 \chapter{Mô hình và kỹ thuật nền tảng}
 
-\section{Kiến trúc web API với FastAPI}
+\section{Đặt vấn đề học thuật cho bài toán CV--JD matching}
 
-Backend JobConnect dùng FastAPI làm lớp API runtime. Đây không phải lựa chọn được ghi chung chung là ``web framework'', mà gắn trực tiếp với dependency \texttt{fastapi==0.115.6} trong \texttt{backend/requirements.txt}. FastAPI phù hợp với dự án vì cung cấp request validation, response model, dependency injection, OpenAPI generation và khả năng tổ chức router theo module. Trong repository, app entrypoint nằm tại \texttt{backend/src/jobconnect/main.py}, metadata và router registration nằm tại \texttt{backend/src/jobconnect/app.py}, còn production API router aggregator nằm tại \texttt{backend/src/jobconnect/modules/api/router.py}.
+Bài toán so khớp CV--JD có thể được mô hình hóa như một bài toán truy hồi và xếp hạng có ràng buộc nghiệp vụ. Cho một thực thể neo $a$ (có thể là CV hoặc JD), mục tiêu là xây dựng một hàm xếp hạng $f(a,b)$ trên tập ứng viên $\mathcal{B}$ để tạo ra danh sách top-$k$ phục vụ quyết định tuyển dụng. Khác với truy hồi văn bản tổng quát, không gian quyết định ở đây chịu tác động đồng thời bởi: (i) tương đồng ngữ nghĩa đa trường, (ii) điều kiện cứng theo chính sách tuyển dụng, và (iii) yêu cầu giải trình ở mức nghiệp vụ \cite{requirements,hld-matching,hld-api}.
 
-Theo tài liệu kiến trúc \cite{hld-architecture}, runtime được chia thành các lớp: API layer, auth/authorization layer, domain services, data access layer, worker layer và external services. Cách chia này tránh để endpoint chứa toàn bộ logic nghiệp vụ. API layer chịu trách nhiệm validate request và trả schema rõ ràng; service layer xử lý trạng thái nghiệp vụ như activate resume, publish job, accept invite; data layer làm việc với PostgreSQL; worker layer xử lý parse/embedding; external services được bọc qua integration boundary.
+Trên phương diện nghiên cứu, cộng đồng Information Retrieval (IR) đã dịch chuyển từ truy hồi từ vựng thuần sang các pipeline nhiều tầng, trong đó tầng đầu tối ưu khả năng bao phủ (recall), còn tầng sau tối ưu chất lượng top-$k$ và diễn giải \cite{prf-bm25,dpr,splade,colbertv2,hyrr}. Trong bối cảnh tuyển dụng, các nghiên cứu chuyên miền cũng cho thấy một mô hình duy nhất hiếm khi đủ đáp ứng cả ba mục tiêu chất lượng, chi phí và giải thích \cite{ibm-siamese-job,consultantbert,ai-hiring-context}.
 
-\begin{figure}[H]
-\centering
-\fbox{\begin{minipage}{0.88\textwidth}
-\centering
-\textbf{FastAPI app}\\[0.3em]
-auth -- users/profiles -- organizations -- documents -- resumes -- jobs\\
-matching/search -- applications -- invites -- notifications -- admin\\[0.8em]
-\textbf{Workers}\\
-object storage read -> extraction -> preprocessing -> parser -> embeddings\\[0.8em]
-\textbf{PostgreSQL + pgvector}\\
-business entities + resume/job embedding tables
-\end{minipage}}
-\caption{Kiến trúc runtime tổng quát của JobConnect}
-\docsrc{\cite{hld-architecture}.}
-\end{figure}
+Vì vậy, chương này không chỉ liệt kê kỹ thuật, mà thiết lập một khung lập luận để trả lời ba câu hỏi cốt lõi:
 
-FastAPI còn quan trọng vì OpenAPI là contract surface cho frontend. Tài liệu API LLD yêu cầu mọi route có request/response schema explicit, mọi enum phải thể hiện trong OpenAPI và mọi lỗi business phải đi qua error envelope thống nhất \cite{lld-api}. Vì vậy hệ thống không nên trả response tùy tiện theo từng endpoint; nó cần schema rõ cho \texttt{AuthResponse}, \texttt{CandidateResumeSummary}, \texttt{JobPostSummary}, \texttt{ApplicationSummary}, \texttt{InviteSummary}, semantic search responses và matching responses.
+\begin{itemize}
+  \item Kỹ thuật nào phù hợp với đặc tính dữ liệu CV/JD phi cấu trúc và không đồng nhất?
+  \item Kỹ thuật nào có thể vận hành ở mức MVP với chi phí hợp lý?
+  \item Kỹ thuật nào tạo nền cho explainability thay vì triệt tiêu explainability?
+\end{itemize}
 
-\section{Pydantic, schema validation và error envelope}
+\section{Related Work theo cụm phương pháp}
 
-Pydantic \texttt{2.11.7} được dùng cho request/response model. Vai trò của Pydantic trong hệ thống không chỉ là kiểu dữ liệu Python, mà là lớp bảo vệ API contract. Các request như create resume, update job, semantic search, application status update hoặc invite request phải reject field lạ nếu endpoint không cho phép metadata JSON. Theo implementation matrix, Pydantic models dùng \texttt{extra="forbid"} ở nhiều nơi, và PATCH endpoints đã được điều chỉnh theo hướng partial update bằng \texttt{exclude\_unset} \cite{implementation-matrix}.
+\subsection{Nhóm lexical retrieval và probabilistic ranking}
 
-Error envelope target có dạng:
+Hướng lexical retrieval dựa trên biểu diễn từ vựng và xác suất liên quan, với BM25 là chuẩn thực hành bền vững trong nhiều hệ thống tìm kiếm công nghiệp \cite{prf-bm25}. Lợi thế cốt lõi của hướng này là diễn giải trực quan: có thể truy dấu truy vấn trùng từ nào, ở trường nào, và mức đóng góp ra sao vào điểm cuối. Với miền tuyển dụng, nơi nhiều tín hiệu cứng được biểu đạt rõ theo từ khóa (kỹ năng, chứng chỉ, công nghệ), lexical retrieval có thể tạo precision tốt ở tầng đầu khi dữ liệu chuẩn hóa ở mức khá.
 
-\begin{lstlisting}[caption={Error envelope target trong API contract}]
-{
-  "error": {
-    "code": "validation_error",
-    "message": "Request validation failed.",
-    "fields": {
-      "email": "Invalid email address."
-    },
-    "request_id": "req_01hxyz"
-  }
-}
+Tuy nhiên, lexical retrieval gặp giới hạn trong xử lý tương đương nghĩa và biểu đạt đa dạng. Hai JD có cùng bản chất công việc nhưng dùng từ khác nhau có thể bị xem là xa nhau. Do đó, lexical retrieval khó đóng vai trò duy nhất nếu mục tiêu là tối ưu matching ngữ nghĩa trong tập dữ liệu dị thể.
+
+\subsection{Nhóm dense retrieval và biểu diễn ngữ nghĩa}
+
+Dense retrieval biểu diễn truy vấn và tài liệu bằng vector ngữ nghĩa trong không gian liên tục; các công trình như DPR chứng minh mức cải thiện đáng kể so với sparse baseline trong nhiều bài toán truy hồi mở \cite{dpr}. Cùng hướng đó, SBERT mở ra cơ chế biểu diễn câu hiệu quả để so sánh semantic similarity bằng cosine, phù hợp các hệ thống cần suy luận ngữ nghĩa ở chi phí vừa phải \cite{sbert}.
+
+Trong bài toán tuyển dụng, conSultantBERT cho thấy fine-tune embedding theo miền CV/JD có thể cải thiện đáng kể so với TF-IDF và embedding chưa hiệu chỉnh miền \cite{consultantbert}. Công trình Deep Siamese Matching cũng xác nhận lợi ích của học biểu diễn cặp hồ sơ--công việc trong không gian chung \cite{ibm-siamese-job}. Tuy vậy, dense retrieval đòi hỏi kiểm soát kỹ rủi ro drift dữ liệu và chi phí suy luận, đặc biệt khi quy mô hồ sơ tăng nhanh hoặc khi cần đáp ứng độ trễ thấp.
+
+\subsection{Nhóm hybrid retrieval và late interaction}
+
+Nghiên cứu gần đây cho thấy kết hợp sparse + dense thường ổn định hơn so với dùng đơn lẻ một trường phái. SPLADE là một ví dụ học sparse lexical expansion bằng neural model để giữ ưu điểm sparse index nhưng tăng bao phủ ngữ nghĩa \cite{splade}. ColBERTv2 khai thác late interaction token-level để cải thiện chất lượng truy hồi mà vẫn kiểm soát footprint ở mức khả dụng hơn các thiết kế đa vector truyền thống \cite{colbertv2}. HYRR tiếp tục đẩy xa hơn ở tầng reranking bằng cách huấn luyện với tín hiệu hybrid để tăng độ bền trước thay đổi retriever tầng đầu \cite{hyrr}.
+
+Điểm quan trọng từ cụm nghiên cứu này là: hybrid không phải thủ thuật vá lỗi, mà là chiến lược thiết kế pipeline. Nó chấp nhận rằng sparse và dense có failure mode khác nhau; kết hợp đúng cách sẽ triệt tiêu điểm yếu lẫn nhau ở nhiều ngữ cảnh truy vấn.
+
+\subsection{Nhóm learning-to-rank và reranking}
+
+Learning-to-Rank (LTR) cung cấp cách tối ưu trực tiếp các mục tiêu xếp hạng như NDCG, với các đại diện thực dụng như LambdaMART \cite{lambdamart}. LTR đặc biệt phù hợp khi có dữ liệu nhãn đủ chất lượng theo đúng miền nghiệp vụ. Trong thực tế tuyển dụng, vấn đề là nhãn thường phân tán theo tổ chức, vai trò và giai đoạn, dễ gây bias theo lịch sử tuyển dụng. Vì vậy, khi dùng LTR cần thiết kế rõ pipeline tạo nhãn, kiểm soát leakage, và tách đánh giá offline khỏi tác động vận hành thực tế.
+
+\subsection{Nhóm explainability cho ranking và algorithmic hiring}
+
+Từ góc nhìn IR, Rank-LIME cho thấy khả năng tạo feature attribution cục bộ cho mô hình xếp hạng \cite{ranklime}. Từ góc nhìn hệ thống nhân sự, các tổng quan về AI hiring nhấn mạnh yêu cầu minh bạch, công bằng thủ tục, và khả năng giải thích cho các quyết định có tác động tới ứng viên \cite{ai-hiring-context,ethics-ai-recruiting}. Kết hợp hai chiều này cho thấy explainability trong tuyển dụng nên có hai lớp: lớp kỹ thuật (model behavior) và lớp nghiệp vụ (lý do hành động được/không được đề xuất). Nếu thiếu lớp nghiệp vụ, giải thích thuần mô hình khó chuyển hóa thành quyết định vận hành.
+
+\subsection{Nhóm ATS workflow orchestration trong thực tiễn}
+
+Các nền tảng ATS thương mại lớn đều thể hiện rõ đặc điểm: matching chỉ là một phần của chuỗi workflow rộng hơn gồm intake, screening, trạng thái ứng tuyển, giao tiếp và báo cáo \cite{greenhouse,lever,workday}. Điều này củng cố luận điểm rằng thiết kế hệ thống matching phải đồng thiết kế với orchestration và state machine; nếu tách rời hai lớp này, chất lượng thuật toán khó chuyển thành giá trị vận hành nhất quán.
+
+\section{Mô hình toán học cho xếp hạng nhiều tầng}
+
+Giả sử với một thực thể neo $a$, tập ứng viên sau truy hồi tầng đầu là $\mathcal{C}(a)=\{b_1,\dots,b_n\}$. Điểm cuối cho từng cặp $(a,b)$ được tính theo mô hình hai tầng:
+
+\begin{equation}
+S(a,b)=\mathbb{I}\big(H(a,b)=1\big)\cdot \left(\alpha\,L(a,b)+\beta\,D(a,b)+\gamma\,R(a,b)\right)
+\end{equation}
+
+trong đó:
+
+\begin{itemize}
+  \item $H(a,b)$ là hàm hard-filter (1 nếu đạt mọi điều kiện bắt buộc, 0 nếu không).
+  \item $L(a,b)$ là lexical score đã chuẩn hóa.
+  \item $D(a,b)$ là dense semantic score đã chuẩn hóa.
+  \item $R(a,b)$ là tín hiệu reranking hoặc adjustment theo quy tắc nghiệp vụ.
+  \item $\alpha,\beta,\gamma\ge0$ và $\alpha+\beta+\gamma=1$.
+\end{itemize}
+
+Mô hình này phản ánh đúng trực giác vận hành: cặp không khả thi bị loại trước khi so điểm phù hợp. Trong triển khai thực tế, các score thành phần cần chuẩn hóa để tránh bias do thang đo khác nhau. Một dạng chuẩn hóa ổn định là min-max theo batch truy hồi:
+
+\begin{equation}
+\tilde{x}=\frac{x-x_{\min}}{x_{\max}-x_{\min}+\varepsilon}
+\end{equation}
+
+hoặc chuẩn hóa z-score khi cần so sánh xuyên batch. Việc chọn cơ chế chuẩn hóa cần nhất quán với mục tiêu quan sát drift theo thời gian.
+
+\section{Pseudo-code cho pipeline retrieval -> rerank}
+
+\begin{lstlisting}[language={},caption={Pseudo-code pipeline so khớp CV--JD nhiều tầng (retrieval -> rerank)},label={lst:retrieval-rerank-pipeline}]
+INPUT: anchor a, candidate_pool B, constraints C, top_k k
+OUTPUT: ranked list R with explanations E
+
+function MATCH(a, B, C, k):
+    # Stage 1: candidate generation (lexical + dense)
+    C_lex  <- lexical_retrieve(a, B)
+    C_dense <- dense_retrieve(a, B)
+    C_hybrid <- merge_and_deduplicate(C_lex, C_dense)
+
+    # Stage 2: hard filter
+    C_valid <- []
+    for b in C_hybrid:
+        if pass_constraints(a, b, C):
+            C_valid.append(b)
+
+    # Stage 3: scoring + rerank
+    scored <- []
+    for b in C_valid:
+        l <- lexical_score(a, b)
+        d <- dense_score(a, b)
+        r <- rerank_signal(a, b)
+        s <- weighted_fusion(l, d, r)
+        e <- build_explanation(a, b, l, d, r)
+        scored.append((b, s, e))
+
+    R <- sort_desc_by_score(scored)
+    return top_k(R, k)
 \end{lstlisting}
 
-Cách chuẩn hóa lỗi giúp frontend xử lý thống nhất các trường hợp \texttt{400}, \texttt{401}, \texttt{403}, \texttt{404}, \texttt{409}, \texttt{413}, \texttt{415}, \texttt{422} và \texttt{500}. Với workflow upload, \texttt{413} dùng cho file vượt giới hạn, \texttt{415} cho MIME type không hỗ trợ. Với lifecycle, \texttt{409} phù hợp cho duplicate invite, duplicate application hoặc invalid transition.
+Pseudo-code trên nhấn mạnh ba điểm thiết kế: (i) hybrid candidate generation để tránh bỏ sót, (ii) hard-filter như lớp bảo toàn tính khả thi nghiệp vụ, và (iii) explanation được sinh đồng thời với scoring thay vì bổ sung hậu kỳ.
 
-\section{PostgreSQL và pgvector}
+\section{Phân tích ưu/nhược và điều kiện áp dụng theo từng nhóm}
 
-PostgreSQL là source of truth cho business entities: \texttt{users}, \texttt{organizations}, \texttt{candidate\_profiles}, \texttt{recruiter\_profiles}, \texttt{candidate\_resumes}, \texttt{job\_posts}, \texttt{uploaded\_documents}, \texttt{parse\_jobs}, \texttt{applications}, \texttt{application\_events}, \texttt{recruiter\_invites}, \texttt{notifications} và \texttt{audit\_logs}. pgvector được dùng trong cùng PostgreSQL để lưu semantic vectors cho resume/job fields. Điều này giúp hệ thống giữ transactional business data và semantic retrieval data trong một data store quản lý được ở MVP.
+\subsection{Lexical retrieval}
 
-Schema LLD quy định primary key dùng \texttt{BIGINT GENERATED BY DEFAULT AS IDENTITY}; timestamps dùng \texttt{TIMESTAMPTZ}; enum-like values dùng \texttt{TEXT} hoặc \texttt{VARCHAR} với \texttt{CHECK} constraints thay vì PostgreSQL native enum; normalized skills/certifications dùng \texttt{TEXT[]} với default \texttt{\{\}}; vector columns dùng \texttt{VECTOR(384)} và nullable \cite{lld-schema}. Việc để vector nullable là thiết kế có chủ đích: thiếu embedding không làm fail toàn bộ matching run, mà component tương ứng được score 0.
+\textbf{Ưu điểm:} nhanh, rẻ, dễ triển khai, dễ giải thích cho đội vận hành.\
+\textbf{Nhược điểm:} yếu ở synonym/paraphrase, nhạy với lỗi chính tả và biến thể biểu đạt.\
+\textbf{Điều kiện áp dụng tốt:} khi dữ liệu có cấu trúc từ khóa mạnh, domain dictionary ổn định, và mục tiêu ưu tiên latency thấp.
 
-\begin{table}[H]
-\caption{Nhóm bảng chính trong schema JobConnect}
-\centering
-{\footnotesize
-\begin{tabularx}{\textwidth}{p{0.36\textwidth}X}
-\toprule
-\textbf{Nhóm} & \textbf{Bảng cụ thể}\\
-\midrule
-Identity và profile & \texttt{users}, \texttt{candidate\_profiles}, \texttt{recruiter\_profiles}, \texttt{organizations}\\
-Marketplace entities & \texttt{candidate\_resumes}, \texttt{job\_posts}\\
-Document pipeline & \texttt{uploaded\_documents}, \texttt{parse\_jobs}\\
-Semantic vectors & \texttt{candidate\_resume\_embeddings}, \texttt{job\_post\_embeddings}\\
-ATS-lite & \texttt{applications}, \texttt{application\_events}, \texttt{recruiter\_invites}\\
-Operations & \texttt{notifications}, \texttt{audit\_logs}\\
-\bottomrule
-\end{tabularx}
-}% end footnotesize
-\end{table}
+\subsection{Dense retrieval}
 
-\section{Pipeline xử lý tài liệu CV/JD}
+\textbf{Ưu điểm:} bao phủ ngữ nghĩa tốt, hỗ trợ đa ngôn ngữ và biểu đạt linh hoạt.\
+\textbf{Nhược điểm:} tốn tài nguyên hơn, khó giải thích trực tiếp ở tầng đầu, cần governance cho drift.\
+\textbf{Điều kiện áp dụng tốt:} khi dữ liệu đủ lớn, có hạ tầng vector search ổn định, và có kế hoạch hiệu chỉnh theo miền.
 
-Pipeline ingestion là một trong những phần quan trọng nhất của JobConnect. Theo HLD ingestion, luồng core là: upload file, store original in object storage, create \texttt{uploaded\_documents}, create \texttt{parse\_jobs}, worker marks processing, extract raw text, preprocess text, normalize skills, LLM structured parse, update resume/job fields, expose review payload, save user corrections, generate embeddings, mark succeeded or failed \cite{hld-ingestion}.
+\subsection{Hybrid retrieval}
+
+\textbf{Ưu điểm:} cân bằng recall và precision, bền hơn trước biến động truy vấn.\
+\textbf{Nhược điểm:} tăng độ phức tạp vận hành (nhiều chỉ mục, nhiều thành phần tuning).\
+\textbf{Điều kiện áp dụng tốt:} khi hệ thống cần cả độ phủ ngữ nghĩa và khả năng kiểm soát theo từ khóa.
+
+\subsection{Reranking/LTR}
+
+\textbf{Ưu điểm:} cải thiện chất lượng top-$k$ nơi quyết định nghiệp vụ diễn ra.\
+\textbf{Nhược điểm:} phụ thuộc mạnh vào dữ liệu nhãn, dễ overfit lịch sử tuyển dụng.\
+\textbf{Điều kiện áp dụng tốt:} khi có pipeline tạo nhãn đáng tin cậy và cơ chế đánh giá online/offline tách bạch.
+
+\section{Vì sao không chọn các hướng thay thế làm lõi MVP}
+
+\subsection{Không chọn keyword-only làm lõi}
+
+Keyword-only phù hợp cho sàng lọc sơ cấp nhưng không đủ năng lực ngữ nghĩa để đạt chất lượng shortlist bền vững trong dữ liệu tuyển dụng thực tế. Rủi ro chính là bỏ sót ứng viên phù hợp do khác biệt từ vựng, đặc biệt ở mô tả kinh nghiệm dài.
+
+\subsection{Không chọn dense end-to-end blackbox}
+
+Một pipeline blackbox thuần neural có thể nâng điểm offline, nhưng đánh đổi đáng kể về explainability, chi phí suy luận, và khả năng rollback khi xảy ra drift. Ở giai đoạn MVP, các rủi ro này cao hơn lợi ích so với kiến trúc tách lớp có kiểm soát.
+
+\subsection{Không chọn KG-heavy ngay từ đầu}
+
+Knowledge graph có giá trị dài hạn trong suy luận tri thức nghề nghiệp, nhưng chi phí xây ontology, duy trì chất lượng node/edge và đồng bộ với dữ liệu vận hành là rất lớn. Triển khai KG-heavy sớm có thể làm chậm vòng lặp học hỏi sản phẩm.
+
+\subsection{Không chọn multi-agent orchestration phức tạp}
+
+Đa tác tử có thể tăng khả năng phân vai suy luận, nhưng cũng tăng độ khó kiểm thử, giám sát và đảm bảo tính nhất quán đầu ra. Với MVP, ưu tiên một pipeline quyết định rõ ràng và ít điểm lỗi là lựa chọn thực dụng hơn.
+
+\section{Hình minh họa kiến trúc và luồng kỹ thuật (placeholder)}
 
 \begin{figure}[H]
 \centering
-\fbox{\begin{minipage}{0.92\textwidth}
-\centering
-upload file -> object storage -> uploaded\_documents -> parse\_jobs\\
--> extract text -> preprocess -> skill normalization -> LLM/local parser\\
--> draft resume/job fields -> user review -> embeddings -> active/published pool
-\end{minipage}}
-\caption{Pipeline xử lý CV/JD từ file đến public pool}
-\docsrc{\cite{hld-ingestion}.}
+\fbox{\parbox[c][5.0cm][c]{0.9\textwidth}{\centering
+TODO: upload image\\
+\textbf{Hình 2.1.} Bản đồ phương pháp trong related work (lexical/dense/hybrid/rerank)
+}}
+\caption{Placeholder tổng quan related work theo cụm phương pháp}
+\label{fig:related-work-map-placeholder}
 \end{figure}
 
-File handling có một invariant quan trọng: parse failure không được xóa original file. Database chỉ lưu metadata và object key/file URL, còn object storage là source of truth cho file gốc. Upload endpoint trả về sau khi file persistence và parse job creation hoàn tất; parse chạy async. Điều này giúp API upload có latency kiểm soát được và tránh giữ kết nối quá lâu trong khi extraction/LLM/embedding chạy.
+\begin{figure}[H]
+\centering
+\fbox{\parbox[c][5.2cm][c]{0.9\textwidth}{\centering
+TODO: upload image\\
+\textbf{Hình 2.3.} Kiến trúc retrieval lai (lexical + dense) cho CV--JD
+}}
+\caption{Placeholder kiến trúc retrieval lai dùng cho thuyết minh Chương 2}
+\label{fig:hybrid-retrieval-placeholder}
+\end{figure}
 
-\subsection{Preprocessing}
+\begin{figure}[H]
+\centering
+\fbox{\parbox[c][4.8cm][c]{0.9\textwidth}{\centering
+TODO: upload image\\
+\textbf{Hình 2.5.} Khung explainability: hard-filter, điểm thành phần, cảnh báo dữ liệu
+}}
+\caption{Placeholder khung giải thích kết quả so khớp}
+\label{fig:explainability-placeholder}
+\end{figure}
 
-Preprocessing phải chạy sau raw text extraction và trước structured parsing. Minimum behavior gồm remove null bytes, invalid control characters, normalize Unicode to NFC cho tiếng Việt, collapse excessive whitespace, preserve technical terms/certification names và không dịch toàn bộ document. Quy tắc ``không dịch toàn bộ document'' rất quan trọng: nếu dịch trước khi parse, thuật ngữ như ``Spring'' có thể bị hiểu sai thành mùa xuân, hoặc certification name bị đổi nghĩa.
+\section{Kết nối từ lý thuyết sang thiết kế JobConnect}
 
-\subsection{Skill normalization}
+Từ tổng quan trên, hướng thiết kế phù hợp cho JobConnect có thể tóm gọn theo nguyên tắc: \textit{hybrid candidate generation, hard-filter first, semantic scoring second, explanation by design, workflow-aware orchestration}. Nguyên tắc này giúp hệ thống tránh cực đoan theo một trường phái duy nhất, đồng thời tạo nền nâng cấp từng lớp khi dữ liệu và hạ tầng trưởng thành.
 
-Skill normalization xử lý alias trước hard-filter extraction và embedding. Ví dụ \texttt{reactjs}, \texttt{react.js}, \texttt{React} được normalize thành \texttt{react}; \texttt{nodejs}, \texttt{node.js} thành \texttt{nodejs}; \texttt{pytorch}, \texttt{PyTorch} thành \texttt{pytorch}. Tài liệu yêu cầu gợi ý dictionary MVP khoảng 50-100 high-impact entries \cite{requirements}. Trong code layout hiện tại, phần này tương ứng với \texttt{backend/src/jobconnect/modules/documents/skill\_normalizer.py}.
+Về mặt kỹ thuật, lựa chọn này mang lại ba lợi ích trực tiếp cho MVP. Thứ nhất, giảm rủi ro vận hành nhờ tách bạch logic khả thi và logic phù hợp. Thứ hai, bảo toàn khả năng giải trình cho người dùng nghiệp vụ. Thứ ba, cho phép tăng độ tinh vi thuật toán theo lộ trình (nâng hybrid, thêm reranker, thêm attribution) mà không phá vỡ hợp đồng dữ liệu và workflow hiện hữu \cite{hld-architecture,hld-api,lld-api,hld-security}.
 
-\subsection{LLM structured parsing}
+\section{Ma trận so sánh phương pháp theo kịch bản tuyển dụng}
 
-Parser boundary nằm tại \texttt{backend/src/jobconnect/integrations/llm/}. \texttt{base.py} định nghĩa \texttt{LLMParser} protocol với \texttt{parse\_resume}, \texttt{parse\_job} và \texttt{parser\_version}. \texttt{local.py} là deterministic keyword parser với \texttt{parser\_version = "local-v1"}. \texttt{openai.py} gọi OpenAI-compatible chat completions endpoint với \texttt{response\_format=json\_object}, sau đó validate enum field trước khi trả về. Environment variables gồm \texttt{LLM\_PROVIDER}, \texttt{OPENAI\_API\_KEY}, \texttt{OPENAI\_MODEL}, \texttt{OPENAI\_BASE\_URL}, \texttt{OPENAI\_TIMEOUT\_SECONDS}. Default model trong docs là \texttt{gpt-4o-mini} \cite{hld-ingestion}.
-
-Thiết kế provider boundary làm cho hệ thống có thể chạy local không cần credential nhưng vẫn sẵn sàng chuyển sang provider thật. Nếu \texttt{LLM\_PROVIDER} không hợp lệ hoặc thiếu \texttt{OPENAI\_API\_KEY}, factory fallback về local parser. Nếu parser provider ném \texttt{ParserError}, worker đánh dấu parse job \texttt{failed} với \texttt{error\_code = llm\_parse\_failed} và bảo toàn file gốc.
-
-\section{Embedding provider và semantic search}
-
-Embedding provider boundary nằm tại \texttt{backend/src/jobconnect/integrations/embedding/}. \texttt{base.py} định nghĩa \texttt{EmbeddingProvider} protocol, \texttt{EmbeddingError} và constant \texttt{EMBEDDING\_DIM = 384}. \texttt{local.py} bọc \texttt{LocalHashEmbeddingProvider} dựa trên SHA-256-seeded bag-of-words embedder với \texttt{embedding\_version = "hash-v1"}. \texttt{openai.py} gọi endpoint \texttt{/v1/embeddings}, dùng \texttt{dimensions=384} và default model \texttt{text-embedding-3-small}; vector sai chiều phải raise \texttt{EmbeddingError}, không được silently padding \cite{hld-matching}.
+Để tránh lựa chọn phương pháp theo trực giác, phần này xây dựng ma trận so sánh theo kịch bản sử dụng. Mỗi kịch bản phản ánh một loại truy vấn hoặc một kiểu dữ liệu thường gặp trong tuyển dụng thực tế.
 
 \begin{table}[H]
-\caption{Cấu hình embedding provider}
+\caption{Ma trận so sánh phương pháp theo kịch bản truy vấn tuyển dụng}
 \centering
-{\small
-\begin{tabularx}{\textwidth}{p{0.35\textwidth}p{0.18\textwidth}X}
+\begin{tabularx}{\textwidth}{p{0.22\textwidth}p{0.14\textwidth}p{0.14\textwidth}p{0.14\textwidth}X}
 \toprule
-\textbf{Biến môi trường} & \textbf{Default} & \textbf{Ý nghĩa}\\
+\textbf{Kịch bản} & \textbf{Lexical} & \textbf{Dense} & \textbf{Hybrid} & \textbf{Nhận xét kỹ thuật}\\
 \midrule
-\texttt{EMBEDDING\_PROVIDER} & \texttt{local} & Chọn \texttt{local} hoặc \texttt{openai}; unknown fallback về local.\\
-\texttt{OPENAI\_EMBEDDING\_API\_KEY} & unset & Credential riêng cho embedding; fallback sang \texttt{OPENAI\_API\_KEY}.\\
-\texttt{OPENAI\_EMBEDDING\_MODEL} & \texttt{text-embedding-3-small} & Model name đưa vào \texttt{embedding\_version}.\\
-\texttt{OPENAI\_EMBEDDING\_BASE\_URL} & OpenAI API & Cho endpoint compatible hoặc proxy.\\
-\texttt{OPENAI\_EMBEDDING\_TIMEOUT\_SECONDS} & \texttt{30} & Timeout HTTP request.\\
+JD có từ khóa kỹ thuật rất rõ & Cao & Trung bình & Cao & Lexical bắt tín hiệu trực tiếp tốt; hybrid giữ độ phủ khi CV diễn đạt khác từ vựng JD.\\
+CV viết dài, mô tả kinh nghiệm gián tiếp & Thấp-Trung bình & Cao & Cao & Dense vượt lexical ở tương đồng ngữ nghĩa; hybrid ổn định hơn khi có nhiễu parser.\\
+Truy vấn đa ngôn ngữ & Thấp & Trung bình-Cao & Cao & Dense/hybrid phù hợp hơn; lexical dễ hụt do biến thể ngôn ngữ.\\
+Yêu cầu hard constraint nghiêm ngặt & Cao (khi rule rõ) & Không trực tiếp & Cao (kèm hard-filter) & Hard-filter là lớp bắt buộc, bất kể retriever tầng đầu.\\
+Môi trường tài nguyên hạn chế & Cao & Trung bình-Thấp & Trung bình & Lexical có lợi thế chi phí; hybrid cần tối ưu chỉ mục và caching.\\
+Nhu cầu giải thích cho recruiter & Cao & Trung bình & Cao & Hybrid + component score cho diễn giải cân bằng giữa nghĩa và từ khóa.\\
 \bottomrule
 \end{tabularx}
-}% end small
 \end{table}
 
-Semantic search được tách khỏi matching. Job semantic search dùng query theo ý định ứng viên hoặc mô tả CV-style và rank theo JD requirement embeddings. Resume semantic search rank theo CV summary/experience embeddings, không rank title embeddings. Score semantic search là retrieval relevance, không phải final matching score \cite{requirements,hld-matching}. Sự tách biệt này ngăn người dùng hiểu nhầm rằng mọi kết quả semantic search đều là match đủ điều kiện nghiệp vụ.
+Ma trận trên cho thấy không có phương pháp đơn lẻ nào chiếm ưu thế tuyệt đối. Kết luận thực dụng là hệ thống nên có năng lực chuyển đổi chiến lược theo loại truy vấn và chất lượng dữ liệu đầu vào, thay vì cố định một cấu hình bất biến cho mọi ngữ cảnh.
 
-\section{Matching pipeline}
+\section{Nguyên tắc chọn cấu hình retrieval theo mức trưởng thành dữ liệu}
 
-Matching pipeline nhận một anchor đã đủ visibility: published job cho job-to-resume, active resume cho resume-to-job. Sau khi validate auth, role, ownership và anchor visibility, hệ thống lấy opposite pool, apply hard filters, score và optional rerank. Matching result không tạo application hoặc invite; nó chỉ là recommendation.
+Trong giai đoạn đầu, dữ liệu nhãn thường mỏng và không đều theo vị trí tuyển dụng. Khi đó, một cấu hình quá tham số hóa dễ tạo ảo tưởng tối ưu trên tập nhỏ nhưng suy giảm khi mở rộng miền. Vì vậy, lựa chọn cấu hình nên theo mức trưởng thành dữ liệu:
 
-\subsection{Hard filters}
+\begin{itemize}
+  \item \textbf{Mức 1 -- Data-light}: ưu tiên lexical + hard-filter + dense nhẹ.
+  \item \textbf{Mức 2 -- Data-medium}: tăng vai trò hybrid, bật rerank có kiểm soát.
+  \item \textbf{Mức 3 -- Data-rich}: mở rộng LTR/advanced rerank và calibration theo domain.
+\end{itemize}
 
-Hard filters đảm bảo cặp JD-CV có thể chấp nhận về mặt nghiệp vụ trước khi tính score semantic. Các rule gồm:
+\begin{lstlisting}[language={},caption={Pseudo-code chọn cấu hình retrieval theo maturity dữ liệu},label={lst:maturity-driven-config}]
+function SELECT_CONFIG(data_maturity, infra_budget):
+    if data_maturity == "light":
+        return {
+            "retrieval": "lexical + dense_light",
+            "rerank": "off_or_minimal",
+            "explainability": "component_rules_first"
+        }
 
-\begin{longtable}{p{0.28\textwidth}p{0.62\textwidth}}
-\caption{Hard filters trong matching}\\
+    if data_maturity == "medium":
+        return {
+            "retrieval": "hybrid_balanced",
+            "rerank": "on_controlled_depth",
+            "explainability": "component_scores + risk_flags"
+        }
+
+    # data-rich
+    return {
+        "retrieval": "hybrid_advanced",
+        "rerank": "ltr_or_cross_encoder",
+        "explainability": "component + attribution_optional"
+    }
+\end{lstlisting}
+
+Tiếp cận theo maturity giúp giảm rủi ro “nhảy cóc công nghệ” và giữ đường nâng cấp mượt. Đây là nguyên tắc quan trọng để kiến trúc MVP có thể tiến hóa mà không phải tái thiết kế toàn cục.
+
+\section{Rủi ro kỹ thuật và điểm gãy thường gặp trong pipeline retrieval}
+
+Ngay cả khi chọn đúng trường phái phương pháp, pipeline vẫn có thể suy giảm do các điểm gãy vận hành:
+
+\begin{itemize}
+  \item \textbf{Index skew}: chỉ mục lexical cập nhật chậm hơn chỉ mục dense, gây lệch candidate set.
+  \item \textbf{Embedding drift}: mô hình embedding thay đổi phiên bản làm điểm so sánh lịch sử mất ổn định.
+  \item \textbf{Constraint inconsistency}: logic hard-filter thay đổi nhưng không đồng bộ cấu hình UI.
+  \item \textbf{Rerank bottleneck}: độ sâu rerank quá lớn làm tăng đột biến độ trễ top-$k$.
+  \item \textbf{Explanation mismatch}: điểm thành phần và narrative summary không đồng bộ do transform sai thứ tự.
+\end{itemize}
+
+Vì vậy, ngoài đánh giá chất lượng kết quả, thiết kế retrieval cần kèm cơ chế kiểm thử hồi quy vận hành: kiểm tra ổn định index, độ nhất quán constraint, và độ bền latency theo tải. Nếu bỏ qua phần này, hệ thống có thể “đúng thuật toán” nhưng “sai sản phẩm”.
+
+\section{Mở rộng về fairness, bias và trách nhiệm giải trình trong matching}
+
+Trong tuyển dụng, đánh giá kỹ thuật không thể tách rời rủi ro thiên lệch. Các tổng quan AI hiring nhấn mạnh rằng hệ thống nên được kiểm tra không chỉ về accuracy mà còn về tính minh bạch thủ tục và khả năng phát hiện sai lệch tác động giữa nhóm ứng viên \cite{ai-hiring-context,ethics-ai-recruiting}. Ở mức MVP, chưa thể giải quyết toàn bộ fairness formalism, nhưng cần xây nền bằng ba nguyên tắc:
+
+\begin{itemize}
+  \item Giữ human-in-the-loop cho quyết định cuối.
+  \item Lưu đầy đủ dấu vết lý do gợi ý và lý do loại trừ.
+  \item Tách dữ liệu nhạy cảm khỏi tín hiệu chấm điểm trực tiếp khi chưa có khung governance đầy đủ.
+\end{itemize}
+
+Nguyên tắc này không làm hệ thống “công bằng tuyệt đối” ngay lập tức, nhưng giảm đáng kể rủi ro triển khai thiếu kiểm soát. Quan trọng hơn, nó tạo nền để các vòng đánh giá fairness sâu hơn ở Chương 4 có dữ liệu đủ để phân tích.
+
+\section{Checklist kỹ thuật khi áp dụng lý thuyết vào triển khai}
+
+\begin{table}[H]
+\caption{Checklist kỹ thuật chuyển hóa từ lý thuyết sang triển khai}
+\centering
+\begin{tabularx}{\textwidth}{p{0.08\textwidth}X}
 \toprule
-\textbf{Filter} & \textbf{Rule}\\
+\textbf{STT} & \textbf{Điểm kiểm tra}\\
 \midrule
-\endfirsthead
-\toprule
-\textbf{Filter} & \textbf{Rule}\\
-\midrule
-\endhead
-\texttt{job\_type} & Job type phải match. Nếu JD là \texttt{remote}, location filter được bỏ qua.\\
-\texttt{location} & Với job không remote, CV và JD phải có cùng location.\\
-\texttt{seniority} & Seniority phải match chính xác.\\
-\texttt{education} & CV education phải lớn hơn hoặc bằng job required education theo thứ tự \texttt{lop\_9 < lop\_12 < dai\_hoc < thac\_si < tien\_si}.\\
-\texttt{certifications} & JD required certifications phải là subset của CV certifications.\\
-Missing data & Thiếu dữ liệu hard-filter trên một phía làm pair fail hard filter.\\
+1 & Xác định rõ objective của từng tầng (retrieval, filter, ranking, explanation).\\
+2 & Đảm bảo mọi score thành phần có quy trình chuẩn hóa nhất quán.\\
+3 & Thiết kế fallback khi dense retrieval suy giảm hoặc timeout.\\
+4 & Kiểm tra tính đồng bộ giữa hard-filter logic và business policy cấu hình.\\
+5 & Định nghĩa rõ top-$k$ theo use case thay vì dùng một giá trị cố định toàn cục.\\
+6 & Đảm bảo explanation payload sinh cùng vòng đời scoring, không sinh hậu kỳ rời rạc.\\
+7 & Thiết lập telemetry cho từng tầng để phát hiện drift sớm.\\
+8 & Kiểm thử hồi quy cho các truy vấn biên (đa ngôn ngữ, nhiễu chính tả, thiếu trường).\\
+9 & Ghi nhận phiên bản model/index trong mọi kết quả để truy vết được sai lệch.\\
+10 & Xây dựng quy trình hiệu chỉnh trọng số theo evidence, tránh tuning cảm tính.\\
 \bottomrule
-\end{longtable}
+\end{tabularx}
+\end{table}
 
-\subsection{Scoring deterministic}
+\section{Khung định lượng chi phí--lợi ích theo vòng đời hệ thống}
 
-Score formula giữ lại công thức prototype nhưng được đặt vào bối cảnh production MVP:
-
-\begin{equation}
-\begin{split}
-final\_score = &\ 0.35 \times title\_sim + 0.35 \times skills\_sim \\
-& + 0.20 \times req\_exp\_sim + 0.10 \times req\_summary\_sim \\
-& + bonus\_exact\_skill - penalty\_missing\_required
-\end{split}
-\end{equation}
+Trong bối cảnh luận văn ứng dụng, lựa chọn phương pháp không chỉ dựa vào chất lượng top-$k$ mà còn dựa vào tổng chi phí vòng đời. Ta mô hình hóa utility vận hành như sau:
 
 \begin{equation}
-skills\_sim = 0.6 \times semantic\_skills + 0.4 \times exact\_overlap\_ratio
+U = \lambda_q \cdot Q - \lambda_l \cdot L - \lambda_c \cdot C - \lambda_o \cdot O
 \end{equation}
 
-Default \texttt{top\_k = 10}, allowed range \texttt{1..50}; default \texttt{min\_score = 0.7}, allowed range \texttt{0..1}. Bonus và penalty hiện giữ 0 đến khi có measured rule \cite{requirements,hld-matching}. Tie-break deterministic là \texttt{final\_score DESC}, sau đó \texttt{resume\_id ASC} cho job anchors hoặc \texttt{job\_id ASC} cho resume anchors. Quy tắc tie-break giúp cùng dữ liệu và cùng model version luôn trả thứ tự ổn định.
+trong đó:
+\begin{itemize}
+  \item $Q$ là nhóm chỉ số chất lượng khuyến nghị (ví dụ precision@$k$, nDCG, tỷ lệ shortlist hữu ích).
+  \item $L$ là độ trễ end-to-end tại percentile quan trọng (P95/P99).
+  \item $C$ là chi phí hạ tầng/suy luận/duy trì chỉ mục.
+  \item $O$ là chi phí vận hành tổ chức (giám sát, điều tra lỗi, huấn luyện người dùng).
+\end{itemize}
 
-\subsection{Reranking và reasoning}
+Với cùng một mức $Q$, cấu hình có $O$ thấp hơn thường bền vững hơn trong MVP vì giảm áp lực vận hành liên tục. Đây là lý do các hệ lexical+dense+rule được ưu tiên hơn kiến trúc blackbox nặng ngay từ đầu \cite{dpr,splade,colbertv2,hyrr}.
 
-Runtime hiện tại cố gắng local cross-encoder rerank trên top deterministic candidates, dùng \texttt{sentence-transformers==3.0.1}. Nếu reranker lỗi hoặc unavailable, matching fallback về deterministic scoring và đưa warning trong runtime metadata \cite{implementation-matrix}. Đây là cách hợp lý cho MVP vì không làm matching fail chỉ vì model phụ không sẵn sàng.
+\begin{table}[H]
+\caption{So sánh định tính utility theo giai đoạn phát triển}
+\centering
+\begin{tabularx}{\textwidth}{p{0.24\textwidth}p{0.14\textwidth}p{0.14\textwidth}p{0.14\textwidth}X}
+\toprule
+\textbf{Cấu hình} & \textbf{$Q$} & \textbf{$L$} & \textbf{$C$} & \textbf{Nhận định utility ở MVP}\\
+\midrule
+Lexical-only & Trung bình & Thấp & Thấp & Utility chấp nhận được ở bài toán nhỏ, nhưng suy giảm khi JD/CV diễn đạt đa dạng ngữ nghĩa.\\
+Dense-only & Trung bình-Cao & Trung bình & Trung bình-Cao & Utility phụ thuộc mạnh vào chất lượng embedding và tuning; rủi ro giải thích thấp.\\
+Hybrid + hard-filter & Cao & Trung bình & Trung bình & Utility thường cao nhất trong bối cảnh cần cân bằng chất lượng, chi phí và explainability.\\
+Hybrid + deep rerank nặng & Cao-Rất cao & Cao & Cao & Utility chỉ vượt trội khi dữ liệu lớn và có năng lực vận hành/giám sát trưởng thành.\\
+\bottomrule
+\end{tabularx}
+\end{table}
 
-Reasoning phải grounded in score breakdown và structured fields. Một reasoning tốt nên nói rõ kỹ năng nào overlap, hard filters nào pass, component nào mạnh/yếu và có thiếu embedding nào không. LLM-generated reasoning được phép, nhưng chỉ khi không invent fact. Điều này đặc biệt quan trọng trong tuyển dụng, vì một gợi ý sai hoặc không giải thích được có thể ảnh hưởng đến quyết định của người dùng.
+Khung utility này cũng giúp trả lời câu hỏi phản biện phổ biến: ``vì sao không dùng luôn mô hình mạnh nhất?'' Câu trả lời là mô hình mạnh nhất về điểm số không chắc là mô hình mạnh nhất về hệ thống, đặc biệt khi tính thêm độ trễ, chi phí và rủi ro vận hành.
 
-\section{Authentication, authorization và auditability}
+\section{Domain shift trong CV--JD và chiến lược thích nghi}
 
-Authentication dùng email/password và JWT session. Implementation matrix ghi nhận custom HMAC JWT với \texttt{sub}, \texttt{role}, \texttt{iat}, \texttt{exp}; token hết hạn bị reject với \texttt{expired\_token}, token thiếu \texttt{exp} cũng bị reject \cite{implementation-matrix}. Disabled users không được publish, activate, apply, invite hoặc run matching.
+Domain shift là hiện tượng phân phối ngôn ngữ tuyển dụng thay đổi theo thời gian, ngành nghề hoặc thị trường lao động. Trong JobConnect, domain shift thể hiện qua:
 
-Authorization theo role và ownership. Candidates quản lý profile, documents, resumes, applications, invites và notifications của mình. Recruiters quản lý jobs và recruiting actions liên quan đến job họ sở hữu hoặc được phép quản lý theo organization. Admin đọc dữ liệu monitoring, nhưng MVP không thêm destructive moderation. Privacy rule yêu cầu recruiters chỉ search/match active resumes, candidates chỉ search/match published jobs, và contact data của candidate phải hạn chế theo role/flow cần thiết \cite{hld-security}.
+\begin{itemize}
+  \item Từ khóa kỹ năng mới xuất hiện nhanh (framework/tool mới, vai trò lai).
+  \item Mô tả JD thay đổi phong cách (nhiều soft-skill, ít keyword chuẩn hóa).
+  \item CV từ nhiều nguồn có mức chuẩn hóa không đồng đều.
+\end{itemize}
 
-Audit logs là một phần quan trọng để hệ thống có thể vận hành. Các event cần audit gồm resume activated/archived, job published/closed, parse job failed, candidate applied, recruiter invite sent, invite accepted/rejected, application status changed và admin monitoring access where useful. Audit event cần actor user ID nếu có, target entity, event type, timestamp và metadata JSON.
+Nếu không có chiến lược thích nghi, hệ thống dễ rơi vào hai cực đoan: lexical bỏ sót ngữ nghĩa mới hoặc dense ưu ái tương đồng bề mặt không liên quan nghiệp vụ. Nghiên cứu hybrid retrieval và reranking cho thấy việc kết hợp tín hiệu theo tầng thường ổn định hơn trước dịch chuyển phân phối \cite{splade,colbertv2,hyrr,lambdamart}.
+
+Đề xuất thích nghi theo ba vòng:
+\begin{itemize}
+  \item \textbf{Vòng giám sát}: theo dõi metric drift theo nhóm vị trí và nguồn dữ liệu.
+  \item \textbf{Vòng hiệu chỉnh}: cập nhật từ điển normalization, trọng số fusion, ngưỡng filter.
+  \item \textbf{Vòng xác nhận}: chạy regression set cố định trước khi áp dụng cấu hình mới.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox[c][4.8cm][c]{0.9\textwidth}{\centering
+TODO: upload image\\
+\textbf{Hình 2.6.} Chu trình thích nghi domain shift cho pipeline CV--JD
+}}
+\caption{Placeholder chu trình phát hiện drift, hiệu chỉnh cấu hình và xác nhận hồi quy}
+\label{fig:domain-shift-adaptation-placeholder}
+\end{figure}
+
+Điểm quan trọng là thích nghi không đồng nghĩa với thay đổi liên tục mô hình lõi. Trong nhiều trường hợp, điều chỉnh policy, normalization và weighting đã đủ cải thiện utility mà không tạo chi phí chuyển đổi lớn.
+
+\section{Khung phân tầng bằng chứng khoa học cho quyết định thiết kế}
+
+Để tránh lập luận cảm tính, mỗi quyết định phương pháp nên gắn với một tầng bằng chứng:
+
+\begin{itemize}
+  \item \textbf{Tầng 1 -- Evidence từ literature}: các kết luận ổn định trong cộng đồng nghiên cứu IR/NLP \cite{prf-bm25,dpr,sbert,lambdamart}.
+  \item \textbf{Tầng 2 -- Evidence từ hệ thống thực tế}: ràng buộc ATS/workflow và yêu cầu explainability trong triển khai sản phẩm \cite{greenhouse,lever,workday}.
+  \item \textbf{Tầng 3 -- Evidence từ bối cảnh dự án}: dữ liệu, hạ tầng, năng lực vận hành và mục tiêu tiến độ của nhóm.
+\end{itemize}
+
+Khi ba tầng cùng đồng thuận, quyết định có tính phòng thủ cao trước phản biện học thuật. Khi có mâu thuẫn (ví dụ literature ủng hộ mô hình phức tạp nhưng bối cảnh dự án không đủ hạ tầng), ưu tiên thiết kế bền vững theo tầng 2-3 và ghi rõ giới hạn trong Chương 4.
+
+\section{Kết luận chương}
+
+Chương 2 đã xây dựng nền học thuật cho bài toán so khớp CV--JD dưới góc nhìn IR hiện đại và ràng buộc vận hành ATS-lite. Các nhóm phương pháp lexical, dense, hybrid, rerank/LTR và explainability được phân tích theo cùng một khung: nguyên lý, lợi ích, rủi ro và điều kiện áp dụng. Kết quả của chương này là một bộ tiêu chí thiết kế có thể chuyển hóa trực tiếp sang quyết định kiến trúc trong Chương 3.

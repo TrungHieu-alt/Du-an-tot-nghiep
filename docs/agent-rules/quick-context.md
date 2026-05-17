@@ -17,9 +17,13 @@ Purpose: concise system reality snapshot for agents.
 - Backend source is organized under `backend/src/jobconnect` using app, core,
   common, integrations, and feature-module boundaries.
 - Backend main app exposes MVP API namespaces under `/api/*`.
+- Runtime persistence in `backend/src/jobconnect/modules/*/service.py` uses
+  `psycopg` + raw SQL (not SQLAlchemy ORM).
 - Legacy V2 prototype runtime code has been removed; `/api/v2/prototype/*`
   route aliases are not available.
 - Schema migration lives at `backend/db/migrations/001_production_mvp.sql`.
+- SQLAlchemy ORM is currently used for seed tooling under `backend/db/seeds/*`
+  and is intentionally decoupled from runtime API persistence.
 - Runtime data uses `users`, profiles, organizations,
   `candidate_resumes`, `job_posts`, embeddings, documents, parse jobs,
   applications, invites, notifications, and audit logs.

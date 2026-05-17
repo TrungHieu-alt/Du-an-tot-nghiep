@@ -116,3 +116,17 @@ Mẫu tự kiểm trước khi chốt:
 4) Citation [x] đã đủ chưa?
 5) Nếu là phần thực nghiệm: đã có nhận xét sau bảng chưa?
 ```
+
+## 10. Visual Style Lock (Chuẩn đã chốt)
+Áp dụng cho toàn bộ báo cáo LaTeX hiện tại, trừ khi người dùng yêu cầu đổi lại.
+
+- Font toàn cục: TeX Gyre Termes (Times-style) cho nội dung văn bản.
+- Heading: màu đen 100% ở mọi cấp.
+- Phân cấp heading: Chapter lớn hơn Section, Section lớn hơn Subsection.
+- Thuật ngữ tiếng Anh: giữ nguyên khi cần, nhưng không dùng kiểu chữ “code-style”.
+- List of Tables: dùng định dạng đồng nhất cho toàn bộ dòng (cùng indent, prefix, khoảng cách dòng đều nhau).
+- Phụ lục và thân bài: ưu tiên mô tả mô hình xử lý nghiệp vụ, không trình bày theo địa chỉ source code hay tên biến/bảng kỹ thuật.
+
+Khi cập nhật báo cáo:
+1) Không tự ý đổi khỏi chuẩn trên.
+2) Nếu cần đổi visual style, phải ghi rõ lý do và cập nhật lại mục này ngay trong cùng task.

@@ -1,208 +1,97 @@
-\chapter{Phụ lục API, schema và traceability}
+\chapter{Phụ lục mô hình xử lý và truy vết nghiên cứu}
 
-\section{Tóm tắt API contract}
+\section{Bản đồ chức năng ở mức khái niệm}
 
-Phụ lục này gom các bảng kỹ thuật để khi đọc báo cáo có thể tra nhanh endpoint, entity, enum và nguồn tài liệu. Nội dung được tổng hợp từ \texttt{docs/backend/LLD/40-api-contract.md}, \texttt{docs/backend/LLD/30-database-schema.md}, \texttt{docs/backend/LLD/50-current-api-implementation-matrix.md} và các HLD liên quan.
+Phụ lục này trình bày bản đồ chức năng ở mức khái niệm nhằm hỗ trợ đối chiếu nhanh khi đọc báo cáo. Nội dung tập trung vào vai trò nghiệp vụ, dữ liệu vào/ra và nguyên tắc vận hành, không mô tả chi tiết triển khai kỹ thuật.
 
-{\small
-\begin{longtable}{p{0.14\textwidth}p{0.30\textwidth}p{0.20\textwidth}p{0.24\textwidth}}
-\caption{API endpoint summary theo nhóm chức năng}\\
+\begin{table}[H]
+\caption{Nhóm chức năng và mục tiêu nghiệp vụ}
+\centering
+\begin{tabularx}{\textwidth}{p{0.28\textwidth}X}
 \toprule
-\textbf{Nhóm} & \textbf{Endpoint} & \textbf{Vai trò} & \textbf{Ghi chú}\\
+\textbf{Nhóm chức năng} & \textbf{Mục tiêu nghiệp vụ}\\
 \midrule
-\endfirsthead
-\toprule
-\textbf{Nhóm} & \textbf{Endpoint} & \textbf{Vai trò} & \textbf{Ghi chú}\\
-\midrule
-\endhead
-Auth & \texttt{POST} \path{/api/auth/register} & Public & Tạo user, hash password, issue JWT.\\
-Auth & \texttt{POST} \path{/api/auth/login} & Public & Verify password, block disabled user, issue JWT.\\
-Auth & \texttt{POST} \path{/api/auth/logout} & Authenticated & Stateless logout, client discard token.\\
-User & \texttt{GET} \path{/api/me} & Authenticated & User summary + role-specific bootstrap.\\
-Candidate profile & \texttt{GET} \path{/api/candidate/profile} & Candidate & Đọc profile hiện tại.\\
-Candidate profile & \texttt{PUT} \path{/api/candidate/profile} & Candidate & Upsert candidate profile.\\
-Recruiter profile & \texttt{GET} \path{/api/recruiter/profile} & Recruiter & Đọc recruiter profile.\\
-Recruiter profile & \texttt{PUT} \path{/api/recruiter/profile} & Recruiter & Upsert profile sau organization check.\\
-Organizations & \texttt{GET} \path{/api/organizations} & Authenticated & List/search organization với \texttt{q}, limit, offset.\\
-Organizations & \texttt{POST} \path{/api/organizations} & Recruiter/Admin runtime & Tạo organization, audit event.\\
-Organizations & \texttt{GET} \path{/api/organizations/\{id\}} & Authenticated & Detail organization.\\
-Organizations & \texttt{PATCH} \path{/api/organizations/\{id\}} & Recruiter/Admin & Update organization với membership check.\\
-Resumes & \texttt{GET} \path{/api/candidate/resumes} & Candidate/Admin & List resumes theo owner hoặc all admin.\\
-Resumes & \texttt{POST} \path{/api/candidate/resumes} & Candidate & Create draft resume, upsert embeddings.\\
-Resumes & \texttt{GET} \path{/api/candidate/resumes/search} & Recruiter/Admin & Search active resumes theo q/filters.\\
-Resumes & \texttt{POST} \path{/api/candidate/resumes/semantic-search} & Recruiter/Admin & Semantic search resume relevance.\\
-Resumes & \texttt{GET} \path{/api/candidate/resumes/\{id\}} & Candidate/Recruiter/Admin & Owner/all/active visibility.\\
-Resumes & \texttt{PATCH} \path{/api/candidate/resumes/\{id\}} & Candidate & Partial update và refresh embeddings.\\
-Resumes & \texttt{POST} \path{/api/candidate/resumes/\{id\}/activate} & Candidate & Draft/archived -> active; audit event.\\
-Resumes & \texttt{POST} \path{/api/candidate/resumes/\{id\}/archive} & Candidate & Draft/active -> archived; audit event.\\
-Jobs & \texttt{GET} \path{/api/jobs} & Authenticated active & List jobs với filters.\\
-Jobs & \texttt{POST} \path{/api/jobs} & Recruiter/Admin runtime & Create draft job, upsert embeddings.\\
-Jobs & \texttt{GET} \path{/api/jobs/search} & Authenticated active & Search title/skills/organization name.\\
-Jobs & \texttt{POST} \path{/api/jobs/semantic-search} & Authenticated active & Semantic job search theo requirement embeddings.\\
-Jobs & \texttt{GET} \path{/api/jobs/\{id\}} & Authenticated active & Candidate sees published, recruiter owns, admin all.\\
-Jobs & \texttt{PATCH} \path{/api/jobs/\{id\}} & Recruiter/Admin & Partial update và refresh embeddings.\\
-Jobs & \texttt{POST} \path{/api/jobs/\{id\}/publish} & Recruiter/Admin & Draft -> published, set \texttt{published\_at}.\\
-Jobs & \texttt{POST} \path{/api/jobs/\{id\}/close} & Recruiter/Admin & Draft/published -> closed.\\
-Documents & \texttt{POST} \path{/api/documents} & Authenticated active & Multipart upload, storage write, parse job queued.\\
-Documents & \texttt{GET} \path{/api/documents} & Authenticated active & List visible documents.\\
-Documents & \texttt{GET} \path{/api/documents/\{id\}} & Owner/Admin & Document detail + parse jobs.\\
-Documents & \texttt{GET} \path{/api/documents/\{id\}/download-url} & Owner/Admin & Storage adapter URL.\\
-Documents & \texttt{GET} \path{/api/documents/\{id\}/parse-jobs/\{pid\}} & Owner/Admin & Parse job detail.\\
-Documents & \texttt{POST} \path{/api/documents/\{id\}/parse-jobs} & Owner/Admin & Retry parse job, audit event.\\
-Matching & \texttt{POST} \path{/api/matching/jobs/\{id\}/run} & Recruiter/Admin & Published job anchor -> active resumes.\\
-Matching & \texttt{POST} \path{/api/matching/resumes/\{id\}/run} & Candidate/Admin & Active resume anchor -> published jobs.\\
-Applications & \texttt{GET} \path{/api/applications} & Candidate/Recruiter/Admin & Role-scoped application listing.\\
-Applications & \texttt{POST} \path{/api/applications} & Candidate & Candidate apply, event, notification, audit.\\
-Applications & \texttt{GET} \path{/api/applications/\{id\}} & Candidate/Recruiter/Admin & Detail + event history.\\
-Applications & \texttt{POST} \path{/api/applications/\{id\}/status} & Authenticated active & Role-specific transition graph.\\
-Invites & \texttt{GET} \path{/api/invites} & Candidate/Recruiter/Admin & Role-scoped invite listing.\\
-Invites & \texttt{POST} \path{/api/invites} & Recruiter & Create pending invite, duplicate guard.\\
-Invites & \texttt{GET} \path{/api/invites/\{id\}} & Candidate/Recruiter/Admin & Detail invite.\\
-Invites & \texttt{POST} \path{/api/invites/\{id\}/accept} & Candidate & Accept and create/return application.\\
-Invites & \texttt{POST} \path{/api/invites/\{id\}/reject} & Candidate & Reject, no application.\\
-Notifications & \texttt{GET} \path{/api/notifications} & Authenticated active & List notifications.\\
-Notifications & \texttt{POST} \path{/api/notifications/\{id\}/read} & Owner & Mark one notification read.\\
-Notifications & \texttt{POST} \path{/api/notifications/read-all} & Authenticated active & Mark unread notifications read, return count.\\
-Admin & \texttt{GET} \path{/api/admin/users} & Admin & User monitoring.\\
-Admin & \texttt{GET} \path{/api/admin/users/\{id\}} & Admin & User detail + profile context + ops summary.\\
-Admin & \texttt{GET} \path{/api/admin/documents} & Admin & Document monitoring filters.\\
-Admin & \texttt{GET} \path{/api/admin/parse-jobs} & Admin & Parse job monitoring filters.\\
-Admin & \texttt{GET} \path{/api/admin/applications} & Admin & Application monitoring filters.\\
-Admin & \texttt{GET} \path{/api/admin/invites} & Admin & Invite monitoring filters.\\
-Admin & \texttt{GET} \path{/api/admin/notifications} & Admin & Notification monitoring filters.\\
-Admin & \texttt{GET} \path{/api/admin/audit-logs} & Admin & Audit log filters.\\
+Quản lý tài khoản và vai trò & Bảo đảm mỗi thao tác có chủ thể hợp lệ và quyền truy cập phù hợp.\\
+Quản lý hồ sơ ứng viên & Chuẩn hóa và duy trì thông tin ứng viên theo vòng đời trạng thái.\\
+Quản lý nhu cầu tuyển dụng & Công bố và duy trì thông tin vị trí tuyển dụng theo vòng đời trạng thái.\\
+Chuẩn hóa dữ liệu tài liệu & Chuyển đổi dữ liệu phi cấu trúc thành biểu diễn có cấu trúc để so khớp.\\
+So khớp có giải thích & Tạo danh sách gợi ý có thứ tự và nêu rõ căn cứ đánh giá.\\
+Tương tác tuyển dụng & Quản lý ứng tuyển, lời mời và cập nhật trạng thái nghiệp vụ.\\
+Quan sát vận hành & Ghi nhận sự kiện, cảnh báo và hỗ trợ truy vết khi phát sinh sự cố.\\
 \bottomrule
-\end{longtable}
-}% end small
+\end{tabularx}
+\end{table}
 
-\section{Entity summary}
+\section{Mô hình dữ liệu ở mức nghiệp vụ}
 
-{\footnotesize
-\begin{longtable}{p{0.37\textwidth}p{0.27\textwidth}p{0.26\textwidth}}
-\caption{Tóm tắt entity và field chính}\\
+\begin{table}[H]
+\caption{Nhóm dữ liệu và ràng buộc cốt lõi}
+\centering
+\begin{tabularx}{\textwidth}{p{0.30\textwidth}X}
 \toprule
-\textbf{Entity} & \textbf{Field chính} & \textbf{Invariant}\\
+\textbf{Nhóm dữ liệu} & \textbf{Ràng buộc cốt lõi}\\
 \midrule
-\endfirsthead
-\toprule
-\textbf{Entity} & \textbf{Field chính} & \textbf{Invariant}\\
-\midrule
-\endhead
-\texttt{users} & \texttt{user\_id}, \texttt{email}, \texttt{password\_hash}, \texttt{role}, \texttt{status} & Email unique; password chỉ lưu hash; disabled user bị chặn active actions.\\
-\texttt{candidate\_profiles} & \texttt{user\_id}, \texttt{full\_name}, \texttt{current\_location}, \texttt{headline} & Một row cho candidate; total experience chỉ là display metadata.\\
-\texttt{recruiter\_profiles} & \texttt{user\_id}, \texttt{organization\_id}, \texttt{full\_name}, \texttt{title} & Một row cho recruiter; organization kiểm soát recruiting context.\\
-\texttt{organizations} & \texttt{organization\_id}, \texttt{name}, \texttt{slug}, \texttt{logo\_url} & Có predefined Independent organization cho lựa chọn ``Khác''.\\
-\texttt{candidate\_resumes} & \texttt{resume\_id}, \texttt{candidate\_user\_id}, \texttt{title}, \texttt{skills}, \texttt{status} & Chỉ \texttt{active} vào public pool; \texttt{is\_primary} không điều khiển visibility.\\
-\texttt{job\_posts} & \texttt{job\_id}, \texttt{organization\_id}, \texttt{recruiter\_user\_id}, \texttt{title}, \texttt{status} & Chỉ \texttt{published} vào public pool; \texttt{published\_at} set khi publish.\\
-\texttt{uploaded\_documents} & \texttt{document\_id}, \texttt{owner\_user\_id}, \texttt{document\_type}, \texttt{object\_key}, \texttt{mime\_type} & File gốc nằm trong object storage; DB lưu metadata/reference.\\
-\texttt{parse\_jobs} & \texttt{parse\_job\_id}, \texttt{document\_id}, \texttt{status}, \texttt{parser\_version}, \texttt{error\_code} & Failed parse không xóa file; succeeded phải link đúng target entity.\\
-\texttt{candidate\_resume\_embeddings} & \texttt{resume\_id}, \texttt{emb\_title}, \texttt{emb\_skills}, \texttt{emb\_summary}, \texttt{emb\_experience} & Vector 384 chiều; missing vector score component 0.\\
-\texttt{job\_post\_embeddings} & \texttt{job\_id}, \texttt{emb\_title}, \texttt{emb\_skills}, \texttt{emb\_requirement} & Có \texttt{embedding\_version} để backfill.\\
-\texttt{applications} & \texttt{application\_id}, \texttt{job\_id}, \texttt{resume\_id}, \texttt{status} & Unique \texttt{(job\_id, resume\_id)}; matching không tạo application.\\
-\texttt{application\_events} & \texttt{application\_id}, \texttt{from\_status}, \texttt{to\_status}, \texttt{actor\_user\_id} & Append-only status history.\\
-\texttt{recruiter\_invites} & \texttt{invite\_id}, \texttt{job\_id}, \texttt{resume\_id}, \texttt{status} & Pending invite không tạo application; accepted invite tạo/reuse application.\\
-\texttt{notifications} & \texttt{notification\_id}, \texttt{recipient\_user\_id}, \texttt{type}, \texttt{status} & Email failure không rollback business transaction.\\
-\texttt{audit\_logs} & \texttt{actor\_user\_id}, \texttt{event\_type}, \texttt{target\_type}, \texttt{metadata} & Business event trail cho lifecycle actions.\\
+Định danh và quyền & Mỗi bản ghi phải gắn vai trò và trạng thái truy cập rõ ràng.\\
+Hồ sơ ứng viên và vị trí tuyển dụng & Chỉ bản ghi ở trạng thái sẵn sàng mới tham gia không gian so khớp công khai.\\
+Dữ liệu xử lý tài liệu & Mỗi lần xử lý cần có trạng thái tiến trình và thông tin lỗi khi thất bại.\\
+Dữ liệu so khớp & Kết quả phải lưu được điểm tổng, điểm thành phần và thông tin giải thích tối thiểu.\\
+Dữ liệu tương tác tuyển dụng & Mỗi thay đổi trạng thái phải có dấu vết theo thời gian để phục vụ truy vết.\\
 \bottomrule
-\end{longtable}
-}% end footnotesize
+\end{tabularx}
+\end{table}
 
-\section{Matching formula và hard filter details}
+\section{Khung giải thích kết quả so khớp}
 
-{\small
-\begin{longtable}{p{0.33\textwidth}p{0.18\textwidth}p{0.39\textwidth}}
-\caption{Score component trong matching}\\
+\begin{table}[H]
+\caption{Thành phần giải thích bắt buộc}
+\centering
+\begin{tabularx}{\textwidth}{p{0.34\textwidth}X}
 \toprule
-\textbf{Component} & \textbf{Weight} & \textbf{Ý nghĩa}\\
+\textbf{Thành phần} & \textbf{Ý nghĩa}\\
 \midrule
-\endfirsthead
-\toprule
-\textbf{Component} & \textbf{Weight} & \textbf{Ý nghĩa}\\
-\midrule
-\endhead
-\texttt{title\_sim} & 0.35 & Mức tương đồng giữa title/resume title hoặc định danh nghề nghiệp.\\
-\texttt{skills\_sim} & 0.35 & Kết hợp semantic skills và exact overlap ratio.\\
-\texttt{req\_exp\_sim} & 0.20 & Tương đồng giữa yêu cầu JD và kinh nghiệm CV.\\
-\texttt{req\_summary\_sim} & 0.10 & Tương đồng giữa requirement và summary.\\
-\texttt{bonus\_exact\_skill} & 0 hiện tại & Dự phòng cho measured rule sau này.\\
-\texttt{penalty\_missing\_required} & 0 hiện tại & Dự phòng; hard filters đã loại pair thiếu điều kiện.\\
+Kết quả điều kiện bắt buộc & Xác định cặp dữ liệu có đủ điều kiện tham gia xếp hạng hay không.\\
+Điểm thành phần & Cho biết mức đóng góp tương đối của từng góc nhìn đánh giá.\\
+Điểm tổng hợp & Thể hiện mức phù hợp cuối cùng sau khi tổng hợp các thành phần.\\
+Nhận xét giải thích & Tóm tắt điểm mạnh, điểm hạn chế và nguyên nhân chính của thứ hạng.\\
+Cảnh báo dữ liệu & Chỉ ra thông tin thiếu hoặc nhiễu có thể làm giảm độ tin cậy kết quả.\\
 \bottomrule
-\end{longtable}
-}% end small
+\end{tabularx}
+\end{table}
 
-\begin{longtable}{p{0.25\textwidth}p{0.65\textwidth}}
-\caption{Reasoning content tối thiểu}\\
+\section{Khung truy vết nguồn tri thức}
+
+\begin{table}[H]
+\caption{Nguồn tri thức và mục đích sử dụng trong báo cáo}
+\centering
+\begin{tabularx}{\textwidth}{p{0.34\textwidth}X}
 \toprule
-\textbf{Nội dung} & \textbf{Mục đích}\\
+\textbf{Nguồn tri thức} & \textbf{Mục đích sử dụng}\\
 \midrule
-\endfirsthead
-\toprule
-\textbf{Nội dung} & \textbf{Mục đích}\\
-\midrule
-\endhead
-Strongest components & Cho người dùng biết score cao nhờ title, skills, experience hay summary.\\
-Exact skill overlap & Giải thích kỹ năng trùng khớp cụ thể giữa CV và JD.\\
-Hard-filter pass notes & Xác nhận seniority, location, education, certifications có pass không.\\
-Missing embedding notes & Nếu vector field thiếu và component bị 0, reasoning phải nêu rõ.\\
-Warnings metadata & Nêu rerank fallback hoặc provider unavailable nếu có.\\
+Đặc tả yêu cầu sản phẩm & Khóa mục tiêu, phạm vi nghiên cứu và tiêu chí chấp nhận.\\
+Tài liệu kiến trúc tổng thể & Định hình thành phần xử lý, luồng dữ liệu và nguyên tắc thiết kế.\\
+Tài liệu hợp đồng dữ liệu & Chuẩn hóa cách hiểu dữ liệu vào/ra và quy tắc xử lý lỗi.\\
+Tài liệu hiện trạng triển khai & Đối chiếu mức độ hoàn thành và nhận diện khoảng trống cải tiến.\\
+Bộ quy tắc viết báo cáo & Bảo đảm cấu trúc học thuật, giọng văn và tính nhất quán trình bày.\\
 \bottomrule
-\end{longtable}
+\end{tabularx}
+\end{table}
 
-\section{Source traceability}
+\section{Checklist duy trì chất lượng báo cáo}
 
-{\footnotesize
-\begin{longtable}{p{0.27\textwidth}p{0.33\textwidth}p{0.30\textwidth}}
-\caption{Traceability từ nội dung báo cáo về source docs}\\
+\begin{table}[H]
+\caption{Checklist kiểm soát chất lượng khi cập nhật báo cáo}
+\centering
+\begin{tabularx}{\textwidth}{p{0.08\textwidth}X}
 \toprule
-\textbf{Nội dung báo cáo} & \textbf{Nguồn chính} & \textbf{Ghi chú sử dụng}\\
+\textbf{STT} & \textbf{Tiêu chí kiểm tra}\\
 \midrule
-\endfirsthead
-\toprule
-\textbf{Nội dung báo cáo} & \textbf{Nguồn chính} & \textbf{Ghi chú sử dụng}\\
-\midrule
-\endhead
-Product goal và user roles & \texttt{docs/REQUIREMENTS.md} & Candidate, recruiter, admin; shared-pool marketplace.\\
-MVP scope/non-goals & \texttt{docs/REQUIREMENTS.md} & Tránh claim tenant isolation, billing, scheduling, benchmark quality.\\
-Canonical enums & \texttt{docs/REQUIREMENTS.md}, API LLD & Dùng cho API/persistence validation.\\
-Ingestion pipeline & HLD ingestion & Upload -> storage -> parse -> review -> embedding.\\
-LLM parser boundary & HLD ingestion & \texttt{integrations/llm/base.py}, local/openai adapters.\\
-Embedding provider & HLD matching & Local hash/OpenAI \texttt{text-embedding-3-small}, 384 dimensions.\\
-Data model & HLD data, DB LLD & Entity tables, constraints, indexes, invariants.\\
-Matching hard filters & Requirements, HLD matching & Job type, location, seniority, education, certifications.\\
-Scoring formula & Requirements, HLD matching & \texttt{final\_score} và \texttt{skills\_sim}.\\
-Runtime flows & HLD API/runtime & Candidate flow, recruiter flow, matching flow, application flow.\\
-Security/privacy & HLD security & JWT, disabled user, role/ownership, contact data privacy.\\
-Notifications/audit & Requirements, HLD security & Notification types, email failure, audit events.\\
-API namespaces & Requirements, API LLD & Production \texttt{/api/*}, no prototype aliases.\\
-Implementation status & Current API Implementation Matrix & Aligned/partial/gap analysis.\\
-Backend layout & README, codemap, file tree & App/core/common/integrations/modules.\\
-Dependencies & \texttt{backend/requirements.txt} & Versioned runtime packages.\\
-Report structure & \texttt{report/knowledge/01-04} & Bố cục khóa luận, giọng viết, no DOCX reopen by default.\\
+1 & Đề mục thống nhất màu sắc, cấp độ và ngôn ngữ trình bày.\\
+2 & Toàn văn dùng một font chữ và không lạm dụng định dạng đặc biệt cho thuật ngữ.\\
+3 & Nội dung tập trung vào mô hình xử lý bài toán, không sa vào mô tả chi tiết triển khai.\\
+4 & Bảng biểu không tràn khổ trang và có cấu trúc dễ đọc.\\
+5 & Mọi bảng kết quả chính đều có đoạn nhận xét xu hướng và nguyên nhân.\\
+6 & Trích dẫn tài liệu được sử dụng nhất quán theo định dạng đã chọn.\\
+7 & Hạn chế và hướng phát triển được nêu rõ, có liên hệ với kết quả đánh giá.\\
 \bottomrule
-\end{longtable}
-}% end footnotesize
-
-\section{Checklist dùng lại khi tiếp tục phát triển báo cáo}
-
-\begin{longtable}{p{0.08\textwidth}p{0.82\textwidth}}
-\caption{Checklist kiểm tra nội dung báo cáo}\\
-\toprule
-\textbf{STT} & \textbf{Tiêu chí}\\
-\midrule
-\endfirsthead
-\toprule
-\textbf{STT} & \textbf{Tiêu chí}\\
-\midrule
-\endhead
-1 & Mở đầu và Kết luận không đánh số chương.\\
-2 & Bốn chương nội dung tương ứng đúng vai trò: bối cảnh, kỹ thuật, thiết kế, thực nghiệm.\\
-3 & Mọi mô tả công nghệ phải gắn với file/version/module cụ thể khi có trong repo.\\
-4 & Không dùng mô tả công nghệ dạng chung chung; mọi công nghệ phải gắn với version, module hoặc file nguồn khi có dữ liệu.\\
-5 & Matching phải có hard filters, công thức score, tie-break và reasoning.\\
-6 & Data model phải nêu rõ public pool visibility: active resumes, published jobs.\\
-7 & API phải dùng namespace production \texttt{/api/*}, không dùng prototype route.\\
-8 & Các claim về implementation status phải bám implementation matrix.\\
-9 & Những gì chưa biết hoặc chưa có trong docs phải để placeholder hoặc nêu là future work.\\
-10 & Nếu DOCX nguồn thay đổi, regenerate Knowledge Pack trước khi viết tiếp.\\
-\bottomrule
-\end{longtable}
+\end{tabularx}
+\end{table}

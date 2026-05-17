@@ -80,7 +80,7 @@ not treat it as the final architecture contract.
 | `PUT` | `/api/candidate/profile` | candidate | `CandidateProfileRequest` | `CandidateProfile` | Upserts current candidate profile | `candidate_profiles` insert/update | Aligned. |
 | `GET` | `/api/recruiter/profile` | recruiter | bearer token | `RecruiterProfile` | none | `recruiter_profiles` read | Aligned (Slice 2): admin role removed; admin must use `/api/admin/users/{user_id}`. |
 | `PUT` | `/api/recruiter/profile` | recruiter | `RecruiterProfileRequest` | `RecruiterProfile` | Upserts current recruiter profile after organization check | `organizations` read; `recruiter_profiles` insert/update | Aligned. |
-| `GET` | `/api/organizations` | authenticated | `q?`, `limit`, `offset` | paginated `Organization` | none | `organizations` read | Partial: `q` matches name + slug (ILIKE), but seed/bootstrap support for predefined Independent organization (`Khác`) is not yet documented in runtime migration. |
+| `GET` | `/api/organizations` | authenticated | `q?`, `limit`, `offset` | paginated `Organization` | none | `organizations` read | Aligned: `q` matches name + slug (ILIKE); predefined Independent organization seed/bootstrap is available via `db/seeds` tooling and returned by lookup. |
 | `POST` | `/api/organizations` | recruiter, admin | `OrganizationRequest` | `Organization` | Creates organization; writes audit event | `organizations` insert; `audit_logs` insert | Partial: target says recruiter; runtime also allows admin. |
 | `GET` | `/api/organizations/{organization_id}` | authenticated | organization id | `Organization` | none | `organizations` read | Aligned. |
 | `PATCH` | `/api/organizations/{organization_id}` | recruiter (member), admin | full `OrganizationRequest` | `Organization` | Updates organization; writes audit event | `recruiter_profiles` read (recruiter only); `organizations` update; `audit_logs` insert | Aligned (Slice 2): recruiter must belong to the target organization (`recruiter_profiles.organization_id`); admin bypasses. Non-member recruiter → 404. |
@@ -229,7 +229,7 @@ Classification rules:
 | `PATCH /api/candidate/resumes/{id}` | Requires full body. | Accept partial body. | non-breaking |
 | `PATCH /api/jobs/{id}` | Requires full body. | Accept partial body. | non-breaking |
 | `GET /api/organizations` | Missing `q?`. | Add optional `q`. | non-breaking |
-| Organization seed | No predefined Independent organization for `Khác`. | Add seed/bootstrap row and expose it through organization lookup/config. | non-breaking |
+| Organization seed | No predefined Independent organization for `Khác`. | Done: seed/bootstrap row is managed by `python -m db.seeds.cli seed --profile demo` and exposed through organization lookup/config. | non-breaking |
 | `GET /api/jobs` | Missing `location?`, `job_type?`, `seniority?`, `q?`. | Add optional filters. | non-breaking |
 | `GET /api/jobs/search` | `q` only matches title/skills. | Extend to organization name. | non-breaking |
 | Job summary responses | Missing organization display fields for FE cards. | Add `organization_name`, `organization_logo_url`, and `organization_slug` to job list/search/semantic items. | non-breaking |

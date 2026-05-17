@@ -2,136 +2,96 @@
 
 \section{Bối cảnh tuyển dụng số}
 
-Tuyển dụng hiện đại là một bài toán dữ liệu nhiều phía. Ứng viên không chỉ cung cấp một bộ thông tin định danh, mà thường gửi CV với cấu trúc tự do, kinh nghiệm đa dạng, kỹ năng viết theo nhiều alias và bằng cấp/chứng chỉ có cách diễn đạt không thống nhất. Nhà tuyển dụng không chỉ đăng một tiêu đề công việc, mà mô tả yêu cầu kỹ thuật, cấp bậc, địa điểm, hình thức làm việc, bằng cấp, chứng chỉ và nhiều tiêu chí mềm. Khi hai tập dữ liệu này cùng tồn tại dưới dạng văn bản dài, việc tìm kiếm bằng từ khóa thuần túy dễ bỏ sót ứng viên phù hợp và dễ đưa ra kết quả không giải thích được.
+Tuyển dụng số đang dịch chuyển từ mô hình quản lý hồ sơ thụ động sang mô hình ra quyết định dựa trên dữ liệu. Ở mô hình mới, hệ thống không chỉ lưu trữ hồ sơ mà còn phải hỗ trợ đánh giá mức độ phù hợp, giải thích kết quả và theo dõi vòng đời ứng tuyển. Nếu thiếu ba năng lực này, nền tảng tuyển dụng khó tạo giá trị bền vững cho cả ứng viên lẫn nhà tuyển dụng.
 
-Các nền tảng ATS lớn như Greenhouse, LeverTRM và Workday Talent Acquisition được đặc tả trong tài liệu yêu cầu như các benchmark tham chiếu về candidate experience, pipeline management, automation, analytics và AI-assisted recruiting \cite{requirements,greenhouse,lever,workday}. Tuy nhiên, mục tiêu của JobConnect MVP không phải sao chép toàn bộ một ATS doanh nghiệp. MVP chọn một phần lõi đủ để chứng minh sản phẩm có giá trị: tài khoản candidate/recruiter/admin, CV/JD upload, structured profiles, public marketplace pool, two-way matching, application lifecycle, notifications và auditability.
-
-Trong mô hình marketplace của JobConnect, một resume chỉ được nhà tuyển dụng thấy nếu resume có trạng thái \texttt{active}; một job chỉ được ứng viên thấy nếu job có trạng thái \texttt{published}. Quy tắc visibility này làm cho public pool rõ ràng và tránh nhầm lẫn giữa dữ liệu đang draft với dữ liệu đã sẵn sàng tham gia matching. Đây cũng là khác biệt quan trọng so với một hệ thống quản lý nội bộ theo tenant riêng: MVP không có private company workspace, không có tenant isolation và không có quota/billing.
+Trong thực tế, dữ liệu đầu vào của tuyển dụng có tính nhiễu cao. Hồ sơ cùng một năng lực có thể được mô tả bằng nhiều cách viết khác nhau; mô tả vị trí tuyển dụng cũng thường không đồng nhất về cấu trúc. Do đó, bài toán cốt lõi không nằm ở việc "lưu được dữ liệu", mà ở khả năng chuẩn hóa và liên kết ngữ nghĩa giữa hai phía dữ liệu \cite{requirements}.
 
 \section{Nhóm người dùng và nhu cầu}
 
-JobConnect phục vụ ba nhóm người dùng. Candidate tạo tài khoản, cập nhật hồ sơ cá nhân, upload một hoặc nhiều CV, review dữ liệu đã parse, kích hoạt resume vào public pool, tìm kiếm hoặc match published jobs, apply và phản hồi recruiter invites. Recruiter tạo tài khoản dưới một employer organization, tạo hoặc upload JD, publish job, tìm kiếm/match active resumes, gửi lời mời và quản lý applications. Admin theo dõi users, content, parse jobs, matching activity, notifications và audit events; MVP admin là read-only trừ khi có yêu cầu moderation riêng \cite{requirements}.
+Nghiên cứu này xem xét ba nhóm người dùng chính: ứng viên, nhà tuyển dụng và quản trị vận hành. Ứng viên cần công cụ thể hiện năng lực rõ ràng và nhận được gợi ý công việc phù hợp. Nhà tuyển dụng cần cơ chế tìm kiếm, so khớp và lọc hồ sơ hiệu quả, đồng thời có căn cứ để giải thích lựa chọn. Quản trị vận hành cần khả năng theo dõi trạng thái hệ thống, phát hiện sai lệch và đảm bảo quy trình nghiệp vụ được thực thi nhất quán.
 
 \begin{table}[H]
-\caption{Vai trò người dùng và năng lực chính}
+\caption{Nhu cầu cốt lõi theo nhóm người dùng}
 \centering
-\begin{tabularx}{\textwidth}{p{0.18\textwidth}X}
+\begin{tabularx}{\textwidth}{p{0.20\textwidth}X}
 \toprule
-\textbf{Vai trò} & \textbf{Năng lực chính trong MVP}\\
+\textbf{Nhóm người dùng} & \textbf{Nhu cầu cốt lõi}\\
 \midrule
-Candidate & Đăng ký, tạo profile, upload CV, review parsed resume, activate/archive resume, search/match jobs, apply, accept/reject invite, đọc notifications.\\
-Recruiter & Đăng ký, tạo recruiter profile, liên kết organization, create/upload job, publish/close job, search/match resumes, send invites, quản lý applications.\\
-Admin & Theo dõi users, documents, parse jobs, applications, invites, notifications và audit logs qua các endpoint read-only.\\
+Ứng viên & Chuẩn hóa hồ sơ cá nhân, nhận gợi ý công việc có giải thích, theo dõi trạng thái ứng tuyển minh bạch.\\
+Nhà tuyển dụng & Mô tả vị trí tuyển dụng nhất quán, tìm ứng viên theo tiêu chí bắt buộc và mức độ phù hợp, gửi lời mời có kiểm soát.\\
+Quản trị vận hành & Theo dõi chất lượng xử lý tài liệu, giám sát trạng thái quy trình, lưu dấu vết phục vụ kiểm tra và cải tiến.\\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-Từ góc nhìn candidate, hệ thống cần giúp họ biến một CV phi cấu trúc thành một resume entity có các field dùng được cho matching: \texttt{title}, \texttt{summary}, \texttt{experience}, \texttt{skills}, \texttt{location}, \texttt{job\_type}, \texttt{seniority}, \texttt{education} và \texttt{certifications}. Candidate không bị buộc chỉ có một resume active; đặc tả cho phép nhiều active resumes, còn \texttt{is\_primary} chỉ là display/default-selection hint \cite{requirements}.
-
-Từ góc nhìn recruiter, hệ thống cần giúp chuyển một JD thành \texttt{job\_posts} có \texttt{title}, \texttt{requirement}, \texttt{skills}, \texttt{location}, \texttt{job\_type}, \texttt{seniority}, \texttt{education}, \texttt{required\_certifications} và trạng thái \texttt{draft/published/closed}. Job chỉ vào public job pool khi \texttt{status = published}. Khi job đã \texttt{closed}, hệ thống không được nhận application hoặc invite mới.
-
 \section{Phát biểu bài toán}
 
-Bài toán của khóa luận có thể phát biểu như sau. Cho tập tài liệu CV do ứng viên upload và tập tài liệu JD do nhà tuyển dụng tạo hoặc upload, xây dựng một hệ thống backend có khả năng lưu trữ tài liệu gốc, trích xuất và chuẩn hóa thông tin, đưa resume/job hợp lệ vào public pool, tìm kiếm và so khớp hai chiều, giải thích kết quả ranking và hỗ trợ luồng ứng tuyển/lời mời.
-
-Đầu vào của hệ thống gồm:
+Bài toán được phát biểu như sau: từ hai tập dữ liệu phi cấu trúc gồm hồ sơ ứng viên và mô tả vị trí tuyển dụng, xây dựng một cơ chế xử lý có khả năng:
 
 \begin{itemize}
-  \item Tài khoản người dùng với vai trò \texttt{candidate}, \texttt{recruiter}, \texttt{admin}.
-  \item CV/JD file, tối thiểu hỗ trợ PDF; DOCX chỉ nên hỗ trợ khi extractor được kiểm thử.
-  \item Dữ liệu manual create/update cho resume và job.
-  \item Query keyword hoặc semantic search.
-  \item Anchor \texttt{job\_id} hoặc \texttt{resume\_id} cho matching.
+  \item Chuẩn hóa dữ liệu thành biểu diễn có cấu trúc.
+  \item Áp dụng tiêu chí bắt buộc để loại trừ sớm các cặp không khả thi.
+  \item Xếp hạng các cặp còn lại theo mức độ tương đồng ngữ nghĩa.
+  \item Trả về kết quả có khả năng giải thích và theo dõi được theo thời gian.
 \end{itemize}
 
-Đầu ra của hệ thống gồm:
-
-\begin{itemize}
-  \item Structured resume/job records có enum canonical.
-  \item Parse job status \texttt{queued}, \texttt{processing}, \texttt{succeeded}, \texttt{failed}.
-  \item Embedding rows có \texttt{embedding\_version}.
-  \item Kết quả matching gồm rank, final score, component scores, exact skill overlap và reasoning.
-  \item Application, invite, notification và audit log theo lifecycle nghiệp vụ.
-\end{itemize}
-
-Điểm khó nằm ở việc kết hợp semantic retrieval với rule nghiệp vụ. Một resume có thể semantic tương đồng với job nhưng vẫn không hợp lệ nếu job yêu cầu \texttt{senior} còn resume là \texttt{junior}, hoặc nếu JD required certifications không nằm trong CV certifications. Ngược lại, một pair pass hard filters vẫn cần score breakdown để phân biệt mức độ phù hợp. Do đó JobConnect không dùng AI như một black box, mà tách thành eligibility, retrieval, scoring, reranking và reasoning.
+Đầu vào của bài toán gồm dữ liệu tài liệu, dữ liệu hồ sơ nghiệp vụ và yêu cầu tìm kiếm/so khớp. Đầu ra của bài toán gồm danh sách gợi ý có thứ tự, điểm đánh giá theo thành phần, nhận xét giải thích và trạng thái nghiệp vụ tương ứng.
 
 \section{Phạm vi MVP và các non-goals}
 
-Phạm vi MVP được xác định rõ trong \texttt{REQUIREMENTS.md}. Các thành phần in scope gồm authentication bằng email/password và JWT, roles, profile management, organization profile, CV/JD upload, parse pipeline, resume CRUD và activation, job CRUD và publishing, keyword search, semantic search, two-way matching, explainable ranking, application flow, recruiter invite flow, ATS-lite status lifecycle, notifications, audit logs và OpenAPI-documented production namespaces.
+Phạm vi MVP tập trung vào khả năng vận hành lõi: chuẩn hóa dữ liệu, so khớp hai chiều, hỗ trợ ứng tuyển và lời mời, cùng với cơ chế quan sát vận hành tối thiểu. Những nội dung có độ phức tạp cao hoặc phụ thuộc dữ liệu lớn không nằm trong phạm vi giai đoạn này.
 
-\begin{longtable}{p{0.33\textwidth}p{0.57\textwidth}}
-\caption{MVP scope và non-goals}\\
+\begin{table}[H]
+\caption{Phạm vi nghiên cứu và phần không thuộc phạm vi}
+\centering
+\begin{tabularx}{\textwidth}{p{0.45\textwidth}p{0.45\textwidth}}
 \toprule
 \textbf{Trong phạm vi} & \textbf{Ngoài phạm vi}\\
 \midrule
-\endfirsthead
-\toprule
-\textbf{Trong phạm vi} & \textbf{Ngoài phạm vi}\\
-\midrule
-\endhead
-Email/password auth, JWT session, role checks & Billing, subscriptions, quota enforcement\\
-Candidate/recruiter profile và organization profile & Tenant/company isolation hoặc private workspace\\
-CV/JD upload, parse job, normalized fields, embeddings & Full ATS interview scheduling, offer approval, onboarding\\
-Keyword search và semantic search tách riêng & CRM/nurture campaign\\
-Job-to-resume và resume-to-job matching & Automated reject/advance solely by AI\\
-Application, invite, notification, audit log & Production benchmark claims khi chưa có labeled evaluation data\\
+Chuẩn hóa hồ sơ và mô tả công việc ở mức MVP. & Tối ưu toàn cục cho hệ sinh thái tuyển dụng quy mô doanh nghiệp lớn.\\
+So khớp hai chiều có giải thích. & Kết luận chất lượng xếp hạng ở mức tổng quát khi chưa có dữ liệu gán nhãn lớn.\\
+Quy trình ứng tuyển và lời mời có theo dõi trạng thái. & Tự động hóa toàn bộ quyết định nhân sự không có kiểm duyệt của con người.\\
 \bottomrule
-\end{longtable}
-
-Việc loại bỏ tenant isolation là một quyết định kiến trúc quan trọng. Trong MVP, all published jobs và all active candidate resumes nằm trong một shared public pool. Từ đó, logic authorization tập trung vào owner visibility cho draft/archived/closed records và public visibility cho active/published records. Recruiter không cần private tenant để match active resumes, nhưng chỉ được quản lý job do mình sở hữu hoặc thuộc tổ chức được phép.
+\end{tabularx}
+\end{table}
 
 \section{Các khái niệm nền tảng}
 
-\subsection{ATS-lite workflow}
+\subsection{Quy trình ATS-lite}
 
-ATS-lite trong JobConnect là tập workflow nhỏ nhưng đủ để minh họa vòng đời tuyển dụng. Candidate apply tạo một row trong \texttt{applications} với trạng thái \texttt{submitted}. Recruiter invite tạo một row \texttt{recruiter\_invites} với trạng thái \texttt{pending}. Khi candidate accept invite, hệ thống tạo application nếu cặp \texttt{(job\_id, resume\_id)} chưa tồn tại. Recruiter có thể chuyển application từ \texttt{submitted} sang \texttt{shortlisted}, \texttt{rejected} hoặc \texttt{hired}; candidate có thể \texttt{withdrawn} nếu chưa có terminal recruiter decision. Mỗi status change phải tạo \texttt{application\_events}.
+ATS-lite trong nghiên cứu này được hiểu là tập chức năng tinh gọn để quản lý vòng đời tuyển dụng ở mức cần thiết: tạo hồ sơ, tạo nhu cầu tuyển dụng, so khớp, phát sinh tương tác và cập nhật trạng thái. Điểm quan trọng của ATS-lite là giữ được tính kiểm soát quy trình nhưng tránh phức tạp hóa như hệ thống doanh nghiệp toàn diện.
 
 \subsection{Structured parsing}
 
-Structured parsing là bước chuyển đổi text phi cấu trúc thành field canonical. Parser phải nhận schema JSON và allowed enum labels, sau đó tạo output không invent unsupported enum values. Trong implementation target, parser có biên tích hợp dưới \texttt{backend/src/jobconnect/integrations/llm/}: \texttt{base.py} định nghĩa protocol, \texttt{local.py} là deterministic fallback, \texttt{openai.py} gọi endpoint OpenAI-compatible với \texttt{response\_format=json\_object} và validate enum trước khi trả dữ liệu \cite{hld-ingestion}.
+Structured parsing là bước chuyển đổi dữ liệu văn bản tự do sang dạng có cấu trúc. Mục tiêu của bước này là tạo dữ liệu nhất quán để phục vụ lọc điều kiện và so khớp ngữ nghĩa. Nếu structured parsing thiếu ổn định, toàn bộ pipeline phía sau sẽ suy giảm chất lượng.
 
-\subsection{Embedding và pgvector}
+\subsection{Embedding và semantic similarity}
 
-Embedding biểu diễn title, skills, summary, experience hoặc requirement dưới dạng vector 384 chiều. Schema target lưu embedding trong hai bảng riêng: \texttt{candidate\_resume\_embeddings} và \texttt{job\_post\_embeddings}. Các vector field nullable để khi thiếu embedding, matching không fail toàn bộ; component tương ứng được chấm 0 và reasoning phải nêu rõ missing embedding \cite{hld-storage,lld-schema}. Provider boundary nằm dưới \texttt{backend/src/jobconnect/integrations/embedding/}, với local hash provider mặc định và OpenAI provider dùng \texttt{text-embedding-3-small} mặc định khi có credential.
+Embedding giúp biểu diễn văn bản thành không gian đặc trưng số, cho phép so sánh mức độ gần nhau về nghĩa thay vì chỉ so khớp từ khóa bề mặt. Trong bài toán tuyển dụng, biểu diễn ngữ nghĩa đặc biệt hữu ích với các trường mô tả kinh nghiệm, kỹ năng và yêu cầu vị trí \cite{hld-matching,hld-storage}.
 
 \subsection{Explainable matching}
 
-Explainable matching trong JobConnect không chỉ trả điểm tổng. Kết quả phải có hard-filter pass notes, exact skill overlap count, strongest score components, missing embedding notes và final score. Nếu LLM-generated reasoning được dùng, nó phải grounded in score breakdown và structured fields; LLM không được invent facts absent from CV/JD data \cite{hld-matching}. Quy tắc này giúp kết quả matching có thể giải thích cho user và audit được khi xảy ra tranh chấp.
+Explainable matching là nguyên tắc bắt buộc của đề tài: hệ thống không chỉ trả kết quả xếp hạng mà phải cho biết vì sao một kết quả được xếp cao hoặc thấp. Tính giải thích được xây dựng trên hai lớp thông tin: điều kiện bắt buộc và điểm tương đồng theo thành phần.
 
-\section{Yêu cầu trạng thái và enum canonical}
+\section{Mô hình hóa yêu cầu trạng thái}
 
-Hệ thống validate enum ở API và persistence boundary. Các enum này không chỉ là giá trị hiển thị, mà quyết định visibility, lifecycle và matching eligibility.
+Để đảm bảo tính nhất quán nghiệp vụ, nghiên cứu sử dụng mô hình trạng thái rõ ràng cho từng thực thể chính. Trạng thái không chỉ dùng để hiển thị mà quyết định khả năng tham gia tìm kiếm và so khớp.
 
-{\footnotesize
-\begin{longtable}{p{0.30\textwidth}p{0.60\textwidth}}
-\caption{Enum canonical trong JobConnect MVP}\\
+\begin{table}[H]
+\caption{Nguyên tắc trạng thái ở mức khái niệm}
+\centering
+\begin{tabularx}{\textwidth}{p{0.34\textwidth}X}
 \toprule
-\textbf{Field} & \textbf{Giá trị hợp lệ}\\
+\textbf{Nhóm trạng thái} & \textbf{Nguyên tắc vận hành}\\
 \midrule
-\endfirsthead
-\toprule
-\textbf{Field} & \textbf{Giá trị hợp lệ}\\
-\midrule
-\endhead
-\texttt{users.role} & \texttt{candidate}, \texttt{recruiter}, \texttt{admin}\\
-\texttt{users.status} & \texttt{active}, \texttt{invited}, \texttt{disabled}\\
-\texttt{candidate\_resumes.status} & \texttt{draft}, \texttt{active}, \texttt{archived}\\
-\texttt{job\_posts.status} & \texttt{draft}, \texttt{published}, \texttt{closed}\\
-\texttt{applications.status} & \texttt{submitted}, \texttt{shortlisted}, \texttt{rejected}, \texttt{hired}, \texttt{withdrawn}\\
-\texttt{recruiter\_invites.status} & \texttt{pending}, \texttt{accepted}, \texttt{rejected}\\
-\texttt{parse\_jobs.status} & \texttt{queued}, \texttt{processing}, \texttt{succeeded}, \texttt{failed}\\
-\texttt{notifications.status} & \texttt{unread}, \texttt{read}\\
-\texttt{location} & \texttt{ha\_noi}, \texttt{tp\_hcm}, \texttt{da\_nang}\\
-\texttt{job\_type} & \texttt{remote}, \texttt{fulltime}, \texttt{parttime}\\
-\texttt{seniority} & \texttt{intern}, \texttt{fresher}, \texttt{junior}, \texttt{mid}, \texttt{senior}, \texttt{lead}\\
-\texttt{education} & \texttt{lop\_9}, \texttt{lop\_12}, \texttt{dai\_hoc}, \texttt{thac\_si}, \texttt{tien\_si}\\
+Hồ sơ ứng viên & Chỉ hồ sơ đã sẵn sàng mới tham gia không gian tìm kiếm công khai.\\
+Vị trí tuyển dụng & Chỉ vị trí đang mở mới tham gia so khớp công khai.\\
+Quy trình tài liệu & Mỗi lần xử lý tài liệu phải có trạng thái tiến trình và trạng thái lỗi rõ ràng.\\
+Tương tác tuyển dụng & Ứng tuyển và lời mời phải có vòng đời trạng thái để truy vết quyết định.\\
 \bottomrule
-\end{longtable}
-}% end footnotesize
+\end{tabularx}
+\end{table}
 
-Hai visibility rule là then chốt: \texttt{candidate\_resumes.status = active} mới vào public candidate pool, và \texttt{job\_posts.status = published} mới vào public job pool. Các trạng thái \texttt{draft}, \texttt{archived}, \texttt{closed} bị loại khỏi public search và matching. Quy tắc này làm cho matching có tính dự đoán và tránh việc dữ liệu chưa review bị đưa vào kết quả.
+\section{Kết luận chương}
 
-\section{Liên hệ với báo cáo cũ và định hướng viết lại}
-
-Knowledge Pack trong thư mục \texttt{report/knowledge} xác định rằng báo cáo mới giữ bố cục mới và tái sử dụng ý cũ ở mức luận điểm, không copy dài nguyên văn. Các heading cũ như ``Thách thức của quy trình tuyển dụng hiện đại'', ``Cơ hội từ kiến trúc RAG'', ``Embedding models'', ``Hybrid Retrieval \& Scoring'' và ``Implementation vs Theory: Gaps Analysis'' được chuyển thành seed nội dung cho các chương tương ứng. Trong bản báo cáo này, phần nội dung được viết lại theo source hiện tại của repository, nên không còn mô tả hệ thống như prototype RAG đơn lẻ mà chuyển thành JobConnect production MVP với API namespaces, schema và implementation matrix cụ thể.
+Chương 1 đã xác lập nền tảng bài toán gồm bối cảnh, nhu cầu người dùng, phát biểu kỹ thuật và phạm vi nghiên cứu. Các khái niệm về chuẩn hóa dữ liệu, so khớp ngữ nghĩa và tính giải thích được xem là trục xuyên suốt cho các chương tiếp theo. Trên cơ sở này, chương 2 sẽ phân tích các kỹ thuật phù hợp để hiện thực hóa mô hình đề xuất.

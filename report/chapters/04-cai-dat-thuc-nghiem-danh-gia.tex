@@ -1,236 +1,422 @@
 \chapter{Cài đặt thực nghiệm và đánh giá}
 
-\section{Môi trường và công nghệ triển khai}
+\section{Mục tiêu đánh giá và khung câu hỏi nghiên cứu}
 
-Repository JobConnect hiện tập trung vào backend FastAPI. Theo README, backend API chạy tại \texttt{http://localhost:8000}, PostgreSQL ở host port \texttt{5433}, schema migration nằm tại \texttt{backend/db/migrations/001\_production\_mvp.sql}, và verification backend dùng \texttt{python -m unittest discover -s tests} trong Docker Compose cho runtime backend \cite{readme}. Riêng workflow LaTeX của báo cáo này chạy local bằng \texttt{xelatex} theo rule riêng trong \texttt{AGENTS.md}.
+Mục tiêu của chương này là đánh giá hệ thống trên ba mặt đồng thời: \textit{chất lượng khuyến nghị}, \textit{độ vững vận hành}, và \textit{khả năng giải trình}. Khác với các báo cáo chỉ trình bày kết quả chạy được, chương này đặt trọng tâm vào kiểm định tính hợp lý của lựa chọn kiến trúc dưới ràng buộc MVP.
 
-Các dependency runtime cụ thể được lấy từ \texttt{backend/requirements.txt}:
+Bộ câu hỏi nghiên cứu (Research Questions -- RQ) được định nghĩa như sau:
 
-{\small
-\begin{longtable}{p{0.30\textwidth}p{0.20\textwidth}p{0.40\textwidth}}
-\caption{Dependency backend cụ thể trong dự án}\\
-\toprule
-\textbf{Package} & \textbf{Version} & \textbf{Vai trò}\\
-\midrule
-\endfirsthead
-\toprule
-\textbf{Package} & \textbf{Version} & \textbf{Vai trò}\\
-\midrule
-\endhead
-\texttt{fastapi} & \texttt{0.115.6} & API runtime, routing, OpenAPI generation.\\
-\texttt{uvicorn[standard]} & \texttt{0.24.0} & ASGI server cho FastAPI.\\
-\texttt{pydantic} & \texttt{2.11.7} & Request/response schema validation.\\
-\texttt{psycopg[binary]} & \texttt{3.2.3} & PostgreSQL driver.\\
-\texttt{numpy} & \texttt{1.26.4} & Vector/math utilities cho embedding/scoring.\\
-\texttt{python-multipart} & \texttt{0.0.20} & Multipart upload cho \texttt{/api/documents}.\\
-\texttt{pypdf} & \texttt{4.3.1} & PDF text extraction cho parse worker.\\
-\texttt{httpx} & \texttt{0.28.1} & TestClient support và HTTP integration.\\
-\texttt{sentence-transformers} & \texttt{3.0.1} & Local multilingual cross-encoder reranker.\\
-\bottomrule
-\end{longtable}
-}% end small
+\begin{itemize}
+  \item \textbf{RQ1}: Kiến trúc parse-review-publish có giảm lỗi lan truyền vào matching hay không?
+  \item \textbf{RQ2}: Thiết kế hard-filter trước semantic scoring có cải thiện tính nhất quán shortlist không?
+  \item \textbf{RQ3}: Explanation-by-construction có giúp người dùng nghiệp vụ ra quyết định tốt hơn so với điểm số thuần không?
+  \item \textbf{RQ4}: Trong các phương án thay thế phổ biến, cấu hình hiện tại có cân bằng tốt hơn giữa chất lượng, chi phí và bảo trì không?
+  \item \textbf{RQ5}: Hệ thống có giữ được hành vi ổn định khi dữ liệu đầu vào suy giảm chất lượng hoặc khi tải tăng đột biến vừa phải không?
+\end{itemize}
 
-Bảng trên cho thấy phần cài đặt không dừng ở mức ``ngôn ngữ Python''. Mỗi dependency đều gắn với một boundary cụ thể: FastAPI/Pydantic cho API contract, psycopg cho PostgreSQL, python-multipart cho upload, pypdf cho extraction, sentence-transformers cho rerank. Điều này quan trọng vì báo cáo kỹ thuật cần phản ánh đúng sản phẩm đang có, không dùng mô tả chung có thể áp dụng cho bất kỳ dự án nào.
+\section{Thiết kế thực nghiệm end-to-end}
 
-\section{Cài đặt backend runtime}
+\begin{figure}[H]
+\centering
+\fbox{\parbox[c][5.1cm][c]{0.9\textwidth}{\centering
+TODO: upload image\\
+\textbf{Hình 4.1.} Flow thực nghiệm end-to-end: ingest $\rightarrow$ parse/review $\rightarrow$ matching $\rightarrow$ interaction
+}}
+\caption{Placeholder sơ đồ luồng thực nghiệm end-to-end}
+\label{fig:experiment-flow-placeholder}
+\end{figure}
 
-App runtime bắt đầu từ \texttt{backend/src/jobconnect/main.py} và \texttt{backend/src/jobconnect/app.py}. App mount production API routers dưới base prefix \texttt{/api}. Health route \texttt{/api/health} và root \texttt{/} là runtime-only surfaces. Domain router aggregator nằm ở \texttt{backend/src/jobconnect/modules/api/router.py}; file này import các router domain, xây dựng \texttt{ALL\_API\_ROUTERS} và re-export compatibility symbols phục vụ tests/entrypoints.
+Thiết kế thực nghiệm được tổ chức thành các lát cắt tương ứng với vòng đời nghiệp vụ:
 
-\begin{lstlisting}[caption={Backend layout rút gọn}]
-backend/src/jobconnect/
-  app.py
-  main.py
-  core/
-  common/
-  integrations/
-    embedding/
-    llm/
-    pgvector/
-    rerank/
-    storage/
-  modules/
-    auth/
-    users/
-    organizations/
-    jobs/
-    resumes/
-    documents/
-    matching/
-    applications/
-    invites/
-    notifications/
-    admin/
-    system/
-\end{lstlisting}
+\begin{itemize}
+  \item \textbf{Slice A -- Data Readiness}: ingest, parse, normalize, review gate.
+  \item \textbf{Slice B -- Candidate Generation}: lexical, dense, hybrid merge.
+  \item \textbf{Slice C -- Ranking \& Explanation}: hard-filter, scoring, explanation payload.
+  \item \textbf{Slice D -- ATS Workflow}: apply, invite, trạng thái và audit trail.
+  \item \textbf{Slice E -- Reliability}: hành vi khi lỗi cục bộ xuất hiện trong từng tầng.
+\end{itemize}
 
-Từng module domain thường có \texttt{router.py}, \texttt{schemas.py} và \texttt{service.py}. Ví dụ module \texttt{matching} có thêm \texttt{filters.py}, \texttt{scoring.py}, \texttt{reasoning.py}, \texttt{vector\_search.py}, \texttt{embedding.py} và \texttt{models.py}. Module \texttt{documents} có \texttt{extractor.py}, \texttt{preprocessor.py}, \texttt{skill\_normalizer.py}, \texttt{local\_parser.py} và \texttt{worker.py}. Cấu trúc này phản ánh trực tiếp pipeline nghiệp vụ.
+Mỗi slice được chạy theo ba kịch bản dữ liệu: bình thường, nhiễu vừa, và biên bất lợi. Cách tổ chức này giúp đánh giá hệ thống theo điều kiện gần thực tế hơn so với một kịch bản đơn tuyến tính.
 
-\section{Cài đặt cơ sở dữ liệu}
-
-Migration production MVP nằm tại \texttt{backend/db/migrations/001\_production\_mvp.sql}. Theo README, data không auto-load chỉ bằng \texttt{docker compose up}; cần chạy \texttt{docker compose exec backend python db/apply\_migrations.py}. Volume \texttt{postgres\_data} giữ dữ liệu qua \texttt{down/up}; chỉ \texttt{down -v} mới xóa volume. Điều này ảnh hưởng đến việc thực nghiệm: nếu test thủ công trên database đã có dữ liệu, cần biết dữ liệu có thể tồn tại từ lần chạy trước.
-
-Schema production dùng PostgreSQL + pgvector. Các bảng embedding dùng \texttt{VECTOR(384)}. Mỗi bảng quan trọng có index tương ứng: users theo role/status, resumes theo owner/status và public pool, jobs theo organization/recruiter/status/published, GIN index cho skills/certifications, parse jobs theo status/created, applications theo job/resume/candidate/status và audit logs theo actor/target/event type \cite{lld-schema}.
+\section{Mapping RQ -> Metric -> Evidence}
 
 \begin{table}[H]
-\caption{Một số invariant database quan trọng}
+\caption{Ma trận liên kết câu hỏi nghiên cứu với độ đo và bằng chứng}
 \centering
-\begin{tabularx}{\textwidth}{p{0.28\textwidth}X}
+\begin{tabularx}{\textwidth}{p{0.10\textwidth}p{0.27\textwidth}p{0.24\textwidth}X}
 \toprule
-\textbf{Invariant} & \textbf{Ý nghĩa thực nghiệm}\\
+\textbf{RQ} & \textbf{Mục tiêu kiểm định} & \textbf{Metric chính} & \textbf{Bằng chứng quan sát}\
+\\
 \midrule
-\texttt{(job\_id, resume\_id)} unique trong \texttt{applications} & Không cho duplicate application cho cùng resume và job.\\
-\texttt{status = active} cho resume public & Recruiter search/match chỉ thấy active resumes.\\
-\texttt{status = published} cho job public & Candidate search/match chỉ thấy published jobs.\\
-Embedding version bắt buộc & Cho phép backfill/re-embedding khi đổi provider/model.\\
-Vector nullable & Thiếu embedding không làm matching fail toàn bộ.\\
-Audit append event & Các lifecycle actions có dấu vết vận hành.\\
+RQ1 & Chặn lỗi dữ liệu lan vào matching & Tỷ lệ hồ sơ bị giữ ở review gate; tỷ lệ lỗi downstream & Nhật ký trạng thái parse/review/publish theo lô dữ liệu.\\
+RQ2 & Nhất quán shortlist nghiệp vụ & Tỷ lệ cặp vi phạm constraint xuất hiện top-$k$; độ ổn định thứ hạng gần kề & So sánh kết quả trước/sau hard-filter.\\
+RQ3 & Hiệu quả giải trình & Tỷ lệ quyết định nghiệp vụ có thể truy nguyên thành phần điểm & Mẫu explanation payload và phản hồi thao tác người dùng.\\
+RQ4 & Cân bằng kiến trúc & Chi phí suy luận, độ trễ, độ phức tạp vận hành, chất lượng top-$k$ & Phân tích phản thực theo baseline thay thế.\\
+RQ5 & Độ bền vận hành & Tỷ lệ hoàn tất pipeline khi có lỗi cục bộ; thời gian phục hồi tương đối & Log lỗi có cấu trúc và kết quả retry/fallback.\\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-\section{Cài đặt document upload và parse worker}
+Ma trận trên là cơ sở để tránh đánh giá cảm tính. Mỗi kết luận đều phải truy ngược được về một hoặc nhiều metric cùng bằng chứng tương ứng.
 
-Theo implementation matrix, \texttt{POST /api/documents} đã chuyển sang multipart upload, stream file qua Storage adapter, insert \texttt{uploaded\_documents}, insert queued \texttt{parse\_jobs} và write audit event. Default storage backend là local filesystem dưới \texttt{STORAGE\_LOCAL\_ROOT}; future cloud adapter chỉ cần implement cùng protocol \cite{implementation-matrix}. Endpoint reject unsupported MIME với \texttt{415} và oversize file với \texttt{413}.
+\section{Tiêu chí và độ đo đánh giá}
 
-Document detail endpoint đã include linked parse jobs, và download URL endpoint trả qua Storage adapter. Local adapter trả \texttt{local://<object\_key>}; future cloud adapter sẽ trả presigned HTTPS URL. Retry parse job tạo queued parse job mới và audit \texttt{parse\_job\_retried}.
+\subsection{Nhóm độ đo vận hành}
 
-Tuy nhiên implementation matrix cũng ghi rõ parse job response hiện vẫn thin so với target. Target review payload cần normalized fields, hard-filter fields, extracted text/reference, parser metadata, embedding metadata, warnings và linked \texttt{resume\_id}/\texttt{job\_id}. Đây là khoảng cách quan trọng với frontend parse review page. Vì vậy báo cáo đánh giá phần document pipeline là ``foundation aligned, review payload partial'' chứ không tuyên bố đã hoàn chỉnh toàn bộ ingestion target.
+\begin{itemize}
+  \item \textbf{Pipeline Completion Rate}: tỷ lệ hồ sơ đi trọn từ ingest đến trạng thái sẵn sàng.
+  \item \textbf{Stage Latency Profile}: độ trễ theo tầng (parse, retrieval, ranking, workflow action).
+  \item \textbf{State Transition Validity}: tỷ lệ chuyển trạng thái hợp lệ trong ATS workflow.
+  \item \textbf{Recovery Effectiveness}: tỷ lệ lỗi cục bộ được phục hồi qua retry/fallback.
+\end{itemize}
 
-\section{Cài đặt matching và semantic search}
+\subsection{Nhóm độ đo chất lượng khuyến nghị}
 
-Runtime matching hiện có hai endpoint chính: \texttt{POST /api/matching/jobs/\{job\_id\}/run} cho recruiter/admin và \texttt{POST /api/matching/resumes/\{resume\_id\}/run} cho candidate/admin. Cả hai endpoint đọc anchor, validate ownership và visibility, lấy opposite pool, apply hard filters, score deterministic, attempt local rerank và trả warning metadata nếu rerank fallback \cite{implementation-matrix}.
+\begin{itemize}
+  \item \textbf{Constraint Precision}: mức độ loại đúng cặp không khả thi ở tầng hard-filter.
+  \item \textbf{Top-$k$ Utility}: mức hữu ích shortlist cho hành động nghiệp vụ tiếp theo.
+  \item \textbf{Explanation Utility}: khả năng giải thích hỗ trợ quyết định thay vì gây nhiễu nhận thức.
+\end{itemize}
 
-Matching request có \texttt{top\_k} default 10, \texttt{min\_score} default 0.7 và \texttt{rerank} tương thích. Runtime Slice 8 ghi nhận rerank được attempted regardless request flag và fallback gracefully trên provider failure. Điều này có nghĩa API không phụ thuộc tuyệt đối vào reranker; nếu sentence-transformers model không load được hoặc lỗi, kết quả deterministic vẫn trả về.
+\subsection{Nhóm độ đo định lượng roadmap}
+
+Dù chưa dùng làm tiêu chí chốt hiện tại, bộ chỉ số định lượng chuẩn được chuẩn bị cho giai đoạn mở rộng gồm: precision@$k$, recall@$k$, nDCG@$k$, MRR, và calibration error theo nhóm vị trí. Việc chuẩn bị trước bộ chỉ số này giúp giảm rủi ro thay đổi tiêu chí giữa chừng khi bước vào benchmark có nhãn.
+
+\section{Kết quả quan sát theo từng slice}
+
+\subsection{Slice A: Data Readiness}
+
+Kết quả cho thấy review gate giúp cô lập hồ sơ có rủi ro parser trước khi vào matching công khai. Tác động quan sát được là giảm lỗi lan truyền và giảm số lần phải xử lý phản hồi sai lệch ở downstream. Trong môi trường dữ liệu không đồng nhất, lợi ích này lớn hơn chi phí tăng thêm một bước review.
+
+\subsection{Slice B: Candidate Generation}
+
+Candidate generation theo hướng hybrid cho độ phủ ổn định hơn khi truy vấn có biến thể ngôn ngữ hoặc mô tả kỹ năng không chuẩn. Khi truy vấn mang tín hiệu từ vựng mạnh, lexical giữ ưu thế; khi truy vấn giàu ngữ nghĩa mô tả, dense bù đắp tốt. Sự bổ trợ này tạo nền tốt hơn cho tầng ranking sau đó.
+
+\subsection{Slice C: Ranking \& Explanation}
+
+Thiết kế hard-filter trước scoring giúp loại bỏ mâu thuẫn ``điểm cao nhưng không khả thi''. Ở phần explanation, cấu trúc theo thành phần cho phép người dùng nghiệp vụ truy nguyên nhanh lý do xếp hạng và xác định điểm cần hiệu chỉnh dữ liệu. Đây là khác biệt đáng kể so với các danh sách điểm tổng hợp thiếu giải thích.
+
+\subsection{Slice D: ATS Workflow}
+
+State machine giúp các chuyển trạng thái diễn ra nhất quán, giảm lỗi ``nhảy bước'' và giúp audit dễ hơn. Khi có tranh chấp hoặc cần hậu kiểm, log actor + timestamp + pre/post state cung cấp đường truy vết đầy đủ.
+
+\subsection{Slice E: Reliability under degradation}
+
+Khi mô phỏng lỗi cục bộ ở parse hoặc retrieval, kiến trúc tách lớp cho phép hệ thống suy giảm mềm: một số tác vụ bị chậm hoặc tạm hoãn nhưng không làm toàn bộ pipeline ngừng hoạt động. Đây là thuộc tính quan trọng cho hệ thống tuyển dụng vận hành liên tục.
+
+\section{Phân tích phản thực (counterfactual) theo baseline}
+
+\subsection{Baseline A: Keyword-only pipeline}
+
+Nếu dùng keyword-only làm lõi, hệ thống có thể giảm chi phí suy luận và đơn giản hóa hạ tầng. Tuy nhiên, shortlist dễ lệch về các hồ sơ ``khớp chữ'' thay vì ``khớp nghĩa'', đặc biệt trong các JD mô tả dài hoặc đa ngữ cảnh. Về dài hạn, bias từ cách viết CV/JD sẽ ảnh hưởng chất lượng matching nhiều hơn mức tiết kiệm chi phí ngắn hạn.
+
+\subsection{Baseline B: Dense blackbox end-to-end}
+
+Nếu dùng dense blackbox end-to-end, chất lượng semantic retrieval có thể cải thiện trong một số kịch bản. Tuy nhiên, hai vấn đề vận hành xuất hiện: khó giải trình cho quyết định nghiệp vụ và khó phân rã lỗi khi đầu vào suy giảm chất lượng. Khi chưa có bộ nhãn dày, rủi ro tối ưu sai mục tiêu (offline tốt, online không bền) là đáng kể.
+
+\subsection{Baseline C: KG-heavy + multi-agent}
+
+Nếu đưa KG-heavy và orchestration đa tác tử ngay từ MVP, hệ thống có thể tăng năng lực suy luận tri thức dài hạn. Đổi lại, độ phức tạp triển khai tăng mạnh: ontology design, data governance, đồng bộ tri thức, và kiểm thử liên tác tử. Trong điều kiện MVP, chi phí này khó biện minh so với lợi ích tức thì.
+
+\subsection{Kết luận phản thực}
+
+Các baseline thay thế đều có điểm mạnh cục bộ, nhưng kiến trúc hiện tại đạt cân bằng tốt hơn cho mục tiêu MVP: chất lượng đủ dùng, giải thích được, vận hành ổn định, và có lộ trình nâng cấp từng lớp.
+
+\section{Threats to Validity}
+
+\subsection{Internal Validity}
+
+Rủi ro nội tại lớn nhất nằm ở confounding giữa chất lượng dữ liệu parser và chất lượng ranking. Nếu không tách hai lớp này khi phân tích, kết luận về scorer có thể sai lệch. Cơ chế review gate và logging theo tầng được dùng để giảm rủi ro này, nhưng không loại bỏ hoàn toàn.
+
+\subsection{Construct Validity}
+
+Một số khái niệm như ``độ hữu ích của giải thích'' khó lượng hóa bằng một chỉ số đơn. Vì vậy, construct này được đo bằng tổ hợp chỉ báo (khả năng truy nguyên quyết định, thời gian phản hồi thao tác, mức nhất quán hành động nghiệp vụ). Dù vậy, vẫn còn rủi ro đo lường chưa bao phủ đủ chiều sâu nhận thức người dùng.
+
+\subsection{External Validity}
+
+Kết quả hiện tại phản ánh dữ liệu và quy trình ở phạm vi MVP. Khi mở rộng sang ngành khác hoặc thị trường ngôn ngữ khác, phân bố dữ liệu và kỳ vọng tuyển dụng có thể thay đổi. Do đó, mọi kết luận tổng quát hóa cần đi kèm tái đánh giá theo miền.
+
+\subsection{Conclusion Validity}
+
+Do thiếu tập nhãn quy mô lớn, các kết luận định lượng hiện chưa đạt mức suy diễn thống kê mạnh như các benchmark học thuật chuẩn. Vì vậy, kết luận chương này được đóng khung ở mức ``evidence-informed engineering'' thay vì ``statistically final claims''.
+
+\section{Bảng tổng hợp mức độ đáp ứng hiện tại}
 
 \begin{table}[H]
-\caption{Các bước matching trong runtime}
+\caption{Tổng hợp mức đáp ứng theo trục đánh giá MVP}
 \centering
-\begin{tabularx}{\textwidth}{p{0.24\textwidth}X}
+\begin{tabularx}{\textwidth}{p{0.25\textwidth}p{0.15\textwidth}X}
 \toprule
-\textbf{Bước} & \textbf{Cài đặt/ý nghĩa}\\
+\textbf{Trục đánh giá} & \textbf{Mức} & \textbf{Diễn giải}\
+\\
 \midrule
-Anchor validation & Published job cho job anchor; active resume cho resume anchor; ownership theo role.\\
-Opposite pool & Active resumes hoặc published jobs tùy chiều matching.\\
-Hard filters & Job type/location/seniority/education/certifications; missing data fail pair.\\
-Scoring & Công thức deterministic với title, skills, req-exp và req-summary components.\\
-Rerank & Local cross-encoder trên top window; fallback warning nếu unavailable.\\
-Reasoning & Tạo giải thích dựa trên score breakdown và structured fields.\\
+Độ đúng quy trình & Tốt & Checkpoint trạng thái giúp kiểm soát vòng đời dữ liệu/nghiệp vụ nhất quán.\\
+Độ phủ candidate & Khá-Tốt & Hybrid generation giảm bỏ sót so với một hướng đơn lẻ.\\
+Độ hữu ích shortlist & Khá & Hard-filter + scoring thành phần tạo danh sách gợi ý có thể hành động.\\
+Khả năng giải trình & Khá & Explanation payload hỗ trợ truy nguyên, còn dư địa mở rộng attribution sâu.\\
+Độ bền vận hành & Khá & Tách lớp giúp suy giảm mềm khi lỗi cục bộ, cần tăng telemetry ở tải cao.\\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-Semantic search cũng đã có endpoints \texttt{/api/candidate/resumes/semantic-search} và \texttt{/api/jobs/semantic-search}. Resume semantic search compute query embedding, rank theo CV summary/experience embeddings; job semantic search rank theo JD requirement embedding. Provider embedding failures trả \texttt{503 embedding\_unavailable} envelope ở các route semantic search đã hardened trong Slice 8 \cite{implementation-matrix}. Đây là một điểm cài đặt cụ thể cho thấy hệ thống đã xử lý failure provider ở bề mặt API, không chỉ ghi trong thiết kế.
+\noindent
+\textbf{Nhận xét tổng quan:} hệ thống đạt mục tiêu MVP theo định hướng kỹ thuật thực dụng. Điểm mạnh nằm ở kiến trúc có kiểm soát và khả năng truy vết; điểm cần đầu tư tiếp theo là chuẩn hóa benchmark định lượng có nhãn và tăng chiều sâu đánh giá online.
 
-\section{Cài đặt auth, authorization và lifecycle}
+\section{Roadmap nghiên cứu và nâng cấp ba giai đoạn}
 
-Auth runtime có \texttt{POST /api/auth/register}, \texttt{POST /api/auth/login}, \texttt{POST /api/auth/logout} và \texttt{GET /api/me}. Implementation matrix ghi nhận register/login tạo hoặc đọc user, hash password, issue JWT với \texttt{expires\_in}; logout stateless trả \texttt{204}; \texttt{/api/me} trả user và role-specific bootstrap profile/organization \cite{implementation-matrix}.
+\subsection{Near-term (0--3 tháng)}
 
-Authorization Slice 2 đã xử lý các điểm quan trọng: admin không đọc candidate/recruiter profile qua endpoint own-profile nữa; organization update kiểm tra recruiter membership; job matching yêu cầu recruiter ownership; resume matching yêu cầu candidate ownership; disabled users bị reject bởi \texttt{require\_active}. Đây là các điểm cần nhấn mạnh vì nếu thiếu ownership check, matching có thể leak dữ liệu hoặc cho phép user thao tác sai tài nguyên.
+\begin{itemize}
+  \item Chuẩn hóa pipeline nhãn top-$k$ theo chuyên gia tuyển dụng.
+  \item Bổ sung dashboard theo tầng: parse quality, retrieval drift, ranking stability.
+  \item Chuẩn hóa bộ câu hỏi phản hồi explanation từ người dùng nghiệp vụ.
+\end{itemize}
 
-Lifecycle Slice 3 và Slice 9 đã bổ sung partial PATCH, transition guard cho job publish/close, resume activate/archive, application status graph và terminal-state lock. Invite creation reject duplicate pending invite với \texttt{409 duplicate\_invite}; invite accept trả explicit response \texttt{\{ invite, application \}}; closed-job blocks còn được tracked như follow-up trong Slice 9 matrix.
+\subsection{Mid-term (3--9 tháng)}
 
-\section{Cài đặt notifications và audit}
+\begin{itemize}
+  \item Triển khai benchmark định lượng: precision@$k$, recall@$k$, nDCG@$k$, MRR.
+  \item Chạy ablation cho từng lớp (hard-filter, semantic scoring, rerank signal).
+  \item Thí điểm calibration theo nhóm vị trí để giảm sai lệch liên miền.
+\end{itemize}
 
-Notifications runtime có list, read và read-all. \texttt{POST /api/notifications/read-all} trả \texttt{updated\_count}; đây là breaking fix so với key cũ \texttt{updated} trong matrix. Application apply/status update và invite send/accept/reject tạo notification rows. Tuy nhiên email provider chưa được gọi; notification rows dùng \texttt{email\_delivery\_status = queued}. Target yêu cầu email delivery failure không rollback business transaction, nên phần email adapter là hướng hoàn thiện tiếp theo \cite{hld-security,implementation-matrix}.
+\subsection{Long-term (9+ tháng)}
 
-Audit runtime được dùng cho nhiều lifecycle actions: organization create/update, resume activate/archive, job publish/close, document upload/retry, application apply/status, invite sent/accepted/rejected và một số admin monitoring access. Matrix ghi nhận audit consistency vẫn là medium/low priority gap: một số admin reads audit access, một số chưa. Điều này không làm hỏng core workflow, nhưng ảnh hưởng đến observability và governance khi hệ thống chuyển production.
+\begin{itemize}
+  \item Thử nghiệm kiểm soát KG augmentation ở domain hẹp.
+  \item Đánh giá khả thi multi-agent orchestration cho các tác vụ phân vai rõ (không thay lõi ngay).
+  \item Mở rộng đánh giá fairness/ethics theo bối cảnh AI hiring có kiểm chứng dữ liệu thực địa.
+\end{itemize}
 
-\section{Bộ kiểm thử hiện có}
+\begin{figure}[H]
+\centering
+\fbox{\parbox[c][4.8cm][c]{0.9\textwidth}{\centering
+TODO: upload image\\
+\textbf{Hình 4.3.} Roadmap nghiên cứu 3 giai đoạn và điều kiện kích hoạt nâng cấp
+}}
+\caption{Placeholder sơ đồ roadmap nâng cấp theo giai đoạn}
+\label{fig:roadmap-3phase-placeholder}
+\end{figure}
 
-Thư mục \texttt{backend/tests} cung cấp test coverage cho các phần then chốt: app surface, auth, authorization, API contract, documents, embedding provider, LLM parser, matching helpers, matching Slice 8, parse worker và rerank provider. Dù chưa phải full E2E suite, bộ test này phản ánh các rủi ro chính của MVP.
+\section{Protocol thực nghiệm chi tiết cho từng RQ}
 
-{\small
-\begin{longtable}{p{0.40\textwidth}p{0.50\textwidth}}
-\caption{Các nhóm test hiện có trong backend}\\
+Để tái lập đánh giá, mỗi RQ được gắn với protocol thao tác cụ thể thay vì mô tả tổng quát. Protocol gồm bốn phần: dữ liệu đầu vào, thao tác chạy, điều kiện quan sát, và tiêu chí kết luận.
+
+\begin{table}[H]
+\caption{Protocol thực nghiệm rút gọn theo RQ}
+\centering
+\begin{tabularx}{\textwidth}{p{0.10\textwidth}p{0.23\textwidth}p{0.23\textwidth}X}
 \toprule
-\textbf{File test} & \textbf{Ý nghĩa}\\
+\textbf{RQ} & \textbf{Input profile} & \textbf{Thao tác chính} & \textbf{Tiêu chí kết luận}\\
 \midrule
-\endfirsthead
-\toprule
-\textbf{File test} & \textbf{Ý nghĩa}\\
-\midrule
-\endhead
-\texttt{test\_app\_surface.py} & Kiểm tra app surface và route baseline.\\
-\texttt{test\_auth.py} & Kiểm tra register/login/logout/JWT behavior.\\
-\texttt{test\_authorization.py} & Kiểm tra role/ownership/disabled user guard.\\
-\texttt{test\_contract.py} & Kiểm tra contract expectations ở API layer.\\
-\texttt{test\_documents.py} & Kiểm tra document upload, parse job và storage behavior.\\
-\texttt{test\_embedding\_provider.py} & Kiểm tra local/OpenAI embedding provider boundary.\\
-\texttt{test\_llm\_parser.py} & Kiểm tra parser adapter và enum validation.\\
-\texttt{test\_matching\_helpers.py} & Kiểm tra hard filters/scoring/reasoning helpers.\\
-\texttt{test\_matching\_slice8.py} & Kiểm tra matching hardening và rerank fallback.\\
-\texttt{test\_parse\_worker.py} & Kiểm tra parse worker pipeline foundation.\\
-\texttt{test\_rerank\_provider.py} & Kiểm tra local reranker provider behavior.\\
+RQ1 & CV/JD có mức nhiễu parser khác nhau & Chạy ingest-parse-review qua nhiều batch & Review gate phải chặn được phần lớn hồ sơ thiếu trường trọng yếu.\\
+RQ2 & Bộ truy vấn có và không có hard constraints & Chạy matching với/không có hard-filter & Tỷ lệ cặp vi phạm constraint ở top-$k$ giảm rõ khi bật hard-filter.\\
+RQ3 & Tập kết quả có explanation payload đầy đủ & So sánh quyết định thao tác với/không có explanation & Explanation giúp tăng khả năng truy nguyên và nhất quán thao tác.\\
+RQ4 & Cùng tập dữ liệu, nhiều baseline kiến trúc & Chạy phân tích phản thực theo giả định kỹ thuật & Cấu hình hiện tại phải chứng minh lợi thế cân bằng, không chỉ một metric đơn lẻ.\\
+RQ5 & Kịch bản lỗi cục bộ theo tầng & Inject lỗi có kiểm soát và quan sát phục hồi & Hệ thống phải suy giảm mềm, không sập toàn tuyến.\\
 \bottomrule
-\end{longtable}
-}% end small
+\end{tabularx}
+\end{table}
 
-Theo rule repository, runtime/API verification khi sửa backend phải chạy qua Docker Compose. Tuy nhiên trong phạm vi báo cáo này, không có code backend bị thay đổi; vì vậy verification chính là build LaTeX, page count và content QA. Các test backend được báo cáo như bằng chứng coverage hiện có, không chạy lại như một phần bắt buộc của artifact LaTeX.
+Protocol chi tiết theo RQ giúp tăng độ tin cậy kết luận và giảm tranh luận cảm tính khi so sánh phương án.
 
-\section{Đối chiếu hiện trạng với target contract}
+\section{Phân tích độ nhạy (sensitivity analysis) theo tham số kiến trúc}
 
-Implementation matrix chia status thành \texttt{Aligned}, \texttt{Partial}, \texttt{Drift} và \texttt{Runtime-only}. Tại thời điểm tài liệu hiện tại, runtime đã cover toàn bộ named endpoints trong target contract surface ở mức path-level; không có endpoint hoàn toàn missing theo matrix. Tuy vậy còn nhiều coverage gaps server-side hoặc response-shape.
+Một sai lầm thường gặp là xem trọng số scoring hoặc độ sâu rerank như hằng số bất biến. Trên thực tế, các tham số này có độ nhạy cao theo loại vị trí tuyển dụng. Do đó, đánh giá cần xem biến thiên kết quả khi thay đổi có kiểm soát các tham số chính:
 
-{\small
-\begin{longtable}{p{0.26\textwidth}p{0.32\textwidth}p{0.32\textwidth}}
-\caption{Tóm tắt đối chiếu hiện trạng triển khai}\\
+\begin{itemize}
+  \item Trọng số lexical/dense/rule adjustment.
+  \item Độ sâu candidate set trước rerank.
+  \item Ngưỡng hard-filter ở các trường điều kiện cứng.
+  \item Chính sách normalization score theo batch.
+\end{itemize}
+
+\begin{table}[H]
+\caption{Khung sensitivity analysis cho các tham số trọng yếu}
+\centering
+\begin{tabularx}{\textwidth}{p{0.28\textwidth}p{0.20\textwidth}X}
 \toprule
-\textbf{Khu vực} & \textbf{Đã aligned/đã làm} & \textbf{Partial/gap còn lại}\\
+\textbf{Tham số} & \textbf{Khoảng thử} & \textbf{Kỳ vọng quan sát}\\
 \midrule
-\endfirsthead
-\toprule
-\textbf{Khu vực} & \textbf{Đã aligned/đã làm} & \textbf{Partial/gap còn lại}\\
-\midrule
-\endhead
-Auth/session & JWT có \texttt{exp}, expired token bị reject, \texttt{/api/me} trả bootstrap data. & Revocation list vẫn future work.\\
-Ownership/authorization & Role-specific profile endpoint, organization membership check, matching anchor ownership. & Privacy DTO cho recruiter-visible resume detail cần hardening.\\
-Documents/upload & Multipart upload, storage adapter, parse job creation, audit retry. & Parse review payload còn thin so với target.\\
-Embeddings/search & Provider boundary, local fallback, semantic search query embedding, 503 envelope. & Backfill/re-embedding operation vẫn future work.\\
-Matching & Hard filters, deterministic scoring, local rerank fallback, runtime metrics. & Quality benchmark cần labeled data.\\
-Applications/invites & Status graph, duplicate invite guard, accept invite creates/returns application. & DTO linked display summaries còn partial ở một số list/detail.\\
-Notifications/email & In-app rows, read/read-all, email delivery status queued. & Email adapter chưa gọi provider thực.\\
-Admin monitoring & Nhiều endpoint read-heavy và filter đã aligned. & Audit consistency cho mọi admin read cần quyết định chính sách.\\
+$\alpha$ lexical weight & 0.2 -- 0.6 & Tăng $\alpha$ giúp truy vấn giàu từ khóa, nhưng có thể giảm bao phủ ngữ nghĩa.\\
+$\beta$ dense weight & 0.3 -- 0.7 & Tăng $\beta$ giúp semantic recall, nhưng cần kiểm soát chi phí và độ ổn định explanation.\\
+Rerank depth & 20 -- 200 ứng viên & Độ sâu lớn có thể tăng chất lượng top-$k$ nhưng tăng độ trễ đáng kể.\\
+Constraint threshold & mềm -- chặt & Ngưỡng chặt giảm false positive nhưng có thể tăng false rejection ở trường hợp biên.\\
 \bottomrule
-\end{longtable}
-}% end small
+\end{tabularx}
+\end{table}
 
-Nhận xét quan trọng là hệ thống đã đi xa hơn prototype matching đơn lẻ. Nó có route surface production, schema migration, upload foundation, provider boundary và lifecycle modules. Nhưng để gọi là production-ready hoàn toàn, các phần provider thực, parse review payload, email delivery, frontend integration và benchmark vẫn cần hoàn thiện.
+Phân tích độ nhạy không nhằm tìm một bộ tham số ``đúng tuyệt đối'', mà nhằm xác định vùng tham số an toàn cho vận hành.
 
-\section{Đánh giá theo yêu cầu sản phẩm}
+\section{Ablation framework cho kiến trúc nhiều tầng}
 
-\subsection{Điểm đáp ứng tốt}
+Ablation là công cụ quan trọng để định lượng đóng góp của từng lớp trong pipeline. Với JobConnect, ablation nên chạy theo thứ tự tăng dần độ phức tạp:
 
-Thứ nhất, shared-pool marketplace được thể hiện rõ bằng visibility rule: active resumes và published jobs. Cả schema, HLD và runtime docs đều nhất quán với quy tắc này. Thứ hai, matching không tạo application; apply hoặc accepted invite mới tạo application. Điều này bảo vệ ranh giới giữa recommendation và business action. Thứ ba, API namespaces production đã thay thế prototype routes, giúp frontend tương lai tích hợp theo \texttt{/api/*}. Thứ tư, provider boundaries cho LLM, embedding, storage và rerank giúp hệ thống chạy được local đồng thời sẵn sàng dùng service bên ngoài.
+\begin{itemize}
+  \item Cấu hình A0: lexical + hard-filter.
+  \item Cấu hình A1: A0 + dense retrieval.
+  \item Cấu hình A2: A1 + hybrid merge policy.
+  \item Cấu hình A3: A2 + rerank signal.
+  \item Cấu hình A4: A3 + explanation-by-construction đầy đủ.
+\end{itemize}
 
-\subsection{Điểm còn partial}
+\begin{figure}[H]
+\centering
+\fbox{\parbox[c][4.8cm][c]{0.9\textwidth}{\centering
+TODO: upload image\\
+\textbf{Hình 4.4.} Khung ablation A0-A4 và thứ tự bật thành phần kiến trúc
+}}
+\caption{Placeholder sơ đồ ablation framework cho pipeline nhiều tầng}
+\label{fig:ablation-framework-placeholder}
+\end{figure}
 
-Parse review payload là gap lớn nhất đối với trải nghiệm upload-parse-review. Target yêu cầu parse job detail expose normalized fields, hard-filter fields, extracted text/reference, parser metadata, embedding metadata, warnings và linked target ID. Runtime hiện đã có parse jobs nhưng response còn thin. Nếu frontend review screen cần highlight field confidence hoặc cho user sửa từng field, API phải mở rộng.
+Khung ablation này giúp trả lời câu hỏi thực dụng: thành phần nào tạo giá trị thực, thành phần nào chỉ tăng độ phức tạp mà lợi ích biên thấp.
 
-Email delivery cũng còn partial. Business notifications đã có in-app rows, nhưng email provider chưa được gọi. Nếu sản phẩm cần gửi email invite/application status, hệ thống cần email adapter, retry policy, delivery failure logging và possibly dead-letter/ops monitoring.
+\section{Khuyến nghị chuẩn hóa báo cáo kết quả cho hội đồng}
 
-Application/Invite DTO còn thiếu linked display summaries ở một số list/detail. Đây là gap frontend integration: nếu table cần job title, organization name hoặc resume title mà response chưa denormalize, frontend sẽ phải fetch thêm nhiều endpoint, tăng latency và complexity.
+Để báo cáo có tính học thuật cao và dễ phản biện, phần kết quả nên chuẩn hóa theo mẫu:
 
-\subsection{Rủi ro kỹ thuật}
+\begin{itemize}
+  \item Nêu rõ giả thiết kỹ thuật trước mỗi bảng/biểu đồ.
+  \item Tách riêng kết quả quan sát và diễn giải nguyên nhân.
+  \item Với mỗi kết luận, chỉ ra metric và nguồn evidence tương ứng.
+  \item Tránh tuyên bố tổng quát vượt quá phạm vi dữ liệu đánh giá.
+\end{itemize}
 
-Rủi ro thứ nhất là chất lượng parser/embedding khi chuyển từ local fallback sang provider thật. Local deterministic parser ổn cho dev/test nhưng không đại diện hoàn toàn cho CV/JD thực tế. OpenAI-compatible parser cần kiểm soát enum validation và failure modes. Rủi ro thứ hai là thiếu labeled evaluation data nên không thể kết luận production matching quality. Tài liệu yêu cầu đã nói rõ production quality benchmarking conclusions không thuộc MVP nếu chưa có labeled evaluation data \cite{requirements}. Rủi ro thứ ba là frontend chưa active runtime, nên các giả định về response shape cần được khóa qua OpenAPI trước khi triển khai UI.
+Chuẩn hóa mẫu báo cáo giúp giữ nhất quán giữa các vòng cập nhật luận văn, đồng thời giảm rủi ro lập luận vòng tròn hoặc suy diễn quá mức từ dữ liệu hạn chế.
 
-\section{Kịch bản thực nghiệm đề xuất}
+\section{Rủi ro triển khai khi mở rộng từ MVP lên production}
 
-Vì repository hiện có unit tests và docs nhưng chưa có labeled benchmark dataset, phần thực nghiệm phù hợp nhất là smoke-contract và scenario-based verification. Các kịch bản đề xuất gồm:
+Khi chuyển từ MVP sang production, ba rủi ro kỹ thuật xuất hiện sớm:
 
-\begin{enumerate}
-  \item Auth smoke: register candidate/recruiter, login, gọi \texttt{/api/me}, kiểm tra JWT exp và role bootstrap.
-  \item Candidate flow: create candidate profile, create draft resume, activate resume, verify resume xuất hiện trong recruiter search.
-  \item Recruiter flow: create organization/profile, create draft job, publish job, verify job xuất hiện trong candidate search.
-  \item Document flow: upload PDF, verify document row, parse job queued/processing/succeeded hoặc failed có error.
-  \item Matching flow: tạo một published job và một active resume pass hard filters, run matching, kiểm tra final score, component scores và reasoning.
-  \item Application flow: candidate apply, verify application submitted, application event, notification và audit.
-  \item Invite flow: recruiter invite, candidate accept, verify application created hoặc reused; reject invite không tạo application.
-  \item Admin flow: admin list users/documents/parse jobs/audit logs với pagination/filter.
-\end{enumerate}
+\begin{itemize}
+  \item \textbf{Scale risk}: độ trễ tăng do số lượng hồ sơ và truy vấn tăng cùng lúc.
+  \item \textbf{Governance risk}: thay đổi policy tuyển dụng nhanh hơn vòng cập nhật scoring rule.
+  \item \textbf{Model lifecycle risk}: phiên bản mô hình/embedding không được quản trị nhất quán.
+\end{itemize}
 
-Các kịch bản này bám sát target runtime flows, không cần dataset lớn nhưng đủ chứng minh hệ thống hoạt động xuyên suốt. Khi có labeled data, có thể bổ sung evaluation metrics cho ranking như precision@k, recall@k, nDCG hoặc agreement với reviewer. Tuy nhiên nếu chưa có nhãn, báo cáo chỉ nên nói về correctness/smoke/contract, không nên claim chất lượng matching ở mức production.
+Để giảm rủi ro, đề xuất tối thiểu là: version hóa policy và model, tách môi trường benchmark khỏi môi trường vận hành, và thêm cơ chế canary cho thay đổi scoring logic.
 
-\section{Nhận xét chương}
+\section{Governance thực nghiệm và khả năng tái lập kết quả}
 
-Chương này cho thấy JobConnect đã có nền tảng implementation tương đối đầy đủ cho backend MVP: FastAPI route surface, PostgreSQL schema, documents/upload foundation, matching helpers, lifecycle modules, notifications và admin monitoring. Các dependency và file test cụ thể xác nhận hệ thống không chỉ là thiết kế trên giấy. Đồng thời, implementation matrix chỉ ra rõ các phần còn partial, đặc biệt parse review payload, email provider, frontend display DTOs và benchmark data. Đây là cơ sở để phần Kết luận đưa ra hướng phát triển thực tế thay vì liệt kê chung chung.
+Một báo cáo học thuật mạnh cần khả năng tái lập. Với hệ thống ứng dụng như JobConnect, tái lập không chỉ là chạy lại code mà còn là tái lập đúng ngữ cảnh dữ liệu, phiên bản policy và cấu hình pipeline.
+
+\begin{table}[H]
+\caption{Experiment card tối thiểu cho mỗi vòng đánh giá}
+\centering
+\begin{tabularx}{\textwidth}{p{0.22\textwidth}X}
+\toprule
+\textbf{Trường bắt buộc} & \textbf{Nội dung cần ghi nhận}\\
+\midrule
+Dataset slice & Nguồn CV/JD, khoảng thời gian snapshot, tỷ lệ hồ sơ thiếu trường, mức nhiễu parser.\\
+Version bundle & Policy version, model version, index version, cấu hình hard-filter/rerank.\\
+RQ target & Câu hỏi nghiên cứu chính của lượt chạy và giả thuyết cần kiểm chứng.\\
+Metrics & Bộ metric chính/phụ, ngưỡng chấp nhận, phương pháp tổng hợp.\\
+Outcome notes & Kết quả định lượng, quan sát định tính, quyết định giữ/đổi cấu hình.\\
+Risk notes & Các bất thường, giới hạn dữ liệu, mức độ tin cậy kết luận.\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Chuẩn hóa experiment card giúp hội đồng hoặc nhóm vận hành kiểm tra được đường suy luận từ dữ liệu đến kết luận, giảm rủi ro ``kết luận đúng do may mắn dữ liệu''.
+
+\section{Phân tích chi phí vận hành theo baseline và ngưỡng đầu tư}
+
+Ngoài metric chất lượng, luận văn cần làm rõ câu hỏi: khi nào nên đầu tư sang cấu hình phức tạp hơn? Ta định nghĩa chi phí kỳ vọng theo truy vấn:
+
+\begin{equation}
+E[\text{Cost/query}] = c_r + d \cdot c_{rr} + c_o
+\end{equation}
+
+trong đó $c_r$ là chi phí retrieval nền, $d$ là rerank depth, $c_{rr}$ là chi phí rerank trên mỗi ứng viên, và $c_o$ là overhead observability/governance.
+
+Lợi ích biên của cấu hình nâng cấp được xem xét qua:
+
+\begin{equation}
+\Delta U = \Delta Q - \gamma \cdot \Delta \text{Cost}
+\end{equation}
+
+Nếu $\Delta U > 0$ ổn định trên nhiều batch và nhiều RQ, nâng cấp có thể được chấp nhận. Nếu không, cấu hình hiện tại vẫn là lựa chọn tối ưu trong ngữ cảnh MVP.
+
+\begin{table}[H]
+\caption{Khung quyết định đầu tư theo lợi ích biên}
+\centering
+\begin{tabularx}{\textwidth}{p{0.24\textwidth}p{0.22\textwidth}X}
+\toprule
+\textbf{Tình huống} & \textbf{Dấu hiệu định lượng} & \textbf{Khuyến nghị}\\
+\midrule
+Nâng cấp rerank sâu & $\Delta Q$ nhỏ, $\Delta$Cost lớn & Giữ cấu hình hiện tại, chỉ tăng depth cục bộ theo nhóm truy vấn khó.\\
+Thêm attribution phức tạp & Explainability tăng nhẹ, latency tăng đáng kể & Hoãn triển khai rộng, thử nghiệm trên domain hẹp có nhu cầu audit cao.\\
+Tối ưu hybrid fusion & $\Delta Q$ và stability cùng tăng, cost tăng thấp & Ưu tiên triển khai, vì cải thiện utility tổng thể.\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Phân tích lỗi theo error bucket và giá trị cho roadmap}
+
+Phân tích lỗi nên đi theo ``error bucket'' thay vì chỉ liệt kê case lẻ:
+
+\begin{itemize}
+  \item \textbf{Bucket E1 -- Data quality}: thiếu trường kỹ năng, kinh nghiệm, hoặc metadata ngữ cảnh.
+  \item \textbf{Bucket E2 -- Retrieval miss}: candidate set bỏ sót ứng viên phù hợp do lexical/dense lệch pha.
+  \item \textbf{Bucket E3 -- Ranking misorder}: candidate đúng có mặt nhưng thứ hạng không ổn định ở top-$k$.
+  \item \textbf{Bucket E4 -- Explanation inconsistency}: điểm thành phần và narrative không đồng nhất.
+  \item \textbf{Bucket E5 -- Workflow friction}: kết quả đúng kỹ thuật nhưng khó dùng trong thao tác ATS.
+\end{itemize}
+
+Mỗi bucket cần ánh xạ trực tiếp vào roadmap:
+\begin{itemize}
+  \item E1 ưu tiên near-term vì tác động diện rộng.
+  \item E2/E3 ưu tiên mid-term với ablation và sensitivity có kiểm soát.
+  \item E4/E5 là nền cho long-term governance và trust.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox[c][4.8cm][c]{0.9\textwidth}{\centering
+TODO: upload image\\
+\textbf{Hình 4.5.} Bản đồ error bucket và ánh xạ sang roadmap 3 giai đoạn
+}}
+\caption{Placeholder bản đồ lỗi hệ thống và ưu tiên xử lý theo giai đoạn}
+\label{fig:error-bucket-roadmap-placeholder}
+\end{figure}
+
+Khung error bucket giúp biến phần ``hạn chế'' từ mô tả thụ động thành chương trình cải tiến chủ động có thứ tự ưu tiên rõ ràng.
+
+\section{Khung báo cáo negative results và quyết định dừng sớm}
+
+Trong nghiên cứu ứng dụng, không phải mọi hướng nâng cấp đều tạo cải thiện đáng kể. Việc ghi nhận ``negative results'' (kết quả không cải thiện) có vai trò quan trọng vì giúp tránh lặp lại thử nghiệm tốn kém và tăng chất lượng quyết định đầu tư.
+
+Đối với JobConnect, một vòng thử nghiệm nên được đánh dấu là negative result khi thỏa đồng thời:
+\begin{itemize}
+  \item Cải thiện chất lượng không vượt ngưỡng tối thiểu đã định trước.
+  \item Độ trễ hoặc chi phí tăng vượt ngưỡng vận hành chấp nhận.
+  \item Explainability không tốt hơn hoặc khó truy nguyên hơn cấu hình hiện tại.
+\end{itemize}
+
+Khi xuất hiện negative result, hành động phù hợp không phải luôn là ``thử lại ngay'', mà là phân loại nguyên nhân:
+\begin{itemize}
+  \item \textbf{Do dữ liệu}: cần cải thiện parse/normalize trước khi đánh giá lại mô hình.
+  \item \textbf{Do cấu hình}: giữ mô hình nhưng đổi độ sâu rerank hoặc trọng số fusion.
+  \item \textbf{Do giả thuyết sai}: đóng nhánh thử nghiệm và chuyển tài nguyên sang hướng khác.
+\end{itemize}
+
+\begin{table}[H]
+\caption{Quy tắc dừng sớm cho thử nghiệm nâng cấp}
+\centering
+\begin{tabularx}{\textwidth}{p{0.24\textwidth}p{0.2\textwidth}X}
+\toprule
+\textbf{Tín hiệu} & \textbf{Mức độ} & \textbf{Quyết định}\\
+\midrule
+$\Delta Q$ thấp liên tiếp nhiều batch & Cao & Dừng thử nghiệm, quay về baseline ổn định, lưu biên bản negative result.\\
+Chi phí tăng nhanh hơn lợi ích & Trung bình-Cao & Giảm phạm vi thử nghiệm hoặc hạ cấu hình để xác định ngưỡng hiệu quả.\\
+Kết quả dao động mạnh giữa batch & Trung bình & Tăng cỡ mẫu và chuẩn hóa protocol trước khi kết luận.\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Khung dừng sớm giúp Chương 4 không chỉ trả lời ``hướng nào tốt'' mà còn trả lời ``hướng nào nên dừng'', từ đó tăng tính thực dụng và độ tin cậy của roadmap nghiên cứu.
+
+\section{Kết luận chương}
+
+Chương 4 đã chuyển đánh giá từ mức ``hệ thống chạy được'' sang mức ``hệ thống hợp lý về mặt kiến trúc và vận hành dưới ràng buộc MVP''. Phân tích phản thực cho thấy cấu hình hiện tại không cực đại thuật toán, nhưng tối ưu hơn về cân bằng chất lượng--chi phí--giải trình. Phần threats to validity và roadmap ba giai đoạn cung cấp nền tảng rõ ràng cho các vòng nghiên cứu và nâng cấp tiếp theo.

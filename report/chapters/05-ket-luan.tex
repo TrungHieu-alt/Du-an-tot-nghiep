@@ -4,39 +4,25 @@
 \section*{Kết quả đạt được}
 \addcontentsline{toc}{section}{Kết quả đạt được}
 
-Khóa luận đã trình bày quá trình phân tích và thiết kế JobConnect MVP như một hệ thống tuyển dụng production-oriented, không còn là prototype matching riêng lẻ. Hệ thống được mô hình hóa thành shared-pool marketplace với ba vai trò candidate, recruiter và admin. Candidate upload CV, review parsed resume và activate resume; recruiter tạo hoặc upload JD, review parsed job và publish job; cả hai phía có thể chạy matching hai chiều; application chỉ được tạo bởi candidate apply hoặc accepted invite; notifications và audit logs ghi nhận các sự kiện nghiệp vụ quan trọng.
+Khóa luận đã xây dựng được một khung xử lý tuyển dụng số theo hướng cân bằng giữa tính chính xác kỹ thuật và khả năng giải thích nghiệp vụ. Kết quả quan trọng nhất là mô hình hai lớp đánh giá: lớp điều kiện bắt buộc để đảm bảo tính khả thi và lớp tương đồng ngữ nghĩa để xếp hạng mức độ phù hợp. Cách tổ chức này giúp kết quả so khớp có căn cứ rõ ràng, tránh phụ thuộc hoàn toàn vào suy luận khó kiểm soát.
 
-Về mặt kỹ thuật, khóa luận đã làm rõ kiến trúc backend FastAPI/Python của dự án. Các module runtime được tổ chức dưới \texttt{backend/src/jobconnect} theo app, core, common, integrations và domain modules. Báo cáo đã chỉ ra cụ thể các dependency đang dùng: FastAPI \texttt{0.115.6}, Pydantic \texttt{2.11.7}, psycopg \texttt{3.2.3}, numpy \texttt{1.26.4}, python-multipart, pypdf, httpx và sentence-transformers. Thiết kế data storage dùng PostgreSQL và pgvector, với schema entities rõ ràng cho users, profiles, organizations, resumes, jobs, documents, parse jobs, embeddings, applications, invites, notifications và audit logs.
-
-Khóa luận cũng đã trình bày pipeline CV/JD từ upload file đến structured data và embeddings. Pipeline gồm object storage, uploaded document metadata, parse job lifecycle, extraction, preprocessing, Unicode NFC normalization, skill normalization, LLM/local structured parser, user review, embedding generation và visibility activation/publishing. Các provider boundaries cho storage, LLM parser, embedding provider và reranker giúp hệ thống vận hành local nhưng vẫn sẵn sàng tích hợp provider thật.
-
-Về matching, khóa luận đã mô tả đầy đủ hard filters, công thức scoring, semantic retrieval, optional rerank, deterministic tie-break và reasoning có căn cứ. Công thức \texttt{final\_score} không được xem là chi tiết phụ, mà là core của hệ thống giải thích: title similarity, skill similarity, requirement-experience similarity và requirement-summary similarity đều có trọng số rõ. Cách thiết kế này giúp hệ thống tránh black-box matching và hỗ trợ người dùng hiểu vì sao một kết quả được xếp hạng cao.
+Bên cạnh đó, nghiên cứu đã chuẩn hóa được cách nhìn hệ thống ở mức vận hành: dữ liệu đầu vào được xử lý theo tiến trình trạng thái, tương tác tuyển dụng được theo dõi theo vòng đời, và các sự kiện quan trọng có thể truy vết để phục vụ kiểm tra hoặc cải tiến. Đây là nền tảng cần thiết để chuyển từ bản thử nghiệm sang sản phẩm có khả năng vận hành ổn định.
 
 \section*{Hạn chế}
 \addcontentsline{toc}{section}{Hạn chế}
 
-Hạn chế thứ nhất là parse review payload trong runtime hiện vẫn chưa đầy đủ so với target contract. Upload document và parse job foundation đã có, nhưng parse job detail cần mở rộng để trả normalized fields, hard-filter fields, extracted text/reference, parser metadata, embedding metadata, warnings và linked target IDs cho frontend review page. Nếu thiếu payload này, user khó review và sửa dữ liệu trước khi activate resume hoặc publish job.
+Hạn chế lớn nhất của nghiên cứu nằm ở dữ liệu đánh giá. Khi chưa có tập dữ liệu gán nhãn đủ rộng, việc kết luận chất lượng xếp hạng ở mức tổng quát còn thận trọng. Ngoài ra, dù cơ chế giải thích đã hình thành, cách diễn giải cho người dùng không chuyên vẫn cần được chuẩn hóa sâu hơn để tăng tính nhất quán trong trải nghiệm thực tế.
 
-Hạn chế thứ hai là email provider chưa hoàn chỉnh. Notifications in-app đã có, và email delivery status có thể ở trạng thái queued, nhưng provider gửi email thật và failure handling/retry vẫn là future work. Trong sản phẩm tuyển dụng, email invite, application status change và parse failure notification là các touchpoint quan trọng; do đó email adapter cần được triển khai trước khi production.
-
-Hạn chế thứ ba là frontend runtime chưa active. Repository hiện ghi rõ frontend runtime code chưa phải source of truth; các tài liệu frontend đang là planning notes. Vì vậy báo cáo chưa thể đánh giá trải nghiệm người dùng thực tế trên màn hình Job Market, Talent Market, upload-parse-review hoặc application management. Khi frontend được triển khai, API response DTO cần được kiểm tra lại để tránh per-row fetch và để đảm bảo privacy của candidate contact data.
-
-Hạn chế thứ tư là chưa có labeled evaluation dataset cho matching. Vì vậy không thể kết luận production quality theo precision, recall, nDCG hoặc human relevance agreement. Hiện có thể đánh giá correctness, contract, hard-filter behavior và deterministic score, nhưng chất lượng ranking thực tế cần dữ liệu nhãn từ chuyên gia hoặc lịch sử tuyển dụng.
+Một hạn chế khác là độ bao phủ của các tình huống biên trong vận hành. Những trường hợp dữ liệu thiếu, dữ liệu nhiễu cao hoặc biến thể ngôn ngữ đặc thù vẫn cần được quan sát thêm qua các vòng thử nghiệm mở rộng.
 
 \section*{Hướng phát triển}
 \addcontentsline{toc}{section}{Hướng phát triển}
 
-Hướng phát triển đầu tiên là hoàn thiện parse worker và parse review API. Cần đảm bảo parse job detail trả đủ dữ liệu cho frontend review form, bao gồm parsed normalized fields, hard-filter fields, warnings, parser version, embedding version và extracted text reference. Sau khi user save corrections, hệ thống phải refresh embeddings cho các field ảnh hưởng đến search/matching.
+Hướng phát triển thứ nhất là xây dựng bộ dữ liệu gán nhãn theo chuyên gia tuyển dụng để đánh giá định lượng có cơ sở hơn. Hướng thứ hai là thực hiện thí nghiệm ablation nhằm đo tác động riêng của từng thành phần trong mô hình, từ đó hiệu chỉnh trọng số theo bằng chứng thay vì kinh nghiệm chủ quan.
 
-Hướng thứ hai là triển khai email adapter và retry policy. Email failure không được rollback business transaction, nhưng phải được log rõ và có cơ chế retry hoặc operational review. Adapter nên có interface tương tự LLM/embedding/storage để môi trường local có thể dùng fake/local provider, còn production dùng provider thật.
-
-Hướng thứ ba là hoàn thiện frontend production integration. Các endpoint job list/search/semantic, application list/detail và invite list/detail cần trả linked display summaries đủ cho UI. Candidate contact data phải được kiểm soát theo role và flow. OpenAPI contract nên là nguồn chính để generate hoặc validate client.
-
-Hướng thứ tư là xây dựng bộ dữ liệu benchmark có nhãn cho matching. Mỗi cặp JD-CV nên có đánh giá từ recruiter hoặc chuyên gia theo mức phù hợp. Từ đó có thể đo precision@k, recall@k, nDCG và so sánh deterministic formula, local reranker, provider embedding và các biến thể scoring. Khi có dữ liệu này, hệ thống mới có cơ sở để thay đổi trọng số \texttt{final\_score} hoặc thêm bonus/penalty đo được.
-
-Hướng cuối cùng là tăng cường observability và admin monitoring. Các tín hiệu parse queue, matching latency, provider failure, notification delivery và audit consistency cần được tổng hợp thành dashboard hoặc report vận hành. Điều này giúp hệ thống không chỉ chạy đúng trong test mà còn có khả năng vận hành, debug và cải tiến liên tục khi dữ liệu thực tế tăng lên.
+Hướng thứ ba là mở rộng cơ chế quan sát vận hành theo thời gian thực để phát hiện sớm sai lệch dữ liệu và suy giảm chất lượng xử lý. Hướng thứ tư là chuẩn hóa ngôn ngữ giải thích cho từng nhóm người dùng, bảo đảm kết quả vừa đúng về kỹ thuật vừa dễ hiểu trong ngữ cảnh nghiệp vụ.
 
 \section*{Kết luận chung}
 \addcontentsline{toc}{section}{Kết luận chung}
 
-JobConnect MVP cho thấy một hướng tiếp cận thực tế để xây dựng hệ thống tuyển dụng có AI hỗ trợ nhưng vẫn kiểm soát được bằng rule, schema và audit. Thay vì để AI tự quyết định phù hợp hay không phù hợp, hệ thống đặt AI vào các boundary cụ thể: parse structured fields, tạo embedding, optional reasoning. Các quyết định nghiệp vụ quan trọng như visibility, hard filters, application creation, invite acceptance và status transition được điều khiển bằng rule rõ ràng. Đây là nền tảng phù hợp để phát triển tiếp thành một sản phẩm tuyển dụng có khả năng mở rộng và giải thích được.
+Tổng thể, khóa luận đã chứng minh tính khả thi của cách tiếp cận tuyển dụng số dựa trên mô hình xử lý có giải thích. Đóng góp của đề tài không nằm ở một thuật toán đơn lẻ, mà ở cách thiết kế hệ thống theo chuỗi xử lý minh bạch, có kiểm soát trạng thái và có khả năng truy vết. Với các hướng phát triển đã nêu, mô hình này có thể tiếp tục mở rộng để đáp ứng yêu cầu thực tế ở quy mô lớn hơn.

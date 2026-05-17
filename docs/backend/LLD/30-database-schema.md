@@ -128,6 +128,9 @@ Seed data:
 - Frontend and services must discover this row by config/bootstrap or lookup;
   they must not hard-code an environment-specific `organization_id`.
 - This seed row is a shared marketplace profile bucket, not tenant isolation.
+- Operational note: demo seed execution is implemented as separate SQLAlchemy
+  tooling under `backend/db/seeds/` and is intentionally decoupled from
+  `backend/db/migrations/` schema migrations.
 
 ### `recruiter_profiles`
 

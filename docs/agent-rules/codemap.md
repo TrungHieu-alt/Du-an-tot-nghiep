@@ -24,12 +24,16 @@ Current code paths:
 - `backend/src/jobconnect/core/database.py`
 - `backend/db/migrations/001_production_mvp.sql`
 - `backend/db/apply_migrations.py`
+- `backend/db/seeds/` (SQLAlchemy ORM seed/reset CLI tooling)
 
 Current runtime boundary:
 
 - App routes under `/api/*`.
 - Legacy `/api/v2/prototype/*` runtime code has been removed.
 - PostgreSQL tables are defined in `backend/db/migrations/`.
+- Runtime API persistence uses `psycopg` + raw SQL in module services.
+- SQLAlchemy ORM usage is currently limited to seed tooling in
+  `backend/db/seeds/*`.
 
 Use this section for tasks that target the runtime surface.
 

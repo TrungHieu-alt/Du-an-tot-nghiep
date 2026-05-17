@@ -2,8 +2,10 @@
 
 \usepackage{fontspec}
 \setmainfont{TeX Gyre Termes}
-\setsansfont{TeX Gyre Heros}
-\setmonofont{DejaVu Sans Mono}
+\setsansfont{TeX Gyre Termes}
+\setmonofont{TeX Gyre Termes}
+\usepackage{unicode-math}
+\setmathfont{Latin Modern Math}
 
 \usepackage[a4paper,top=2.5cm,bottom=3cm,left=3cm,right=2cm]{geometry}
 \usepackage{setspace}
@@ -27,28 +29,33 @@
 \usepackage{titlesec}
 \usepackage{fancyhdr}
 \usepackage[hidelinks]{hyperref}
-\urlstyle{tt}
+\usepackage{tocloft}
+\urlstyle{same}
 
-\definecolor{jcblue}{HTML}{164E63}
-\definecolor{jcgreen}{HTML}{0F766E}
 \definecolor{jcgray}{HTML}{F3F4F6}
-\definecolor{jcline}{HTML}{CBD5E1}
+\definecolor{jcline}{HTML}{B0B7C3}
 
 \titleformat{\chapter}[display]
-  {\normalfont\bfseries\color{jcblue}}
+  {\normalfont\bfseries\color{black}}
   {\MakeUppercase{\chaptertitlename}\ \thechapter}
   {0.5em}
   {\Huge}
 \titleformat{name=\chapter,numberless}[display]
-  {\normalfont\bfseries\color{jcblue}}
+  {\normalfont\bfseries\color{black}}
   {}
   {0pt}
   {\Huge}
-\titleformat{\section}{\normalfont\Large\bfseries\color{jcgreen}}{\thesection}{0.8em}{}
-\titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection}{0.8em}{}
+\titleformat{\section}{\normalfont\LARGE\bfseries\color{black}}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\normalfont\Large\bfseries\color{black}}{\thesubsection}{0.8em}{}
 
 \captionsetup[table]{position=top,skip=6pt,font=small,labelfont=bf}
-\captionsetup[figure]{position=bottom,skip=6pt,font=small,labelfont=bf}
+\setlength{\cftbeforetabskip}{4pt}
+\cftsetindents{table}{0em}{3.2em}
+\renewcommand{\cfttabfont}{\normalfont}
+\renewcommand{\cfttabpagefont}{\normalfont}
+\renewcommand{\cfttabpresnum}{Bảng~}
+\renewcommand{\cfttabaftersnum}{:\ }
+\settowidth{\cfttabnumwidth}{Bảng~10.10:\ }
 
 \pagestyle{fancy}
 \setlength{\headheight}{15pt}
@@ -59,7 +66,7 @@
 \renewcommand{\headrulewidth}{0.4pt}
 
 \lstdefinestyle{reportcode}{
-  basicstyle=\ttfamily\small,
+  basicstyle=\small,
   breaklines=true,
   frame=single,
   rulecolor=\color{jcline},
@@ -69,11 +76,13 @@
   showstringspaces=false
 }
 \lstdefinelanguage{json}{
-  basicstyle=\ttfamily\small,
+  basicstyle=\small,
   showstringspaces=false,
   breaklines=true
 }
 \lstset{style=reportcode}
+
+\renewcommand{\texttt}[1]{#1}
 
 \newcommand{\placeholder}[1]{\textless{}#1\textgreater{}}
 \newcommand{\docsrc}[1]{\textit{Nguồn: #1.}}
@@ -121,7 +130,11 @@ Tôi xin gửi lời cảm ơn tới \placeholder{Giảng viên hướng dẫn} 
 
 \tableofcontents
 \clearpage
+\begingroup
+\setstretch{1.0}
+\setlength{\parskip}{0pt}
 \listoftables
+\endgroup
 \addcontentsline{toc}{chapter}{Danh mục bảng}
 \clearpage
 \listoffigures
