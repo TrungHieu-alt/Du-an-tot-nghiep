@@ -1,18 +1,23 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { jobsApi, resumesApi, applicationsApi, matchingApi, ApiError, type JobSummary, type ResumeSummary } from "@/lib/api";
+import { jobsApi, resumesApi, applicationsApi, matchingApi, ApiError, type JobSummary, type Paginated } from "@/lib/api";
 import { useFetch } from "@/lib/hooks";
 import { LOCATION_LABELS, SENIORITY_LABELS, JOB_TYPE_LABELS } from "@/lib/constants";
 import PageHeader from "@/components/ui/PageHeader";
 import Badge from "@/components/ui/Badge";
 import Spinner from "@/components/ui/Spinner";
 import EmptyState from "@/components/ui/EmptyState";
+import Pagination from "@/components/ui/Pagination";
+
+const PAGE_LIMIT = 20;
 
 export default function JobMarketPage() {
   const { token } = useAuth();
   const [query, setQuery] = useState("");
+  const [searchMode, setSearchMode] = useState<"keyword" | "semantic">("keyword");
   const [searching, setSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<JobSummary[] | null>(null);
+  const [searchResults, setSearchResults] = useState<Paginated<JobSummary> | null>(null);
+  const [offset, setOffset] = useState(0);
   const [selectedJob, setSelectedJob] = useState<JobSummary | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
@@ -20,9 +25,9 @@ export default function JobMarketPage() {
   const [matchResult, setMatchResult] = useState<{ score: number; reasoning?: string } | null>(null);
   const [matchLoading, setMatchLoading] = useState(false);
 
-  const { data: jobs, loading } = useFetch(
-    () => (token ? jobsApi.list({ status: "published" }, token) : Promise.reject()),
-    [token],
+  const { data: jobs, loading, reload } = useFetch(
+    () => (token ? jobsApi.list({ status: "published", limit: String(PAGE_LIMIT), offset: String(offset) }, token) : Promise.reject()),
+    [token, offset],
   );
 
   const { data: myResumes } = useFetch(
@@ -32,14 +37,23 @@ export default function JobMarketPage() {
 
   const activeResume = myResumes?.items.find(r => r.status === "active");
 
-  async function search() {
+  // Reset to page 1 when search results change
+  useEffect(() => { if (searchResults === null) setOffset(0); }, [searchResults]);
+
+  async function runSearch() {
     if (!token || !query.trim()) { setSearchResults(null); return; }
     setSearching(true);
     try {
-      const res = await jobsApi.list({ q: query, status: "published" }, token);
-      setSearchResults(res.items);
-    } catch { setSearchResults([]); }
+      const res = searchMode === "semantic"
+        ? await jobsApi.semanticSearch({ query, limit: PAGE_LIMIT }, token)
+        : await jobsApi.list({ q: query, status: "published", limit: String(PAGE_LIMIT) }, token);
+      setSearchResults(res);
+    } catch { setSearchResults({ items: [], total: 0, limit: PAGE_LIMIT, offset: 0 }); }
     finally { setSearching(false); }
+  }
+
+  function clearSearch() {
+    setSearchResults(null); setQuery(""); setOffset(0);
   }
 
   async function runMatch(job: JobSummary) {
@@ -70,25 +84,35 @@ export default function JobMarketPage() {
     runMatch(job);
   }
 
-  const displayed = searchResults ?? jobs?.items ?? [];
+  const displayedPage = searchResults ?? jobs;
+  const displayed = displayedPage?.items ?? [];
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Thị trường việc làm" />
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="mb-4 flex gap-2">
+        <div className="mb-4 flex flex-wrap gap-2">
           <input
-            className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-            placeholder="Tìm kiếm công việc..."
+            className="flex-1 min-w-[200px] rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            placeholder={searchMode === "semantic" ? "Mô tả công việc bạn tìm (ví dụ: làm backend Python với FastAPI)..." : "Tìm theo từ khóa..."}
             value={query}
             onChange={e => setQuery(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && search()}
+            onKeyDown={e => e.key === "Enter" && runSearch()}
           />
-          <button onClick={search} disabled={searching} className="rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700 disabled:opacity-50">
+          <select
+            value={searchMode}
+            onChange={e => setSearchMode(e.target.value as "keyword" | "semantic")}
+            className="rounded-md border border-slate-300 bg-white px-2 py-2 text-sm"
+            aria-label="Loại tìm kiếm"
+          >
+            <option value="keyword">Từ khóa</option>
+            <option value="semantic">Thông minh (AI)</option>
+          </select>
+          <button onClick={runSearch} disabled={searching} className="rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700 disabled:opacity-50">
             {searching ? "..." : "Tìm"}
           </button>
           {searchResults !== null && (
-            <button onClick={() => { setSearchResults(null); setQuery(""); }} className="rounded-md border px-3 py-2 text-sm text-slate-500 hover:bg-slate-50">Xóa</button>
+            <button onClick={clearSearch} className="rounded-md border px-3 py-2 text-sm text-slate-500 hover:bg-slate-50">Xóa</button>
           )}
         </div>
 
@@ -98,9 +122,9 @@ export default function JobMarketPage() {
           </p>
         )}
 
-        {loading && <Spinner className="py-16" />}
-        {!loading && displayed.length === 0 && (
-          <EmptyState title="Không có công việc" body="Chưa có tin tuyển dụng phù hợp." />
+        {(loading || searching) && <Spinner className="py-16" />}
+        {!loading && !searching && displayed.length === 0 && (
+          <EmptyState title="Không có công việc" body={searchResults !== null ? "Không tìm thấy kết quả." : "Chưa có tin tuyển dụng phù hợp."} />
         )}
 
         <div className="space-y-2">
@@ -125,6 +149,17 @@ export default function JobMarketPage() {
             </div>
           ))}
         </div>
+
+        {/* Pagination only shows for the unfiltered default list (search returns capped result set) */}
+        {searchResults === null && jobs && (
+          <Pagination
+            className="mt-4"
+            total={jobs.total}
+            limit={jobs.limit}
+            offset={jobs.offset}
+            onChange={newOffset => { setOffset(newOffset); reload(); }}
+          />
+        )}
 
         {selectedJob && (
           <div className="mt-6 rounded-lg border border-slate-300 bg-white p-5">

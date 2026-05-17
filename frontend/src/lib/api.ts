@@ -181,8 +181,10 @@ export const organizationsApi = {
 // ── Resumes ───────────────────────────────────────────────────────────────────
 
 export const resumesApi = {
-  list: (token: string) =>
-    request<Paginated<ResumeSummary>>("GET", "/api/candidate/resumes", undefined, token),
+  list: (token: string, params: Record<string, string> = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request<Paginated<ResumeSummary>>("GET", `/api/candidate/resumes${qs ? "?" + qs : ""}`, undefined, token);
+  },
   create: (data: Record<string, unknown>, token: string) =>
     request<ResumeDetail>("POST", "/api/candidate/resumes", data, token),
   get: (id: number, token: string) =>
@@ -270,8 +272,10 @@ export const invitesApi = {
 // ── Notifications ─────────────────────────────────────────────────────────────
 
 export const notificationsApi = {
-  list: (token: string) =>
-    request<Paginated<NotificationItem>>("GET", "/api/notifications", undefined, token),
+  list: (token: string, params: Record<string, string> = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request<Paginated<NotificationItem>>("GET", `/api/notifications${qs ? "?" + qs : ""}`, undefined, token);
+  },
   markRead: (id: number, token: string) =>
     request<NotificationItem>("POST", `/api/notifications/${id}/read`, {}, token),
   markAllRead: (token: string) =>
@@ -300,6 +304,8 @@ export const adminApi = {
     const qs = new URLSearchParams(params).toString();
     return request<Paginated<UserSummary>>("GET", `/api/admin/users${qs ? "?" + qs : ""}`, undefined, token);
   },
+  updateUser: (userId: number, status: "active" | "disabled" | "invited", token: string) =>
+    request<UserSummary>("PATCH", `/api/admin/users/${userId}`, { status }, token),
   documents: (params: Record<string, string>, token: string) => {
     const qs = new URLSearchParams(params).toString();
     return request<Paginated<DocumentDetail>>("GET", `/api/admin/documents${qs ? "?" + qs : ""}`, undefined, token);

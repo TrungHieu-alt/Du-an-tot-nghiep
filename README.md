@@ -88,15 +88,15 @@ frontend/
 
 ## Known Gaps (MVP Scope)
 
-| Gap | Impact | Deferred to |
-|-----|--------|-------------|
-| `sentence_transformers` not installed → rerank falls back with a warning | Matching still works via score sort | Post-MVP |
-| Semantic search not wired in UI (filter-only search) | Users cannot do natural-language search from browser | Slice 16 follow-up |
-| Pagination UI not implemented (first 20 results shown) | Large datasets truncated | Post-MVP |
-| DOCX parsing returns empty text | Only PDF/TXT parsed for now | Post-MVP |
-| Admin disable-user action not in UI (read-only) | Admin must call API directly | Post-MVP |
-| Local filesystem storage for uploads | Not suitable for multi-instance or production | Post-MVP |
-| No email delivery (local log sender) | Notifications exist in DB; no email sent | Post-MVP |
+| Gap | Status | Notes |
+|-----|--------|-------|
+| `sentence_transformers` not installed → rerank falls back with a warning | Open | Matching still works via score sort. Install via `pip install -r requirements.txt` to enable. |
+| Semantic search UI | **Closed** (post-MVP fix) | Job/Talent market pages now expose a "Thông minh (AI)" mode using `POST /api/jobs/semantic-search` & `POST /api/candidate/resumes/semantic-search`. |
+| Pagination UI | **Closed** (post-MVP fix) | Reusable `<Pagination>` component wired into Job Market, Talent Market, and Admin pages (20/page). |
+| DOCX parsing | **Closed** (post-MVP fix) | `python-docx` extracts paragraphs + tables. Invalid DOCX returns empty (worker marks `empty_extraction`). |
+| Admin disable-user action in UI | **Closed** (post-MVP fix) | `PATCH /api/admin/users/{id}` + admin-page button (with self-disable guard). |
+| Local filesystem storage for uploads | Open | Not suitable for multi-instance or production. Storage adapter boundary already exists; add S3/MinIO impl. |
+| No real email delivery | Open | `EMAIL_PROVIDER=local` (default) logs only. Set `EMAIL_PROVIDER=smtp`, `SMTP_HOST`, `EMAIL_FROM` to enable SMTP. |
 
 ## Environment Variables
 

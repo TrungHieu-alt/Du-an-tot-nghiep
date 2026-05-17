@@ -1,17 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { resumesApi, jobsApi, invitesApi, matchingApi, ApiError, type ResumeSummary, type JobSummary } from "@/lib/api";
+import { resumesApi, jobsApi, invitesApi, matchingApi, ApiError, type ResumeSummary, type JobSummary, type Paginated } from "@/lib/api";
 import { useFetch } from "@/lib/hooks";
 import { LOCATION_LABELS, SENIORITY_LABELS, JOB_TYPE_LABELS } from "@/lib/constants";
 import PageHeader from "@/components/ui/PageHeader";
 import Spinner from "@/components/ui/Spinner";
 import EmptyState from "@/components/ui/EmptyState";
+import Pagination from "@/components/ui/Pagination";
+
+const PAGE_LIMIT = 20;
 
 export default function TalentMarketPage() {
   const { token } = useAuth();
   const [query, setQuery] = useState("");
+  const [searchMode, setSearchMode] = useState<"keyword" | "semantic">("keyword");
   const [searching, setSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<ResumeSummary[] | null>(null);
+  const [searchResults, setSearchResults] = useState<Paginated<ResumeSummary> | null>(null);
+  const [offset, setOffset] = useState(0);
   const [selectedResume, setSelectedResume] = useState<ResumeSummary | null>(null);
   const [inviteMessage, setInviteMessage] = useState("");
   const [inviting, setInviting] = useState(false);
@@ -26,23 +31,28 @@ export default function TalentMarketPage() {
     [token],
   );
 
-  const { data: resumes, loading } = useFetch(
-    () => (token ? resumesApi.list(token) : Promise.reject()),
-    [token],
+  // Default: list active resumes via search endpoint (recruiter cross-tenant)
+  const { data: resumes, loading, reload } = useFetch(
+    () => (token ? resumesApi.search({ status: "active", limit: String(PAGE_LIMIT), offset: String(offset) }, token) : Promise.reject()),
+    [token, offset],
   );
 
-  async function search() {
+  useEffect(() => { if (searchResults === null) setOffset(0); }, [searchResults]);
+
+  async function runSearch() {
     if (!token || !query.trim()) { setSearchResults(null); return; }
     setSearching(true);
     try {
-      const res = await resumesApi.list(token);
-      const filtered = res.items.filter(r =>
-        r.title.toLowerCase().includes(query.toLowerCase()) ||
-        r.skills.some(s => s.toLowerCase().includes(query.toLowerCase()))
-      );
-      setSearchResults(filtered);
-    } catch { setSearchResults([]); }
+      const res = searchMode === "semantic"
+        ? await resumesApi.semanticSearch({ query, limit: PAGE_LIMIT }, token)
+        : await resumesApi.search({ q: query, status: "active", limit: String(PAGE_LIMIT) }, token);
+      setSearchResults(res);
+    } catch { setSearchResults({ items: [], total: 0, limit: PAGE_LIMIT, offset: 0 }); }
     finally { setSearching(false); }
+  }
+
+  function clearSearch() {
+    setSearchResults(null); setQuery(""); setOffset(0);
   }
 
   async function runMatch(resume: ResumeSummary, jobId: number) {
@@ -73,7 +83,8 @@ export default function TalentMarketPage() {
     } finally { setInviting(false); }
   }
 
-  const displayed = searchResults ?? resumes?.items.filter(r => r.status === "active") ?? [];
+  const displayedPage = searchResults ?? resumes;
+  const displayed = displayedPage?.items ?? [];
   const publishedJobs = jobs?.items.filter((j: JobSummary) => j.status === "published") ?? [];
 
   return (
@@ -93,25 +104,34 @@ export default function TalentMarketPage() {
           </select>
         </div>
 
-        <div className="mb-4 flex gap-2">
+        <div className="mb-4 flex flex-wrap gap-2">
           <input
-            className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-            placeholder="Tìm ứng viên theo kỹ năng hoặc tiêu đề..."
+            className="flex-1 min-w-[200px] rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            placeholder={searchMode === "semantic" ? "Mô tả ứng viên bạn cần (ví dụ: backend Python senior)..." : "Tìm theo kỹ năng hoặc tiêu đề..."}
             value={query}
             onChange={e => setQuery(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && search()}
+            onKeyDown={e => e.key === "Enter" && runSearch()}
           />
-          <button onClick={search} disabled={searching} className="rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700 disabled:opacity-50">
+          <select
+            value={searchMode}
+            onChange={e => setSearchMode(e.target.value as "keyword" | "semantic")}
+            className="rounded-md border border-slate-300 bg-white px-2 py-2 text-sm"
+            aria-label="Loại tìm kiếm"
+          >
+            <option value="keyword">Từ khóa</option>
+            <option value="semantic">Thông minh (AI)</option>
+          </select>
+          <button onClick={runSearch} disabled={searching} className="rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-700 disabled:opacity-50">
             {searching ? "..." : "Tìm"}
           </button>
           {searchResults !== null && (
-            <button onClick={() => { setSearchResults(null); setQuery(""); }} className="rounded-md border px-3 py-2 text-sm text-slate-500 hover:bg-slate-50">Xóa</button>
+            <button onClick={clearSearch} className="rounded-md border px-3 py-2 text-sm text-slate-500 hover:bg-slate-50">Xóa</button>
           )}
         </div>
 
-        {loading && <Spinner className="py-16" />}
-        {!loading && displayed.length === 0 && (
-          <EmptyState title="Không có ứng viên" body="Chưa có CV đang hoạt động trong hệ thống." />
+        {(loading || searching) && <Spinner className="py-16" />}
+        {!loading && !searching && displayed.length === 0 && (
+          <EmptyState title="Không có ứng viên" body={searchResults !== null ? "Không tìm thấy kết quả." : "Chưa có CV đang hoạt động trong hệ thống."} />
         )}
 
         <div className="space-y-2">
@@ -134,6 +154,16 @@ export default function TalentMarketPage() {
             </div>
           ))}
         </div>
+
+        {searchResults === null && resumes && (
+          <Pagination
+            className="mt-4"
+            total={resumes.total}
+            limit={resumes.limit}
+            offset={resumes.offset}
+            onChange={newOffset => { setOffset(newOffset); reload(); }}
+          />
+        )}
 
         {selectedResume && (
           <div className="mt-6 rounded-lg border border-slate-300 bg-white p-5">
