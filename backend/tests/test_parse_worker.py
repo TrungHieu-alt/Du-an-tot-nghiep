@@ -132,6 +132,16 @@ def _parse_job_info(
     )
 
 
+def _notify_script(notification_id: int = 900, attempt_id: int = 800, email: str = "recipient@example.com") -> list[Any]:
+    return [
+        (notification_id,),
+        (email,),
+        (attempt_id,),
+        None,
+        None,
+    ]
+
+
 # ---------------------------------------------------------------------------
 # 1. Preprocessor unit tests
 # ---------------------------------------------------------------------------
@@ -397,9 +407,9 @@ class TestWorkerFailureCases(unittest.TestCase):
         db_calls: list[Any] = [
             load_row,  # _load_parse_job
             None,      # _mark_processing
-            # _fail: UPDATE parse_jobs + INSERT notifications + INSERT audit_logs
+            # _fail: UPDATE parse_jobs + notify/email attempt/email audit + parse audit
             None,
-            None,
+            *_notify_script(),
             None,
         ]
 
@@ -420,8 +430,8 @@ class TestWorkerFailureCases(unittest.TestCase):
             load_row,
             None,   # _mark_processing
             None,   # _fail UPDATE parse_jobs
-            None,   # _fail INSERT notifications
-            None,   # _fail INSERT audit_logs
+            *_notify_script(),
+            None,   # _fail parse audit
         ]
 
         mock_storage = MagicMock()
@@ -441,8 +451,8 @@ class TestWorkerFailureCases(unittest.TestCase):
             None,   # _mark_processing
             None,   # _get_organization_id → fetchone returns None
             None,   # _fail UPDATE parse_jobs
-            None,   # _fail INSERT notifications
-            None,   # _fail INSERT audit_logs
+            *_notify_script(),
+            None,   # _fail parse audit
         ]
 
         mock_storage = MagicMock()

@@ -68,7 +68,8 @@ candidate apply OR accepted invite
   -> create application
   -> append application event
   -> create notification
-  -> write audit event
+  -> record email attempt through the configured email adapter
+  -> write business and email audit events
 ```
 
 ## OpenAPI Requirements

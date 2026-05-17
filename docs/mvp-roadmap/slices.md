@@ -560,7 +560,9 @@ Impacted paths:
 Dependencies: Slices 2 and 3.
 
 API/OpenAPI impact: `non-breaking` behavior hardening unless response models
-change for application event history.
+change for application event history. Slice 9 adds typed application/invite
+list response models and linked summary/timestamp fields, which is additive for
+existing clients.
 
 DoD:
 
@@ -580,6 +582,26 @@ Handoff checklist:
 
 - Record allowed transition graph.
 - Record all side effects verified.
+
+Implementation note (2026-05-17):
+
+- Candidate apply now requires active owned resume plus published non-closed
+  job; duplicate `(job_id, resume_id)` returns `409 duplicate_application`.
+- Recruiter invite now requires active resume plus owned published non-closed
+  job; duplicate pending invite returns `409 duplicate_invite`.
+- Invite accept creates an application and event when absent, or returns the
+  existing application without duplicate application/event rows.
+- Invite reject creates no application.
+- Application status transitions use the canonical graph:
+  recruiter `submitted -> shortlisted | rejected | hired`, recruiter
+  `shortlisted -> rejected | hired`, candidate
+  `submitted | shortlisted -> withdrawn`, terminal
+  `rejected | hired | withdrawn`.
+- Verification: Docker Compose backend/postgres healthy; migration exit 0;
+  targeted `python -m unittest tests.test_slice9_applications_invites` passed
+  12/12; targeted Slice 9 + contract tests passed 30/30; full backend unittest
+  suite passed 151/151; `/api/health` returned `ok`; live `/openapi.json`
+  exposed 47 paths, 51 schemas, and application/invite list response schemas.
 
 ## Slice 10: Notifications, Email, Audit
 
@@ -633,6 +655,27 @@ Handoff checklist:
 
 - Record email adapter mode.
 - Record event coverage.
+
+Implementation note (2026-05-17):
+
+- Added `backend/src/jobconnect/integrations/email.py` with local/log default
+  sender and SMTP provider path selected by `EMAIL_PROVIDER=smtp`.
+- Added `email_attempts` persistence and notification metadata support in the
+  production migration.
+- Notification side effects now create the in-app row, attempt email, persist
+  the email attempt, update `notifications.email_delivery_status`, and write
+  email audit evidence without raising email send failures.
+- Covered events: parse failure, application submitted, application status
+  changed, recruiter invite sent, invite accepted, and invite rejected.
+- Admin monitoring read endpoints now audit `admin_monitoring_access`
+  consistently with filter metadata.
+- Verification: Docker 28.5.2 / Compose v2.40.3; `docker compose up -d --build`
+  completed; `docker compose exec backend python db/apply_migrations.py` exit 0;
+  targeted `python -m unittest tests.test_slice10_notifications_email_audit`
+  passed 10/10; full `python -m unittest discover -s tests` passed 161/161;
+  `/api/health` returned `ok`; live `/openapi.json` exposed 47 paths, 51
+  schemas, and `NotificationDetail.metadata` plus
+  `NotificationDetail.email_delivery_status`.
 
 ## Slice 11: Admin Monitoring
 

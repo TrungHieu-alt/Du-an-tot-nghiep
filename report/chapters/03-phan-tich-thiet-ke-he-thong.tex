@@ -1,0 +1,173 @@
+\chapter{Phân tích và thiết kế hệ thống đề xuất}
+
+\section{Tổng quan kiến trúc JobConnect MVP}
+
+JobConnect được thiết kế như một backend production MVP có module boundaries rõ ràng. Repository không còn tập trung vào prototype route \texttt{/api/v2/prototype/*}; runtime hiện exposing production namespaces dưới \texttt{/api/*}. Theo README và HLD overview, legacy prototype code đã được loại khỏi runtime, còn legacy docs chỉ dùng như tài liệu tham chiếu migration \cite{readme,hld-overview}.
+
+Backend layout chính nằm dưới \texttt{backend/src/jobconnect}. Cấu trúc này có bốn vùng: \texttt{core} cho config, database, security, exceptions, logging; \texttt{common} cho dependencies, pagination, responses, utils, constants; \texttt{integrations} cho storage, LLM, embedding, rerank, pgvector; và \texttt{modules} cho từng feature domain. Cách tổ chức này cho phép mỗi nghiệp vụ có router, schemas và service riêng mà không lẫn với hạ tầng.
+
+\begin{longtable}{p{0.30\textwidth}p{0.60\textwidth}}
+\caption{Mapping thư mục backend sang trách nhiệm kiến trúc}\\
+\toprule
+\textbf{Đường dẫn} & \textbf{Trách nhiệm}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Đường dẫn} & \textbf{Trách nhiệm}\\
+\midrule
+\endhead
+\texttt{backend/src/jobconnect/main.py} & FastAPI app entrypoint.\\
+\texttt{backend/src/jobconnect/app.py} & App metadata và router registration.\\
+\texttt{core/} & Config, database connection, security, exceptions, logging.\\
+\texttt{common/} & Shared dependencies, pagination, response helpers, constants, utils.\\
+\texttt{integrations/storage/} & Local/cloud object storage boundary.\\
+\texttt{integrations/llm/} & Local/OpenAI-compatible parser boundary.\\
+\texttt{integrations/embedding/} & Local hash/OpenAI embedding provider boundary.\\
+\texttt{integrations/rerank/} & Local cross-encoder reranker boundary.\\
+\texttt{modules/*/} & Domain routers, schemas và services cho từng feature.\\
+\bottomrule
+\end{longtable}
+
+\section{Thiết kế module nghiệp vụ}
+
+Feature modules trong \texttt{backend/src/jobconnect/modules} phản ánh trực tiếp sản phẩm. Module \texttt{auth} xử lý register/login/logout, password hashing và JWT issuance. Module \texttt{users} phục vụ current user bootstrap. Module \texttt{organizations} quản lý employer organization, bao gồm predefined Independent organization dùng cho lựa chọn ``Khác''. Module \texttt{resumes} và \texttt{jobs} là hai matching entities chính. Module \texttt{documents} xử lý upload, parse jobs, extraction/preprocessing và worker. Module \texttt{matching} chứa hard filters, scoring, reasoning, embedding helper và vector search. Module \texttt{applications}, \texttt{invites}, \texttt{notifications} và \texttt{admin} triển khai workflow ATS-lite và monitoring.
+
+\begin{table}[H]
+\caption{Feature modules và API namespace liên quan}
+\centering
+\begin{tabularx}{\textwidth}{p{0.25\textwidth}p{0.28\textwidth}X}
+\toprule
+\textbf{Module} & \textbf{Namespace} & \textbf{Vai trò}\\
+\midrule
+\texttt{auth} & \texttt{/api/auth/*} & Đăng ký, đăng nhập, logout, phát JWT.\\
+\texttt{users} & \texttt{/api/me} & Bootstrap thông tin user và role-specific profile.\\
+\texttt{organizations} & \texttt{/api/organizations/*} & Employer profile và Independent organization lookup.\\
+\texttt{resumes} & \texttt{/api/candidate/resumes/*} & Resume CRUD, activate/archive, search, semantic search.\\
+\texttt{jobs} & \texttt{/api/jobs/*} & Job CRUD, publish/close, search, semantic search.\\
+\texttt{documents} & \texttt{/api/documents/*} & Upload file, download URL, parse job status/retry.\\
+\texttt{matching} & \texttt{/api/matching/*} & Run job->resume và resume->job matching.\\
+\texttt{applications} & \texttt{/api/applications/*} & Apply và status transition.\\
+\texttt{invites} & \texttt{/api/invites/*} & Recruiter invite, candidate accept/reject.\\
+\texttt{admin} & \texttt{/api/admin/*} & Read-only monitoring.\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Thiết kế module này giúp báo cáo và code có cùng ngôn ngữ. Khi nói về ``candidate resume lifecycle'', ta có thể chỉ thẳng vào module \texttt{resumes}; khi nói về ``parse worker'', ta chỉ vào module \texttt{documents}; khi nói về ``ranking explainability'', ta chỉ vào module \texttt{matching}. Điều này giảm rủi ro viết báo cáo ở mức trừu tượng xa code.
+
+\section{Thiết kế dữ liệu}
+
+Thiết kế dữ liệu JobConnect dựa trên ba nhóm invariant. Nhóm đầu tiên là invariant định danh và profile: một user có role, status và profile tương ứng. Nhóm thứ hai là invariant public pool: resume active và job published mới được search/match. Nhóm thứ ba là invariant lifecycle: apply/invite/status change phải tạo event, notification và audit tùy flow.
+
+\subsection{Identity và organization}
+
+\texttt{users} lưu email unique, password hash, role, status và timestamps. Password không bao giờ lưu plain text. \texttt{candidate\_profiles} chứa full name, phone, current location, total experience years và headline; \texttt{total\_experience\_years} chỉ là display metadata, không phải hard filter hoặc score input trong MVP \cite{requirements}. \texttt{recruiter\_profiles} liên kết recruiter user với organization. \texttt{organizations} có name, slug, logo URL và about; migration/seed phải tạo một row Independent có slug \texttt{independent} cho lựa chọn ``Khác''.
+
+\subsection{Resume và job}
+
+\texttt{candidate\_resumes} là matching entity phía CV. Các field required gồm \texttt{title}, \texttt{summary}, \texttt{experience}, \texttt{skills}, \texttt{location}, \texttt{job\_type}, \texttt{seniority}, \texttt{education}, \texttt{certifications}, \texttt{is\_primary}, \texttt{status}. \texttt{job\_posts} là matching entity phía JD, gồm \texttt{title}, \texttt{requirement}, \texttt{skills}, \texttt{location}, \texttt{job\_type}, \texttt{seniority}, \texttt{education}, \texttt{required\_certifications}, \texttt{status}, \texttt{published\_at}, \texttt{expires\_at}. Hai bảng này có GIN indexes cho skills/certifications và partial indexes cho public pool \cite{lld-schema}.
+
+\subsection{Documents, parse jobs và embeddings}
+
+\texttt{uploaded\_documents} lưu metadata file gốc: owner, document type, object key/file URL, original filename, MIME type, size và link đến resume/job nếu có. \texttt{parse\_jobs} lưu status, extracted text hoặc object key, parser version, embedding version requested, error code/message và timestamps. Parse job có thể chưa có \texttt{resume\_id} hoặc \texttt{job\_id} khi queued/processing; succeeded parse job phải link đúng một target entity \cite{lld-schema}.
+
+Embedding tables tách riêng khỏi business entity để hỗ trợ versioning và backfill. \texttt{candidate\_resume\_embeddings} có \texttt{emb\_title}, \texttt{emb\_skills}, \texttt{emb\_summary}, \texttt{emb\_experience}; \texttt{job\_post\_embeddings} có \texttt{emb\_title}, \texttt{emb\_skills}, \texttt{emb\_requirement}. Mỗi row có \texttt{embedding\_version}. Khi provider/model thay đổi, operator có thể tìm rows cần re-embedding bằng điều kiện \texttt{WHERE embedding\_version <> '<new>'}.
+
+\subsection{Applications, invites, notifications và audit}
+
+\texttt{applications} có unique constraint trên \texttt{(job\_id, resume\_id)}. Điều này đảm bảo một resume không apply trùng cùng một job. \texttt{application\_events} append-only status history. \texttt{recruiter\_invites} lưu lời mời từ recruiter cho một resume vào một job, với status \texttt{pending/accepted/rejected}. \texttt{notifications} lưu thông báo in-app và email delivery status. \texttt{audit\_logs} lưu business events quan trọng.
+
+\begin{figure}[H]
+\centering
+\fbox{\begin{minipage}{0.90\textwidth}
+\centering
+users -> candidate\_profiles -> candidate\_resumes -> candidate\_resume\_embeddings\\
+users -> recruiter\_profiles -> organizations -> job\_posts -> job\_post\_embeddings\\
+uploaded\_documents -> parse\_jobs -> resume/job draft fields\\
+job\_posts + candidate\_resumes -> applications / recruiter\_invites\\
+applications/invites/parse failures -> notifications + audit\_logs
+\end{minipage}}
+\caption{Quan hệ logic giữa các nhóm entity}
+\docsrc{\cite{hld-storage,lld-schema}.}
+\end{figure}
+
+\section{Thiết kế API}
+
+Base path production là \texttt{/api}. Đây là breaking replacement cho prototype-only routes dưới \texttt{/api/v2/prototype/*}. API contract quy định ID là JSON number đại diện cho BIGINT, timestamp là ISO 8601 có timezone, request/response schema explicit và unknown request fields bị reject trừ endpoint cho phép metadata JSON \cite{lld-api}.
+
+\begin{longtable}{p{0.29\textwidth}p{0.61\textwidth}}
+\caption{Production API namespaces}\\
+\toprule
+\textbf{Namespace} & \textbf{Mục đích}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Namespace} & \textbf{Mục đích}\\
+\midrule
+\endhead
+\texttt{/api/auth/*} & Register, login, logout, JWT session.\\
+\texttt{/api/me} & Current account và role-specific bootstrap data.\\
+\texttt{/api/candidate/profile} & Candidate profile read/upsert.\\
+\texttt{/api/candidate/resumes/*} & Resume CRUD, activation/archive, search, semantic search.\\
+\texttt{/api/recruiter/profile} & Recruiter profile read/upsert.\\
+\texttt{/api/organizations/*} & Organization create/update/list/detail.\\
+\texttt{/api/jobs/*} & Job CRUD, publish/close, search, semantic search.\\
+\texttt{/api/documents/*} & Multipart upload, document detail, download URL, parse jobs.\\
+\texttt{/api/matching/*} & Job anchor và resume anchor matching.\\
+\texttt{/api/applications/*} & Candidate apply, list/detail, status transition.\\
+\texttt{/api/invites/*} & Recruiter invite, candidate accept/reject.\\
+\texttt{/api/notifications/*} & Notification list/read/read-all.\\
+\texttt{/api/admin/*} & Admin monitoring users/documents/parse jobs/applications/invites/notifications/audit logs.\\
+\bottomrule
+\end{longtable}
+
+Một điểm thiết kế đáng chú ý là response list/detail cho frontend cần denormalized display summaries ở các nơi phù hợp. Ví dụ job list/search responses target cần \texttt{organization\_name}, \texttt{organization\_logo\_url}, \texttt{organization\_slug} để job cards không phải fetch organization từng row. Application/Invite summaries target cần \texttt{job\_summary} và \texttt{resume\_summary} để table/detail ổn định \cite{hld-api,lld-api}.
+
+\section{Thiết kế luồng runtime}
+
+\subsection{Candidate CV flow}
+
+Luồng candidate bắt đầu từ register/login, sau đó candidate tạo profile, upload CV hoặc tạo resume thủ công. Upload CV tạo document và parse job. Khi parse succeeded, candidate review parsed fields và save corrections vào draft resume. Resume chỉ vào public pool khi candidate gọi activate. Sau đó candidate có thể search Job Market hoặc run matching từ một active resume để tìm published jobs. Apply tạo application với status \texttt{submitted}; responding invite có thể accept hoặc reject.
+
+\begin{figure}[H]
+\centering
+\fbox{\begin{minipage}{0.92\textwidth}
+\centering
+register/login -> profile -> upload CV -> parse job -> review -> activate resume\\
+-> search/match published jobs -> apply hoặc respond invite
+\end{minipage}}
+\caption{Luồng candidate từ CV đến ứng tuyển}
+\docsrc{\cite{hld-api}.}
+\end{figure}
+
+\subsection{Recruiter JD flow}
+
+Recruiter đăng ký, chọn organization, tạo recruiter profile, tạo hoặc upload JD. JD upload cũng tạo document và parse job. Sau khi review parsed job fields, recruiter publish job để đưa vào public job pool. Recruiter chạy Talent Market search hoặc matching từ published job để tìm active resumes. Nếu phù hợp, recruiter tạo invite. Invite pending không tạo application; accept mới tạo application nếu chưa tồn tại.
+
+\subsection{Matching flow}
+
+Matching flow bắt đầu bằng auth và role validation. Với job anchor, recruiter phải sở hữu published job hoặc admin bypass; với resume anchor, candidate phải sở hữu active resume hoặc admin bypass. Hệ thống lấy opposite pool theo visibility, apply hard filters, score, optional rerank, rồi trả ranked results với reasoning. Matching không có side effect tạo application/invite.
+
+\subsection{Application và invite flow}
+
+Application flow có side effects rõ: candidate apply hoặc accepted invite tạo application, append application event, create notification và write audit event. Status update cũng append event, notify candidate hoặc recruiter theo flow và write audit. Email failure không rollback business transaction, chỉ log để retry hoặc operational review \cite{hld-security}.
+
+\section{Thiết kế bảo mật và quyền truy cập}
+
+Thiết kế bảo mật của JobConnect đặt trọng tâm vào role, ownership và visibility. Candidate chỉ quản lý tài nguyên của mình; recruiter chỉ quản lý job và recruiting actions được phép; admin read-only monitoring. Disabled users bị chặn khỏi các active marketplace actions. Hệ thống không có tenant isolation trong MVP, nên không được thêm logic private workspace ẩn làm sai product model.
+
+Privacy của candidate là điểm cần lưu ý. Recruiters có thể search/match active resumes, nhưng candidate contact fields không nên hiển thị rộng rãi nếu chưa có application hoặc invite flow cần thiết. Điều này cần được thể hiện ở response DTO, không chỉ ở frontend. Nếu runtime dùng cùng \texttt{ResumeDetail} cho candidate và recruiter mà chưa tách privacy DTO, đây là điểm cần hardening trong các phiên bản sau.
+
+\section{Thiết kế observability}
+
+Minimum operational signals gồm parse queue state, parse failure reasons, matching request count/latency, notification creation, email delivery failures, application/invite lifecycle events và API error rates cho auth/upload/parse/matching/application flows \cite{hld-security}. Trong MVP, audit log và notification table đóng vai trò nền tảng để quan sát business events. Runtime metrics trong matching gồm \texttt{total\_ms}, \texttt{retrieval\_ms}, \texttt{filter\_ms}, \texttt{scoring\_ms}, \texttt{rerank\_ms}, candidate counts before/after hard filters, rerank-applied flag và warnings \cite{hld-matching}.
+
+Thiết kế observability này có ý nghĩa thực tế. Nếu matching trả ít kết quả, hệ thống cần biết do candidate pool nhỏ, hard filters quá chặt, embedding thiếu hay min score quá cao. Nếu parse job failed nhiều, operator cần phân biệt lỗi extraction, LLM parse hay embedding. Nếu email không gửi được, business transaction vẫn thành công nhưng operational review cần thấy \texttt{email\_delivery\_status}.
+
+\section{Điểm sáng tạo và khác biệt của mô hình đề xuất}
+
+Điểm sáng tạo của JobConnect không nằm ở việc dùng một model AI duy nhất, mà nằm ở cách kết hợp rule nghiệp vụ, structured data và semantic representation. Hệ thống không giao toàn bộ quyết định cho LLM. LLM/parser chỉ chuyển text thành field canonical; hard filters quyết định eligibility; vector retrieval tạo candidate set; deterministic formula tính score; reranker chỉ là lớp tăng chất lượng tùy chọn; reasoning phải grounded. Thiết kế này giúp hệ thống vừa tận dụng ngữ nghĩa của CV/JD, vừa giữ được tính kiểm soát và khả năng giải thích.
+
+Khác biệt thứ hai là mô hình two-way marketplace. Nhiều hệ thống chỉ tối ưu job-to-candidate matching cho recruiter. JobConnect yêu cầu cả candidate anchor và recruiter anchor: candidate dùng active resume để tìm published jobs, recruiter dùng published job để tìm active resumes. Điều này ảnh hưởng trực tiếp đến API, authorization, visibility và tie-break: resume anchor sort tie theo \texttt{job\_id ASC}, job anchor sort tie theo \texttt{resume\_id ASC}.
+
+Khác biệt thứ ba là thiết kế rõ future provider boundaries. Local deterministic parser, local hash embedding và local reranker giúp dev/test chạy không cần credential. OpenAI-compatible parser và embedding provider sẵn sàng dùng khi có credential. Storage adapter mặc định local filesystem, nhưng cloud adapter có thể slot in qua protocol. Cách này giảm rủi ro vendor lock-in và giúp MVP vẫn chạy được trong môi trường phát triển.

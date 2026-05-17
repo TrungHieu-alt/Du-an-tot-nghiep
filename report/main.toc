@@ -1,0 +1,84 @@
+\contentsline {chapter}{Tóm tắt}{i}{chapter*.1}%
+\contentsline {chapter}{Lời cam đoan}{ii}{chapter*.2}%
+\contentsline {chapter}{Lời cảm ơn}{iii}{chapter*.3}%
+\contentsline {chapter}{Danh mục bảng}{ix}{chapter*.5}%
+\contentsline {chapter}{Danh mục hình}{x}{chapter*.6}%
+\contentsline {chapter}{Danh mục ký hiệu và chữ viết tắt}{xi}{chapter*.7}%
+\contentsline {chapter}{Mở đầu}{1}{chapter*.8}%
+\contentsline {section}{Lý do chọn đề tài}{1}{section*.9}%
+\contentsline {section}{Mục tiêu của khóa luận}{2}{section*.9}%
+\contentsline {section}{Đối tượng và phạm vi nghiên cứu}{3}{section*.9}%
+\contentsline {section}{Phương pháp thực hiện}{3}{section*.9}%
+\contentsline {section}{Đóng góp của khóa luận}{4}{table.caption.10}%
+\contentsline {section}{Bố cục báo cáo}{5}{equation.0.0.2}%
+\contentsline {chapter}{\numberline {1}Giới thiệu chung và cơ sở bài toán}{6}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Bối cảnh tuyển dụng số}{6}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Nhóm người dùng và nhu cầu}{7}{section.1.2}%
+\contentsline {section}{\numberline {1.3}Phát biểu bài toán}{8}{section.1.3}%
+\contentsline {section}{\numberline {1.4}Phạm vi MVP và các non-goals}{9}{section.1.4}%
+\contentsline {section}{\numberline {1.5}Các khái niệm nền tảng}{10}{section.1.5}%
+\contentsline {subsection}{\numberline {1.5.1}ATS-lite workflow}{10}{subsection.1.5.1}%
+\contentsline {subsection}{\numberline {1.5.2}Structured parsing}{10}{subsection.1.5.2}%
+\contentsline {subsection}{\numberline {1.5.3}Embedding và pgvector}{10}{subsection.1.5.3}%
+\contentsline {subsection}{\numberline {1.5.4}Explainable matching}{11}{subsection.1.5.4}%
+\contentsline {section}{\numberline {1.6}Yêu cầu trạng thái và enum canonical}{11}{section.1.6}%
+\contentsline {section}{\numberline {1.7}Liên hệ với báo cáo cũ và định hướng viết lại}{12}{section.1.7}%
+\contentsline {chapter}{\numberline {2}Mô hình và kỹ thuật nền tảng}{13}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Kiến trúc web API với FastAPI}{13}{section.2.1}%
+\contentsline {section}{\numberline {2.2}Pydantic, schema validation và error envelope}{14}{section.2.2}%
+\contentsline {section}{\numberline {2.3}PostgreSQL và pgvector}{15}{section.2.3}%
+\contentsline {section}{\numberline {2.4}Pipeline xử lý tài liệu CV/JD}{16}{section.2.4}%
+\contentsline {subsection}{\numberline {2.4.1}Preprocessing}{17}{subsection.2.4.1}%
+\contentsline {subsection}{\numberline {2.4.2}Skill normalization}{17}{subsection.2.4.2}%
+\contentsline {subsection}{\numberline {2.4.3}LLM structured parsing}{17}{subsection.2.4.3}%
+\contentsline {section}{\numberline {2.5}Embedding provider và semantic search}{18}{section.2.5}%
+\contentsline {section}{\numberline {2.6}Matching pipeline}{18}{section.2.6}%
+\contentsline {subsection}{\numberline {2.6.1}Hard filters}{19}{subsection.2.6.1}%
+\contentsline {subsection}{\numberline {2.6.2}Scoring deterministic}{19}{subsection.2.6.2}%
+\contentsline {subsection}{\numberline {2.6.3}Reranking và reasoning}{20}{subsection.2.6.3}%
+\contentsline {section}{\numberline {2.7}Authentication, authorization và auditability}{20}{section.2.7}%
+\contentsline {chapter}{\numberline {3}Phân tích và thiết kế hệ thống đề xuất}{22}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Tổng quan kiến trúc JobConnect MVP}{22}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Thiết kế module nghiệp vụ}{23}{section.3.2}%
+\contentsline {section}{\numberline {3.3}Thiết kế dữ liệu}{24}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Identity và organization}{25}{subsection.3.3.1}%
+\contentsline {subsection}{\numberline {3.3.2}Resume và job}{25}{subsection.3.3.2}%
+\contentsline {subsection}{\numberline {3.3.3}Documents, parse jobs và embeddings}{25}{subsection.3.3.3}%
+\contentsline {subsection}{\numberline {3.3.4}Applications, invites, notifications và audit}{26}{subsection.3.3.4}%
+\contentsline {section}{\numberline {3.4}Thiết kế API}{26}{section.3.4}%
+\contentsline {section}{\numberline {3.5}Thiết kế luồng runtime}{27}{section.3.5}%
+\contentsline {subsection}{\numberline {3.5.1}Candidate CV flow}{27}{subsection.3.5.1}%
+\contentsline {subsection}{\numberline {3.5.2}Recruiter JD flow}{28}{subsection.3.5.2}%
+\contentsline {subsection}{\numberline {3.5.3}Matching flow}{28}{subsection.3.5.3}%
+\contentsline {subsection}{\numberline {3.5.4}Application và invite flow}{28}{subsection.3.5.4}%
+\contentsline {section}{\numberline {3.6}Thiết kế bảo mật và quyền truy cập}{28}{section.3.6}%
+\contentsline {section}{\numberline {3.7}Thiết kế observability}{29}{section.3.7}%
+\contentsline {section}{\numberline {3.8}Điểm sáng tạo và khác biệt của mô hình đề xuất}{29}{section.3.8}%
+\contentsline {chapter}{\numberline {4}Cài đặt thực nghiệm và đánh giá}{31}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Môi trường và công nghệ triển khai}{31}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Cài đặt backend runtime}{32}{section.4.2}%
+\contentsline {section}{\numberline {4.3}Cài đặt cơ sở dữ liệu}{33}{section.4.3}%
+\contentsline {section}{\numberline {4.4}Cài đặt document upload và parse worker}{34}{section.4.4}%
+\contentsline {section}{\numberline {4.5}Cài đặt matching và semantic search}{35}{section.4.5}%
+\contentsline {section}{\numberline {4.6}Cài đặt auth, authorization và lifecycle}{36}{section.4.6}%
+\contentsline {section}{\numberline {4.7}Cài đặt notifications và audit}{36}{section.4.7}%
+\contentsline {section}{\numberline {4.8}Bộ kiểm thử hiện có}{37}{section.4.8}%
+\contentsline {section}{\numberline {4.9}Đối chiếu hiện trạng với target contract}{38}{section.4.9}%
+\contentsline {section}{\numberline {4.10}Đánh giá theo yêu cầu sản phẩm}{39}{section.4.10}%
+\contentsline {subsection}{\numberline {4.10.1}Điểm đáp ứng tốt}{39}{subsection.4.10.1}%
+\contentsline {subsection}{\numberline {4.10.2}Điểm còn partial}{40}{subsection.4.10.2}%
+\contentsline {subsection}{\numberline {4.10.3}Rủi ro kỹ thuật}{40}{subsection.4.10.3}%
+\contentsline {section}{\numberline {4.11}Kịch bản thực nghiệm đề xuất}{40}{section.4.11}%
+\contentsline {section}{\numberline {4.12}Nhận xét chương}{41}{section.4.12}%
+\contentsline {chapter}{Kết luận}{43}{chapter*.21}%
+\contentsline {section}{Kết quả đạt được}{43}{section*.22}%
+\contentsline {section}{Hạn chế}{44}{section*.22}%
+\contentsline {section}{Hướng phát triển}{45}{section*.22}%
+\contentsline {section}{Kết luận chung}{46}{section*.22}%
+\contentsline {chapter}{Tài liệu tham khảo}{47}{chapter*.23}%
+\contentsline {chapter}{\numberline {A}Phụ lục API, schema và traceability}{49}{appendix.A}%
+\contentsline {section}{\numberline {A.1}Tóm tắt API contract}{49}{section.A.1}%
+\contentsline {section}{\numberline {A.2}Entity summary}{53}{section.A.2}%
+\contentsline {section}{\numberline {A.3}Matching formula và hard filter details}{55}{section.A.3}%
+\contentsline {section}{\numberline {A.4}Source traceability}{56}{section.A.4}%
+\contentsline {section}{\numberline {A.5}Checklist dùng lại khi tiếp tục phát triển báo cáo}{58}{section.A.5}%

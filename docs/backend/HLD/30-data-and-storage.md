@@ -3,7 +3,7 @@
 ## Storage Ownership
 
 - PostgreSQL owns users, profiles, organizations, jobs, resumes, parse jobs,
-  applications, invites, notifications, and audit logs.
+  applications, invites, notifications, email attempts, and audit logs.
 - Object storage owns original CV/JD files.
 - pgvector columns in PostgreSQL own semantic vectors for job and resume fields.
 
@@ -25,6 +25,7 @@ Production implementation must provide these entity groups:
 - `application_events`
 - `recruiter_invites`
 - `notifications`
+- `email_attempts`
 - `audit_logs`
 
 Detailed table columns, constraints, relationships, and index strategy are
@@ -57,8 +58,17 @@ documentation and is not an executable migration.
   application without writing a second `application_events` row.
 - Rejected invite creates no application.
 - Every application status change appends an `application_events` record AND
-  creates a notification AND writes an `audit_logs` row.
-- Closed-job mutation rules (Slice 9):
+  creates a notification AND writes an `audit_logs` row AND records an
+  `email_attempts` row.
+- Allowed MVP application transitions are:
+  - recruiter: `submitted -> shortlisted | rejected | hired`
+  - recruiter: `shortlisted -> rejected | hired`
+  - candidate: `submitted | shortlisted -> withdrawn`
+  - terminal: `rejected | hired | withdrawn`
+- Application transition graph terminals: `rejected`, `hired`, `withdrawn`
+  cannot move further; self-loops and forward jumps both return
+  `409 invalid_transition`.
+- Closed-job mutation rules:
   - `job_posts.status = closed` blocks NEW applications, NEW invites, and
     invite-acceptance with `409 closed_job` envelopes. Draft/missing jobs keep
     returning `404 not_found`.
@@ -66,13 +76,26 @@ documentation and is not an executable migration.
     closes so recruiters can finalize (reject/withdraw) wrap-up decisions.
   - Accept-invite checks job status BEFORE flipping the invite, so the invite
     is never left in an `accepted` state without a corresponding application.
-- Application transition graph terminals: `rejected`, `hired`, `withdrawn`
-  cannot move further; self-loops and forward jumps both return
-  `409 invalid_transition`.
+- Applying or inviting with an inactive resume returns `400 inactive_resume`.
 - Application and invite API responses denormalize linked job/resume display
   summaries and timestamps for frontend list/detail rendering. These are read
   models over the canonical tables, not duplicated persisted application/invite
   columns.
+
+## Notification, Email, And Audit Invariants
+
+- Business events create in-app `notifications` rows before email delivery is
+  attempted.
+- Every email attempt is persisted to `email_attempts` with event type, target,
+  provider, status, timestamps, and metadata.
+- Local development uses the local/log email adapter and records attempts as
+  `logged`.
+- Provider-backed delivery can mark attempts `sent`; provider failures mark
+  attempts `failed`.
+- Email delivery failure must not roll back parse, application, invite, or
+  status-change transactions.
+- Audit rows always include actor user ID when known, event type, target entity,
+  timestamp, and metadata JSON.
 
 ## Embedding Contract
 

@@ -1,0 +1,230 @@
+\chapter{Cài đặt thực nghiệm và đánh giá}
+
+\section{Môi trường và công nghệ triển khai}
+
+Repository JobConnect hiện tập trung vào backend FastAPI. Theo README, backend API chạy tại \texttt{http://localhost:8000}, PostgreSQL ở host port \texttt{5433}, schema migration nằm tại \texttt{backend/db/migrations/001\_production\_mvp.sql}, và verification backend dùng \texttt{python -m unittest discover -s tests} trong Docker Compose cho runtime backend \cite{readme}. Riêng workflow LaTeX của báo cáo này chạy local bằng \texttt{xelatex} theo rule riêng trong \texttt{AGENTS.md}.
+
+Các dependency runtime cụ thể được lấy từ \texttt{backend/requirements.txt}:
+
+\begin{longtable}{p{0.30\textwidth}p{0.20\textwidth}p{0.40\textwidth}}
+\caption{Dependency backend cụ thể trong dự án}\\
+\toprule
+\textbf{Package} & \textbf{Version} & \textbf{Vai trò}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Package} & \textbf{Version} & \textbf{Vai trò}\\
+\midrule
+\endhead
+\texttt{fastapi} & \texttt{0.115.6} & API runtime, routing, OpenAPI generation.\\
+\texttt{uvicorn[standard]} & \texttt{0.24.0} & ASGI server cho FastAPI.\\
+\texttt{pydantic} & \texttt{2.11.7} & Request/response schema validation.\\
+\texttt{psycopg[binary]} & \texttt{3.2.3} & PostgreSQL driver.\\
+\texttt{numpy} & \texttt{1.26.4} & Vector/math utilities cho embedding/scoring.\\
+\texttt{python-multipart} & \texttt{0.0.20} & Multipart upload cho \texttt{/api/documents}.\\
+\texttt{pypdf} & \texttt{4.3.1} & PDF text extraction cho parse worker.\\
+\texttt{httpx} & \texttt{0.28.1} & TestClient support và HTTP integration.\\
+\texttt{sentence-transformers} & \texttt{3.0.1} & Local multilingual cross-encoder reranker.\\
+\bottomrule
+\end{longtable}
+
+Bảng trên cho thấy phần cài đặt không dừng ở mức ``ngôn ngữ Python''. Mỗi dependency đều gắn với một boundary cụ thể: FastAPI/Pydantic cho API contract, psycopg cho PostgreSQL, python-multipart cho upload, pypdf cho extraction, sentence-transformers cho rerank. Điều này quan trọng vì báo cáo kỹ thuật cần phản ánh đúng sản phẩm đang có, không dùng mô tả chung có thể áp dụng cho bất kỳ dự án nào.
+
+\section{Cài đặt backend runtime}
+
+App runtime bắt đầu từ \texttt{backend/src/jobconnect/main.py} và \texttt{backend/src/jobconnect/app.py}. App mount production API routers dưới base prefix \texttt{/api}. Health route \texttt{/api/health} và root \texttt{/} là runtime-only surfaces. Domain router aggregator nằm ở \texttt{backend/src/jobconnect/modules/api/router.py}; file này import các router domain, xây dựng \texttt{ALL\_API\_ROUTERS} và re-export compatibility symbols phục vụ tests/entrypoints.
+
+\begin{lstlisting}[caption={Backend layout rút gọn}]
+backend/src/jobconnect/
+  app.py
+  main.py
+  core/
+  common/
+  integrations/
+    embedding/
+    llm/
+    pgvector/
+    rerank/
+    storage/
+  modules/
+    auth/
+    users/
+    organizations/
+    jobs/
+    resumes/
+    documents/
+    matching/
+    applications/
+    invites/
+    notifications/
+    admin/
+    system/
+\end{lstlisting}
+
+Từng module domain thường có \texttt{router.py}, \texttt{schemas.py} và \texttt{service.py}. Ví dụ module \texttt{matching} có thêm \texttt{filters.py}, \texttt{scoring.py}, \texttt{reasoning.py}, \texttt{vector\_search.py}, \texttt{embedding.py} và \texttt{models.py}. Module \texttt{documents} có \texttt{extractor.py}, \texttt{preprocessor.py}, \texttt{skill\_normalizer.py}, \texttt{local\_parser.py} và \texttt{worker.py}. Cấu trúc này phản ánh trực tiếp pipeline nghiệp vụ.
+
+\section{Cài đặt cơ sở dữ liệu}
+
+Migration production MVP nằm tại \texttt{backend/db/migrations/001\_production\_mvp.sql}. Theo README, data không auto-load chỉ bằng \texttt{docker compose up}; cần chạy \texttt{docker compose exec backend python db/apply\_migrations.py}. Volume \texttt{postgres\_data} giữ dữ liệu qua \texttt{down/up}; chỉ \texttt{down -v} mới xóa volume. Điều này ảnh hưởng đến việc thực nghiệm: nếu test thủ công trên database đã có dữ liệu, cần biết dữ liệu có thể tồn tại từ lần chạy trước.
+
+Schema production dùng PostgreSQL + pgvector. Các bảng embedding dùng \texttt{VECTOR(384)}. Mỗi bảng quan trọng có index tương ứng: users theo role/status, resumes theo owner/status và public pool, jobs theo organization/recruiter/status/published, GIN index cho skills/certifications, parse jobs theo status/created, applications theo job/resume/candidate/status và audit logs theo actor/target/event type \cite{lld-schema}.
+
+\begin{table}[H]
+\caption{Một số invariant database quan trọng}
+\centering
+\begin{tabularx}{\textwidth}{p{0.28\textwidth}X}
+\toprule
+\textbf{Invariant} & \textbf{Ý nghĩa thực nghiệm}\\
+\midrule
+\texttt{(job\_id, resume\_id)} unique trong \texttt{applications} & Không cho duplicate application cho cùng resume và job.\\
+\texttt{status = active} cho resume public & Recruiter search/match chỉ thấy active resumes.\\
+\texttt{status = published} cho job public & Candidate search/match chỉ thấy published jobs.\\
+Embedding version bắt buộc & Cho phép backfill/re-embedding khi đổi provider/model.\\
+Vector nullable & Thiếu embedding không làm matching fail toàn bộ.\\
+Audit append event & Các lifecycle actions có dấu vết vận hành.\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Cài đặt document upload và parse worker}
+
+Theo implementation matrix, \texttt{POST /api/documents} đã chuyển sang multipart upload, stream file qua Storage adapter, insert \texttt{uploaded\_documents}, insert queued \texttt{parse\_jobs} và write audit event. Default storage backend là local filesystem dưới \texttt{STORAGE\_LOCAL\_ROOT}; future cloud adapter chỉ cần implement cùng protocol \cite{implementation-matrix}. Endpoint reject unsupported MIME với \texttt{415} và oversize file với \texttt{413}.
+
+Document detail endpoint đã include linked parse jobs, và download URL endpoint trả qua Storage adapter. Local adapter trả \texttt{local://<object\_key>}; future cloud adapter sẽ trả presigned HTTPS URL. Retry parse job tạo queued parse job mới và audit \texttt{parse\_job\_retried}.
+
+Tuy nhiên implementation matrix cũng ghi rõ parse job response hiện vẫn thin so với target. Target review payload cần normalized fields, hard-filter fields, extracted text/reference, parser metadata, embedding metadata, warnings và linked \texttt{resume\_id}/\texttt{job\_id}. Đây là khoảng cách quan trọng với frontend parse review page. Vì vậy báo cáo đánh giá phần document pipeline là ``foundation aligned, review payload partial'' chứ không tuyên bố đã hoàn chỉnh toàn bộ ingestion target.
+
+\section{Cài đặt matching và semantic search}
+
+Runtime matching hiện có hai endpoint chính: \texttt{POST /api/matching/jobs/\{job\_id\}/run} cho recruiter/admin và \texttt{POST /api/matching/resumes/\{resume\_id\}/run} cho candidate/admin. Cả hai endpoint đọc anchor, validate ownership và visibility, lấy opposite pool, apply hard filters, score deterministic, attempt local rerank và trả warning metadata nếu rerank fallback \cite{implementation-matrix}.
+
+Matching request có \texttt{top\_k} default 10, \texttt{min\_score} default 0.7 và \texttt{rerank} tương thích. Runtime Slice 8 ghi nhận rerank được attempted regardless request flag và fallback gracefully trên provider failure. Điều này có nghĩa API không phụ thuộc tuyệt đối vào reranker; nếu sentence-transformers model không load được hoặc lỗi, kết quả deterministic vẫn trả về.
+
+\begin{table}[H]
+\caption{Các bước matching trong runtime}
+\centering
+\begin{tabularx}{\textwidth}{p{0.24\textwidth}X}
+\toprule
+\textbf{Bước} & \textbf{Cài đặt/ý nghĩa}\\
+\midrule
+Anchor validation & Published job cho job anchor; active resume cho resume anchor; ownership theo role.\\
+Opposite pool & Active resumes hoặc published jobs tùy chiều matching.\\
+Hard filters & Job type/location/seniority/education/certifications; missing data fail pair.\\
+Scoring & Công thức deterministic với title, skills, req-exp và req-summary components.\\
+Rerank & Local cross-encoder trên top window; fallback warning nếu unavailable.\\
+Reasoning & Tạo giải thích dựa trên score breakdown và structured fields.\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Semantic search cũng đã có endpoints \texttt{/api/candidate/resumes/semantic-search} và \texttt{/api/jobs/semantic-search}. Resume semantic search compute query embedding, rank theo CV summary/experience embeddings; job semantic search rank theo JD requirement embedding. Provider embedding failures trả \texttt{503 embedding\_unavailable} envelope ở các route semantic search đã hardened trong Slice 8 \cite{implementation-matrix}. Đây là một điểm cài đặt cụ thể cho thấy hệ thống đã xử lý failure provider ở bề mặt API, không chỉ ghi trong thiết kế.
+
+\section{Cài đặt auth, authorization và lifecycle}
+
+Auth runtime có \texttt{POST /api/auth/register}, \texttt{POST /api/auth/login}, \texttt{POST /api/auth/logout} và \texttt{GET /api/me}. Implementation matrix ghi nhận register/login tạo hoặc đọc user, hash password, issue JWT với \texttt{expires\_in}; logout stateless trả \texttt{204}; \texttt{/api/me} trả user và role-specific bootstrap profile/organization \cite{implementation-matrix}.
+
+Authorization Slice 2 đã xử lý các điểm quan trọng: admin không đọc candidate/recruiter profile qua endpoint own-profile nữa; organization update kiểm tra recruiter membership; job matching yêu cầu recruiter ownership; resume matching yêu cầu candidate ownership; disabled users bị reject bởi \texttt{require\_active}. Đây là các điểm cần nhấn mạnh vì nếu thiếu ownership check, matching có thể leak dữ liệu hoặc cho phép user thao tác sai tài nguyên.
+
+Lifecycle Slice 3 và Slice 9 đã bổ sung partial PATCH, transition guard cho job publish/close, resume activate/archive, application status graph và terminal-state lock. Invite creation reject duplicate pending invite với \texttt{409 duplicate\_invite}; invite accept trả explicit response \texttt{\{ invite, application \}}; closed-job blocks còn được tracked như follow-up trong Slice 9 matrix.
+
+\section{Cài đặt notifications và audit}
+
+Notifications runtime có list, read và read-all. \texttt{POST /api/notifications/read-all} trả \texttt{updated\_count}; đây là breaking fix so với key cũ \texttt{updated} trong matrix. Application apply/status update và invite send/accept/reject tạo notification rows. Tuy nhiên email provider chưa được gọi; notification rows dùng \texttt{email\_delivery\_status = queued}. Target yêu cầu email delivery failure không rollback business transaction, nên phần email adapter là hướng hoàn thiện tiếp theo \cite{hld-security,implementation-matrix}.
+
+Audit runtime được dùng cho nhiều lifecycle actions: organization create/update, resume activate/archive, job publish/close, document upload/retry, application apply/status, invite sent/accepted/rejected và một số admin monitoring access. Matrix ghi nhận audit consistency vẫn là medium/low priority gap: một số admin reads audit access, một số chưa. Điều này không làm hỏng core workflow, nhưng ảnh hưởng đến observability và governance khi hệ thống chuyển production.
+
+\section{Bộ kiểm thử hiện có}
+
+Thư mục \texttt{backend/tests} cung cấp test coverage cho các phần then chốt: app surface, auth, authorization, API contract, documents, embedding provider, LLM parser, matching helpers, matching Slice 8, parse worker và rerank provider. Dù chưa phải full E2E suite, bộ test này phản ánh các rủi ro chính của MVP.
+
+\begin{longtable}{p{0.34\textwidth}p{0.56\textwidth}}
+\caption{Các nhóm test hiện có trong backend}\\
+\toprule
+\textbf{File test} & \textbf{Ý nghĩa}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{File test} & \textbf{Ý nghĩa}\\
+\midrule
+\endhead
+\texttt{test\_app\_surface.py} & Kiểm tra app surface và route baseline.\\
+\texttt{test\_auth.py} & Kiểm tra register/login/logout/JWT behavior.\\
+\texttt{test\_authorization.py} & Kiểm tra role/ownership/disabled user guard.\\
+\texttt{test\_contract.py} & Kiểm tra contract expectations ở API layer.\\
+\texttt{test\_documents.py} & Kiểm tra document upload, parse job và storage behavior.\\
+\texttt{test\_embedding\_provider.py} & Kiểm tra local/OpenAI embedding provider boundary.\\
+\texttt{test\_llm\_parser.py} & Kiểm tra parser adapter và enum validation.\\
+\texttt{test\_matching\_helpers.py} & Kiểm tra hard filters/scoring/reasoning helpers.\\
+\texttt{test\_matching\_slice8.py} & Kiểm tra matching hardening và rerank fallback.\\
+\texttt{test\_parse\_worker.py} & Kiểm tra parse worker pipeline foundation.\\
+\texttt{test\_rerank\_provider.py} & Kiểm tra local reranker provider behavior.\\
+\bottomrule
+\end{longtable}
+
+Theo rule repository, runtime/API verification khi sửa backend phải chạy qua Docker Compose. Tuy nhiên trong phạm vi báo cáo này, không có code backend bị thay đổi; vì vậy verification chính là build LaTeX, page count và content QA. Các test backend được báo cáo như bằng chứng coverage hiện có, không chạy lại như một phần bắt buộc của artifact LaTeX.
+
+\section{Đối chiếu hiện trạng với target contract}
+
+Implementation matrix chia status thành \texttt{Aligned}, \texttt{Partial}, \texttt{Drift} và \texttt{Runtime-only}. Tại thời điểm tài liệu hiện tại, runtime đã cover toàn bộ named endpoints trong target contract surface ở mức path-level; không có endpoint hoàn toàn missing theo matrix. Tuy vậy còn nhiều coverage gaps server-side hoặc response-shape.
+
+\begin{longtable}{p{0.26\textwidth}p{0.32\textwidth}p{0.32\textwidth}}
+\caption{Tóm tắt đối chiếu hiện trạng triển khai}\\
+\toprule
+\textbf{Khu vực} & \textbf{Đã aligned/đã làm} & \textbf{Partial/gap còn lại}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Khu vực} & \textbf{Đã aligned/đã làm} & \textbf{Partial/gap còn lại}\\
+\midrule
+\endhead
+Auth/session & JWT có \texttt{exp}, expired token bị reject, \texttt{/api/me} trả bootstrap data. & Revocation list vẫn future work.\\
+Ownership/authorization & Role-specific profile endpoint, organization membership check, matching anchor ownership. & Privacy DTO cho recruiter-visible resume detail cần hardening.\\
+Documents/upload & Multipart upload, storage adapter, parse job creation, audit retry. & Parse review payload còn thin so với target.\\
+Embeddings/search & Provider boundary, local fallback, semantic search query embedding, 503 envelope. & Backfill/re-embedding operation vẫn future work.\\
+Matching & Hard filters, deterministic scoring, local rerank fallback, runtime metrics. & Quality benchmark cần labeled data.\\
+Applications/invites & Status graph, duplicate invite guard, accept invite creates/returns application. & DTO linked display summaries còn partial ở một số list/detail.\\
+Notifications/email & In-app rows, read/read-all, email delivery status queued. & Email adapter chưa gọi provider thực.\\
+Admin monitoring & Nhiều endpoint read-heavy và filter đã aligned. & Audit consistency cho mọi admin read cần quyết định chính sách.\\
+\bottomrule
+\end{longtable}
+
+Nhận xét quan trọng là hệ thống đã đi xa hơn prototype matching đơn lẻ. Nó có route surface production, schema migration, upload foundation, provider boundary và lifecycle modules. Nhưng để gọi là production-ready hoàn toàn, các phần provider thực, parse review payload, email delivery, frontend integration và benchmark vẫn cần hoàn thiện.
+
+\section{Đánh giá theo yêu cầu sản phẩm}
+
+\subsection{Điểm đáp ứng tốt}
+
+Thứ nhất, shared-pool marketplace được thể hiện rõ bằng visibility rule: active resumes và published jobs. Cả schema, HLD và runtime docs đều nhất quán với quy tắc này. Thứ hai, matching không tạo application; apply hoặc accepted invite mới tạo application. Điều này bảo vệ ranh giới giữa recommendation và business action. Thứ ba, API namespaces production đã thay thế prototype routes, giúp frontend tương lai tích hợp theo \texttt{/api/*}. Thứ tư, provider boundaries cho LLM, embedding, storage và rerank giúp hệ thống chạy được local đồng thời sẵn sàng dùng service bên ngoài.
+
+\subsection{Điểm còn partial}
+
+Parse review payload là gap lớn nhất đối với trải nghiệm upload-parse-review. Target yêu cầu parse job detail expose normalized fields, hard-filter fields, extracted text/reference, parser metadata, embedding metadata, warnings và linked target ID. Runtime hiện đã có parse jobs nhưng response còn thin. Nếu frontend review screen cần highlight field confidence hoặc cho user sửa từng field, API phải mở rộng.
+
+Email delivery cũng còn partial. Business notifications đã có in-app rows, nhưng email provider chưa được gọi. Nếu sản phẩm cần gửi email invite/application status, hệ thống cần email adapter, retry policy, delivery failure logging và possibly dead-letter/ops monitoring.
+
+Application/Invite DTO còn thiếu linked display summaries ở một số list/detail. Đây là gap frontend integration: nếu table cần job title, organization name hoặc resume title mà response chưa denormalize, frontend sẽ phải fetch thêm nhiều endpoint, tăng latency và complexity.
+
+\subsection{Rủi ro kỹ thuật}
+
+Rủi ro thứ nhất là chất lượng parser/embedding khi chuyển từ local fallback sang provider thật. Local deterministic parser ổn cho dev/test nhưng không đại diện hoàn toàn cho CV/JD thực tế. OpenAI-compatible parser cần kiểm soát enum validation và failure modes. Rủi ro thứ hai là thiếu labeled evaluation data nên không thể kết luận production matching quality. Tài liệu yêu cầu đã nói rõ production quality benchmarking conclusions không thuộc MVP nếu chưa có labeled evaluation data \cite{requirements}. Rủi ro thứ ba là frontend chưa active runtime, nên các giả định về response shape cần được khóa qua OpenAPI trước khi triển khai UI.
+
+\section{Kịch bản thực nghiệm đề xuất}
+
+Vì repository hiện có unit tests và docs nhưng chưa có labeled benchmark dataset, phần thực nghiệm phù hợp nhất là smoke-contract và scenario-based verification. Các kịch bản đề xuất gồm:
+
+\begin{enumerate}
+  \item Auth smoke: register candidate/recruiter, login, gọi \texttt{/api/me}, kiểm tra JWT exp và role bootstrap.
+  \item Candidate flow: create candidate profile, create draft resume, activate resume, verify resume xuất hiện trong recruiter search.
+  \item Recruiter flow: create organization/profile, create draft job, publish job, verify job xuất hiện trong candidate search.
+  \item Document flow: upload PDF, verify document row, parse job queued/processing/succeeded hoặc failed có error.
+  \item Matching flow: tạo một published job và một active resume pass hard filters, run matching, kiểm tra final score, component scores và reasoning.
+  \item Application flow: candidate apply, verify application submitted, application event, notification và audit.
+  \item Invite flow: recruiter invite, candidate accept, verify application created hoặc reused; reject invite không tạo application.
+  \item Admin flow: admin list users/documents/parse jobs/audit logs với pagination/filter.
+\end{enumerate}
+
+Các kịch bản này bám sát target runtime flows, không cần dataset lớn nhưng đủ chứng minh hệ thống hoạt động xuyên suốt. Khi có labeled data, có thể bổ sung evaluation metrics cho ranking như precision@k, recall@k, nDCG hoặc agreement với reviewer. Tuy nhiên nếu chưa có nhãn, báo cáo chỉ nên nói về correctness/smoke/contract, không nên claim chất lượng matching ở mức production.
+
+\section{Nhận xét chương}
+
+Chương này cho thấy JobConnect đã có nền tảng implementation tương đối đầy đủ cho backend MVP: FastAPI route surface, PostgreSQL schema, documents/upload foundation, matching helpers, lifecycle modules, notifications và admin monitoring. Các dependency và file test cụ thể xác nhận hệ thống không chỉ là thiết kế trên giấy. Đồng thời, implementation matrix chỉ ra rõ các phần còn partial, đặc biệt parse review payload, email provider, frontend display DTOs và benchmark data. Đây là cơ sở để phần Kết luận đưa ra hướng phát triển thực tế thay vì liệt kê chung chung.

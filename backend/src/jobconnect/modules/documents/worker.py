@@ -25,6 +25,7 @@ from jobconnect.integrations.embedding import EmbeddingError, get_embedding_prov
 from jobconnect.integrations.llm import ParserError, get_parser
 from jobconnect.integrations.pgvector import vector_to_pg_literal
 from jobconnect.integrations.storage import get_storage
+from jobconnect.modules.api.shared import audit, notify
 from jobconnect.modules.documents.extractor import extract_text
 from jobconnect.modules.documents.local_parser import ParsedJob, ParsedResume
 from jobconnect.modules.documents.preprocessor import preprocess_text
@@ -216,13 +217,23 @@ def _mark_succeeded(
                 "UPDATE parse_jobs SET job_id = %s WHERE parse_job_id = %s AND job_id IS NULL",
                 (entity_id, info.parse_job_id),
             )
-        _write_audit(cur, info.owner_user_id, "parse_job_succeeded", "parse_job", info.parse_job_id)
+        _write_audit(
+            cur,
+            info.owner_user_id,
+            "parse_job_succeeded",
+            "parse_job",
+            info.parse_job_id,
+            metadata={
+                "document_id": info.document_id,
+                "target_entity_type": info.target_entity_type,
+                "target_entity_id": entity_id,
+                "parser_version": parser_version,
+                "embedding_version": embedding_version,
+            },
+        )
 
 
 def _fail(info: _ParseJobInfo, error_code: str, error_message: str) -> None:
-    from jobconnect.modules.api.shared import dispatch_email
-
-    notif_id = -1
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -236,24 +247,36 @@ def _fail(info: _ParseJobInfo, error_code: str, error_message: str) -> None:
             """,
             (error_code, error_message[:1000], info.parse_job_id),
         )
-        cur.execute(
-            """
-            INSERT INTO notifications
-                (recipient_user_id, type, title, body, entity_type, entity_id, email_delivery_status)
-            VALUES (%s, 'parse_failed', 'Document parsing failed', %s, 'parse_job', %s, 'queued')
-            RETURNING notification_id
-            """,
-            (
-                info.owner_user_id,
-                f"Your document could not be parsed: {error_message[:200]}",
-                info.parse_job_id,
-            ),
+        notify(
+            cur,
+            info.owner_user_id,
+            "parse_failed",
+            "Document parsing failed",
+            f"Your document could not be parsed: {error_message[:200]}",
+            "parse_job",
+            info.parse_job_id,
+            actor_id=info.owner_user_id,
+            metadata={
+                "parse_job_id": info.parse_job_id,
+                "document_id": info.document_id,
+                "target_entity_type": info.target_entity_type,
+                "error_code": error_code,
+                "error_message": error_message[:1000],
+            },
         )
-        row = cur.fetchone()
-        if row:
-            notif_id = int(row[0])
-        _write_audit(cur, info.owner_user_id, "parse_job_failed", "parse_job", info.parse_job_id)
-    dispatch_email(notif_id)
+        _write_audit(
+            cur,
+            info.owner_user_id,
+            "parse_job_failed",
+            "parse_job",
+            info.parse_job_id,
+            metadata={
+                "document_id": info.document_id,
+                "target_entity_type": info.target_entity_type,
+                "error_code": error_code,
+                "error_message": error_message[:1000],
+            },
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -415,11 +438,12 @@ def _upsert_job_embeddings(cur, job_id: int, parsed: ParsedJob) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _write_audit(cur, actor_user_id: int, event_type: str, target_type: str, target_id: Optional[int]) -> None:
-    cur.execute(
-        """
-        INSERT INTO audit_logs (actor_user_id, event_type, target_entity_type, target_entity_id)
-        VALUES (%s, %s, %s, %s)
-        """,
-        (actor_user_id, event_type, target_type, target_id),
-    )
+def _write_audit(
+    cur,
+    actor_user_id: int,
+    event_type: str,
+    target_type: str,
+    target_id: Optional[int],
+    metadata: Optional[dict] = None,
+) -> None:
+    audit(cur, actor_user_id, event_type, target_type, target_id, metadata=metadata)

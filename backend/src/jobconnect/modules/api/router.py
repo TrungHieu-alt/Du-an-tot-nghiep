@@ -21,6 +21,7 @@ from jobconnect.modules.users.router import (
 # Compatibility re-exports used by app wiring and tests.
 get_connection = shared.get_connection
 get_storage = shared.get_storage
+get_email_sender = shared.get_email_sender
 get_parser = shared.get_parser
 get_embedding_provider = shared.get_embedding_provider
 hash_password = shared.hash_password

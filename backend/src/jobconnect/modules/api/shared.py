@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import time
@@ -11,12 +12,16 @@ from dataclasses import dataclass
 from typing import Any, Literal, Optional
 
 from fastapi import Depends, Header, HTTPException
+from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict
 
 from jobconnect.core.database import get_connection as _get_connection
+from jobconnect.integrations.email import EmailSendError, get_email_sender as _get_email_sender
 from jobconnect.integrations.embedding import get_embedding_provider as _get_embedding_provider
 from jobconnect.integrations.llm import get_parser as _get_parser
 from jobconnect.integrations.storage import get_storage as _get_storage
+
+logger = logging.getLogger(__name__)
 
 Role = Literal["candidate", "recruiter", "admin"]
 UserStatus = Literal["active", "invited", "disabled"]
@@ -152,6 +157,7 @@ get_connection = _get_connection
 get_embedding_provider = _get_embedding_provider
 get_parser = _get_parser
 get_storage = _get_storage
+get_email_sender = _get_email_sender
 
 
 def current_user(authorization: Optional[str] = Header(default=None)) -> CurrentUser:
@@ -276,9 +282,16 @@ APPLICATION_STATUS_TRANSITIONS: dict[str, dict[str, set[str]]] = {
         "hired": {"submitted", "shortlisted"},
     },
 }
+APPLICATION_TERMINAL_STATUSES = {"rejected", "hired", "withdrawn"}
 
 
 def validate_application_transition(current: str, target: str, role: str) -> None:
+    if current in APPLICATION_TERMINAL_STATUSES:
+        raise business_error(
+            409,
+            "invalid_transition",
+            f"Terminal application status {current} cannot transition further.",
+        )
     role_transitions = APPLICATION_STATUS_TRANSITIONS.get(role)
     if not role_transitions or target not in role_transitions:
         if role == "candidate":
@@ -294,28 +307,145 @@ def validate_application_transition(current: str, target: str, role: str) -> Non
         )
 
 
-def notify(cur: Any, user_id: int, typ: str, title: str, body: str, entity_type: str, entity_id: int) -> int:
-    """Insert a notification row and return its notification_id."""
+def _jsonb(value: Optional[dict[str, Any]]) -> Jsonb:
+    return Jsonb(value or {})
+
+
+def _notification_metadata(
+    typ: str,
+    actor_id: Optional[int],
+    entity_type: str,
+    entity_id: Optional[int],
+    metadata: Optional[dict[str, Any]],
+) -> dict[str, Any]:
+    payload = dict(metadata or {})
+    payload.setdefault("event_type", typ)
+    payload.setdefault("target_type", entity_type)
+    payload.setdefault("target_id", entity_id)
+    if actor_id is not None:
+        payload.setdefault("actor_id", actor_id)
+    return payload
+
+
+def notify(
+    cur: Any,
+    user_id: int,
+    typ: str,
+    title: str,
+    body: str,
+    entity_type: str,
+    entity_id: Optional[int],
+    *,
+    actor_id: Optional[int] = None,
+    metadata: Optional[dict[str, Any]] = None,
+    email_subject: Optional[str] = None,
+    email_body: Optional[str] = None,
+) -> None:
+    payload = _notification_metadata(typ, actor_id, entity_type, entity_id, metadata)
     cur.execute(
         """
         INSERT INTO notifications
-            (recipient_user_id, type, title, body, entity_type, entity_id, email_delivery_status)
-        VALUES (%s, %s, %s, %s, %s, %s, 'queued')
+            (recipient_user_id, type, title, body, entity_type, entity_id, email_delivery_status, metadata)
+        VALUES (%s, %s, %s, %s, %s, %s, 'queued', %s)
         RETURNING notification_id
         """,
-        (user_id, typ, title, body, entity_type, entity_id),
+        (user_id, typ, title, body, entity_type, entity_id, _jsonb(payload)),
     )
     row = cur.fetchone()
-    return int(row[0]) if row else -1
+    notification_id = row[0] if row else None
 
+    cur.execute("SELECT email FROM users WHERE user_id = %s", (user_id,))
+    email_row = cur.fetchone()
+    recipient_email = email_row[0] if email_row else None
 
-def audit(cur: Any, actor_id: Optional[int], event: str, entity_type: str, entity_id: Optional[int]) -> None:
+    provider = "unknown"
+    status = "failed"
+    error_message: Optional[str] = None
+    subject = email_subject or title
+    message_body = email_body or body
+    try:
+        from jobconnect.modules.api import router as api_router
+
+        result = api_router.get_email_sender().send_email(
+            recipient_email,
+            subject,
+            message_body,
+            metadata=payload,
+        )
+        status = result.status
+        provider = result.provider
+    except EmailSendError as exc:
+        provider = exc.provider
+        error_message = str(exc)[:1000]
+        logger.warning("Email send failed for notification_id=%s: %s", notification_id, exc)
+    except Exception as exc:
+        error_message = str(exc)[:1000]
+        logger.warning("Email send failed for notification_id=%s: %s", notification_id, exc)
+
+    attempt_metadata = dict(payload)
+    attempt_metadata["notification_id"] = notification_id
     cur.execute(
         """
-        INSERT INTO audit_logs (actor_user_id, event_type, target_entity_type, target_entity_id)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO email_attempts
+            (recipient_email, recipient_user_id, subject, body_preview, event_type, status,
+             provider, error_message, entity_type, entity_id, metadata)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING email_attempt_id
         """,
-        (actor_id, event, entity_type, entity_id),
+        (
+            recipient_email,
+            user_id,
+            subject,
+            message_body[:1000],
+            typ,
+            status,
+            provider,
+            error_message,
+            entity_type,
+            entity_id,
+            _jsonb(attempt_metadata),
+        ),
+    )
+    attempt_row = cur.fetchone()
+    attempt_id = attempt_row[0] if attempt_row else None
+    cur.execute(
+        "UPDATE notifications SET email_delivery_status = %s, updated_at = now() WHERE notification_id = %s",
+        (status, notification_id),
+    )
+    email_audit_event = "email_send_failed" if status == "failed" else "email_attempt_recorded"
+    audit(
+        cur,
+        actor_id,
+        email_audit_event,
+        "notification",
+        notification_id,
+        metadata={
+            "email_attempt_id": attempt_id,
+            "notification_type": typ,
+            "recipient_user_id": user_id,
+            "status": status,
+            "provider": provider,
+            "error_message": error_message,
+            "target_type": entity_type,
+            "target_id": entity_id,
+        },
+    )
+
+
+def audit(
+    cur: Any,
+    actor_id: Optional[int],
+    event: str,
+    entity_type: str,
+    entity_id: Optional[int],
+    metadata: Optional[dict[str, Any]] = None,
+) -> None:
+    cur.execute(
+        """
+        INSERT INTO audit_logs (actor_user_id, event_type, target_entity_type, target_entity_id, metadata)
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        (actor_id, event, entity_type, entity_id, _jsonb(metadata)),
     )
 
 
@@ -350,7 +480,7 @@ def dispatch_email(notification_id: int) -> None:
             return
         _recipient_id, title, body, to_email = row
         sender = get_email_sender()
-        sender.send(to_email=to_email, subject=title, body=body)
+        sender.send_email(to_email, title, body)
         with _api.get_connection() as conn, conn.cursor() as cur:
             cur.execute(
                 "UPDATE notifications SET email_delivery_status = 'sent', updated_at = now() WHERE notification_id = %s",

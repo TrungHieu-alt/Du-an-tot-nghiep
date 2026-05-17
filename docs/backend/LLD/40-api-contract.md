@@ -182,6 +182,7 @@ Application list/detail responses include:
 `applied_at`, `updated_at`, `job_summary`, and `resume_summary`.
 The linked summaries are read models for FE table stability and must respect the
 same role/privacy rules as the linked resource endpoints.
+Application detail event history is ordered by `created_at ASC, event_id ASC`.
 
 `InviteSummary`
 
@@ -189,6 +190,13 @@ Invite list/detail responses include:
 `invite_id`, `job_id`, `resume_id`, `candidate_user_id`, `recruiter_user_id`,
 `status`, `message`, `created_at`, `updated_at`, `job_summary`, and
 `resume_summary`.
+
+`NotificationDetail`
+
+Notification list/read responses include:
+`notification_id`, `recipient_user_id`, `type`, `status`, `title`, `body`,
+`entity_type`, `entity_id`, `email_delivery_status`, and `metadata`.
+`metadata` is additive operational context for the related business event.
 
 ## Auth And Current User
 
@@ -1096,14 +1104,16 @@ Errors: `400`, `401`, `403`, `404`, `409`, `422`.
 
 Side effects: creates `applications` with `status = submitted`; appends
 `application_events`; creates notification and attempts email for application
-submitted; writes audit event `candidate_applied`. Duplicate `(job_id,
-resume_id)` applications are rejected with `409 duplicate_application`.
+submitted; records `email_attempts`; writes audit event `candidate_applied`.
+Duplicate `(job_id, resume_id)` applications are rejected with
+`409 duplicate_application`.
 
-Slice 9 error envelope:
+Error envelopes:
 
 - `409 closed_job` — job exists but `status = closed`. Frontend should surface
   "this job is no longer accepting applications" rather than a generic
   not-found.
+- `400 inactive_resume` — resume exists but is not in `active` status.
 - `404 not_found` — job missing, draft, or owned-resume unavailable. Reserved
   for cases where the candidate is not authorised to see the job.
 
@@ -1151,12 +1161,16 @@ Invalid transition behavior:
 - state-disallowed target status returns `409 invalid_transition`.
 - terminal statuses `rejected`, `hired`, and `withdrawn` never transition
   further.
+- every valid status change appends `application_events`, creates a
+  notification, records an email attempt, and writes audit event
+  `application_status_changed`.
 
 Errors: `400`, `401`, `403`, `404`, `409`, `422`.
 
 Side effects: updates `applications.status`; appends `application_events`;
-creates notification and attempts email for application status changed; writes
-audit event `application_status_changed`.
+creates notification and attempts email for application status changed; records
+`email_attempts`; writes audit event `application_status_changed` and
+email-delivery audit evidence.
 
 ## Invites
 
@@ -1197,7 +1211,9 @@ Errors: `400`, `401`, `403`, `404`, `409`, `422`.
 
 Side effects: creates `recruiter_invites` with `status = pending`; creates
 notification and attempts email for invite sent; writes audit event
-`recruiter_invite_sent`. Pending invite does not create an application.
+`recruiter_invite_sent` and email-delivery audit evidence; records
+`email_attempts`. Pending invite does not create an application.
+Closed jobs reject new invite creation with `409 job_closed`.
 
 Slice 9 error envelope:
 
@@ -1230,7 +1246,7 @@ Side effects: sets `recruiter_invites.status = accepted`; creates application
 with `status = submitted` when no `(job_id, resume_id)` application exists;
 appends `application_events` when an application is created; creates
 notification and attempts email for invite accepted; writes audit event
-`invite_accepted`.
+`invite_accepted` and email-delivery audit evidence; records `email_attempts`.
 
 Duplicate behavior: if the `(job_id, resume_id)` application already exists, the
 endpoint still returns `200` with the accepted invite and the existing
@@ -1262,8 +1278,9 @@ Response `200`: invite detail with `status = rejected` and linked summaries.
 Errors: `400`, `401`, `403`, `404`, `409`.
 
 Side effects: sets `recruiter_invites.status = rejected`; creates notification
-and attempts email for invite rejected; writes audit event `invite_rejected`.
-Rejected invite creates no application.
+and attempts email for invite rejected; records `email_attempts`; writes audit
+event `invite_rejected` and email-delivery audit evidence. Rejected invite
+creates no application.
 
 ## Notifications
 
@@ -1275,7 +1292,8 @@ Purpose: list notifications for the current user.
 
 Query: `status?`, `limit`, `offset`.
 
-Response `200`: paginated notifications.
+Response `200`: paginated `NotificationDetail` rows. Each item includes
+`email_delivery_status` and `metadata`.
 
 Errors: `401`, `422`.
 
@@ -1285,7 +1303,8 @@ Roles: owner.
 
 Purpose: mark one notification as read.
 
-Response `200`: notification detail with `status = read`.
+Response `200`: notification detail with `status = read`,
+`email_delivery_status`, and `metadata`.
 
 Errors: `401`, `403`, `404`.
 
@@ -1309,9 +1328,30 @@ Errors: `401`.
 
 Side effects: updates current user's unread notifications to `read`.
 
+### Email Attempt Persistence
+
+Business notification events attempt email through the configured email adapter.
+The default mode is local/log and does not send real mail. Provider mode is
+selected with `EMAIL_PROVIDER=smtp` when `SMTP_HOST` and `EMAIL_FROM` are
+configured; otherwise runtime falls back to local/log.
+
+Every attempt writes an `email_attempts` row with:
+
+```text
+recipient_email, recipient_user_id, subject, body_preview, event_type, status,
+provider, error_message, entity_type, entity_id, metadata, created_at,
+updated_at
+```
+
+Allowed attempt statuses are `logged`, `sent`, and `failed`. Email adapter
+exceptions are converted to `failed` attempts and must not roll back parse,
+application, invite, or status-change business transactions.
+
 ## Admin Read-Only Monitoring
 
 Admin MVP is read-only unless requirements change.
+All admin monitoring read endpoints write `admin_monitoring_access` audit rows
+with the monitored resource and filter context in metadata.
 
 ### `GET /api/admin/users`
 
@@ -1431,8 +1471,7 @@ Response `200`: paginated audit log summaries.
 
 Errors: `401`, `403`, `422`.
 
-Side effects: may write audit event `admin_monitoring_access` if operationally
-useful.
+Side effects: writes audit event `admin_monitoring_access`.
 
 ## Core Flow Endpoint Coverage
 

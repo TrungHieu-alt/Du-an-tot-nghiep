@@ -4,18 +4,20 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 
-from jobconnect.modules.api.shared import ApplicationStatus, CurrentUser, Paginated, require_active, require_roles
+from jobconnect.modules.api.shared import ApplicationStatus, CurrentUser, require_active, require_roles
 from jobconnect.modules.applications import service
 from jobconnect.modules.applications.schemas import (
     ApplicationDetail,
+    ApplicationListResponse,
     ApplicationRequest,
+    ApplicationSummary,
     ApplicationStatusRequest,
 )
 
 router = APIRouter(prefix="/applications", tags=["applications"])
 
 
-@router.get("", response_model=Paginated)
+@router.get("", response_model=ApplicationListResponse)
 def list_applications(
     status: Optional[ApplicationStatus] = None,
     job_id: Optional[int] = None,
@@ -27,7 +29,7 @@ def list_applications(
     return service.list_applications(status, job_id, resume_id, limit, offset, user)
 
 
-@router.post("", response_model=ApplicationDetail, status_code=201)
+@router.post("", response_model=ApplicationSummary, status_code=201)
 def create_application(request: ApplicationRequest, user: CurrentUser = Depends(require_roles("candidate"))):
     return service.create_application(request, user)
 

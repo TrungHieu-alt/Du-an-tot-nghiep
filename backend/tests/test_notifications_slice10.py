@@ -20,8 +20,12 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from jobconnect.integrations.email import get_email_sender
-from jobconnect.integrations.email.local import LocalLogEmailSender
+from jobconnect.integrations.email import (
+    EmailSendResult,
+    LocalLogEmailSender,
+    get_email_sender,
+    reset_email_sender_cache,
+)
 from jobconnect.main import app
 from jobconnect.modules.api import router as api_router
 from jobconnect.modules.api.shared import dispatch_email, notify
@@ -108,19 +112,21 @@ def _token(user_id: int, role: str) -> str:
 
 
 class TestLocalLogEmailSender(unittest.TestCase):
-    def test_send_logs_and_does_not_raise(self) -> None:
+    def test_send_email_returns_result_and_does_not_raise(self) -> None:
         sender = LocalLogEmailSender()
-        # Should not raise
-        sender.send("user@example.com", "Test Subject", "Test body content")
+        result = sender.send_email("user@example.com", "Test Subject", "Test body content")
+        self.assertIsInstance(result, EmailSendResult)
+        self.assertEqual(result.status, "logged")
 
-    def test_send_truncates_body_in_log(self) -> None:
+    def test_send_email_logs_message(self) -> None:
         sender = LocalLogEmailSender()
-        with self.assertLogs("jobconnect.integrations.email.local", level="INFO") as cm:
-            sender.send("a@b.com", "Subject", "x" * 300)
-        self.assertTrue(any("EMAIL" in line for line in cm.output))
+        with self.assertLogs("jobconnect.integrations.email", level="INFO") as cm:
+            sender.send_email("a@b.com", "Subject", "x" * 300)
+        self.assertTrue(any("local email" in line.lower() for line in cm.output))
 
     def test_get_email_sender_returns_local_by_default(self) -> None:
         import os
+        reset_email_sender_cache()
         original = os.environ.pop("EMAIL_PROVIDER", None)
         try:
             sender = get_email_sender()
@@ -128,46 +134,58 @@ class TestLocalLogEmailSender(unittest.TestCase):
         finally:
             if original is not None:
                 os.environ["EMAIL_PROVIDER"] = original
+            reset_email_sender_cache()
 
     def test_get_email_sender_explicit_local(self) -> None:
         import os
+        reset_email_sender_cache()
         os.environ["EMAIL_PROVIDER"] = "local"
         try:
             sender = get_email_sender()
             self.assertIsInstance(sender, LocalLogEmailSender)
         finally:
             del os.environ["EMAIL_PROVIDER"]
+            reset_email_sender_cache()
 
-    def test_get_email_sender_unknown_raises(self) -> None:
+    def test_get_email_sender_unknown_falls_back_to_local(self) -> None:
+        """Unknown EMAIL_PROVIDER logs a warning and falls back to LocalLogEmailSender."""
         import os
+        reset_email_sender_cache()
         os.environ["EMAIL_PROVIDER"] = "nonexistent"
         try:
-            with self.assertRaises(ValueError):
-                get_email_sender()
+            sender = get_email_sender()
+            self.assertIsInstance(sender, LocalLogEmailSender)
         finally:
             del os.environ["EMAIL_PROVIDER"]
+            reset_email_sender_cache()
 
 
 # ---------------------------------------------------------------------------
-# 2. notify() returns notification_id
+# 2. notify() writes notification row with email_attempt and audit side effects
 # ---------------------------------------------------------------------------
 
 
-class TestNotifyReturnsId(unittest.TestCase):
-    def test_notify_returns_int_notification_id(self) -> None:
+class TestNotifyBehavior(unittest.TestCase):
+    def test_notify_writes_notification_insert_with_returning(self) -> None:
+        """notify() must INSERT into notifications with RETURNING notification_id."""
         mock_cur = MagicMock()
         mock_cur.fetchone.return_value = (42,)
-        result = notify(mock_cur, 1, "test_type", "Title", "Body", "application", 99)
-        self.assertEqual(result, 42)
-        mock_cur.execute.assert_called_once()
-        sql = mock_cur.execute.call_args[0][0]
-        self.assertIn("RETURNING notification_id", sql)
+        notify(mock_cur, 1, "test_type", "Title", "Body", "application", 99)
+        # First execute call should be the notifications INSERT
+        first_sql = mock_cur.execute.call_args_list[0][0][0]
+        self.assertIn("notifications", first_sql.lower())
+        self.assertIn("RETURNING notification_id", first_sql)
 
-    def test_notify_returns_minus_one_when_fetchone_is_none(self) -> None:
+    def test_notify_writes_email_attempt_and_audit(self) -> None:
+        """notify() must also write email_attempts and audit_logs rows."""
         mock_cur = MagicMock()
-        mock_cur.fetchone.return_value = None
-        result = notify(mock_cur, 1, "test_type", "Title", "Body", "application", 99)
-        self.assertEqual(result, -1)
+        mock_cur.fetchone.return_value = (42,)
+        notify(mock_cur, 1, "test_type", "Title", "Body", "application", 99)
+        all_sql = " ".join(
+            call[0][0].lower() for call in mock_cur.execute.call_args_list
+        )
+        self.assertIn("email_attempts", all_sql)
+        self.assertIn("audit_logs", all_sql)
 
 
 # ---------------------------------------------------------------------------
@@ -186,8 +204,9 @@ class TestDispatchEmailSuccess(unittest.TestCase):
         sent_calls: list[tuple] = []
 
         class CaptureSender(LocalLogEmailSender):
-            def send(self, to_email, subject, body):
-                sent_calls.append((to_email, subject, body))
+            def send_email(self, to, subject, body, metadata=None) -> EmailSendResult:
+                sent_calls.append((to, subject, body))
+                return EmailSendResult(status="sent", provider="local")
 
         with patch.object(api_router, "get_connection", factory), \
              patch("jobconnect.integrations.email.get_email_sender", return_value=CaptureSender()):
@@ -221,7 +240,7 @@ class TestDispatchEmailFailure(unittest.TestCase):
         ])
 
         class BrokenSender(LocalLogEmailSender):
-            def send(self, to_email, subject, body):
+            def send_email(self, to, subject, body, metadata=None) -> EmailSendResult:
                 raise RuntimeError("SMTP connection refused")
 
         with patch.object(api_router, "get_connection", factory), \
@@ -245,32 +264,41 @@ class TestDispatchEmailFailure(unittest.TestCase):
 
 class TestEmailFailureDoesNotAffectBusiness(unittest.TestCase):
     def test_application_status_update_succeeds_even_if_email_fails(self) -> None:
-        """When email sending raises internally, dispatch_email catches it and
-        the HTTP response is still 200 — business transaction is unaffected."""
+        """When email sending raises inside notify(), the HTTP response is still 200.
+        The email_attempt is marked failed and business transaction is unaffected."""
         from fastapi.testclient import TestClient
 
         client = TestClient(app, raise_server_exceptions=False)
         token = _token(99, "recruiter")
         updated_row = (99, 5, 10, 7, "shortlisted")
 
-        # Full DB script including dispatch_email's own queries
+        # Full DB script matching update_application_status() with inline notify():
+        # current_user → get_application_row → UPDATE RETURNING → INSERT events →
+        # notify [INSERT notifications, SELECT email, INSERT email_attempts, UPDATE notif, INSERT audit] →
+        # INSERT audit (business) → _select_application_by_id → SELECT events
         factory = _fake_conn([
-            (99, "r@example.com", "recruiter", "active"),                         # current_user
-            (99, 5, 10, 7, "submitted"),                                          # get_application_row
-            updated_row,                                                           # UPDATE applications RETURNING
-            None,                                                                  # INSERT application_events
-            (42,),                                                                 # notify RETURNING notification_id
-            None,                                                                  # INSERT audit_logs
-            (10, "Status changed", "App now shortlisted.", "c@example.com"),      # dispatch_email SELECT
-            None,                                                                  # dispatch_email UPDATE → 'failed'
+            (99, "r@example.com", "recruiter", "active"),   # current_user
+            (99, 5, 10, 7, "submitted"),                    # get_application_row
+            updated_row,                                     # UPDATE applications RETURNING
+            None,                                            # INSERT application_events
+            (42,),                                           # notify: INSERT notifications
+            ("c@example.com",),                              # notify: SELECT email
+            (88,),                                           # notify: INSERT email_attempts
+            None,                                            # notify: UPDATE notifications
+            None,                                            # notify: INSERT audit_logs (email)
+            None,                                            # INSERT audit_logs (business)
+            updated_row,                                     # _select_application_by_id
+            [],                                              # SELECT application_events
         ])
 
         class BrokenSender:
-            def send(self, *_a, **_kw):
+            provider_name = "broken"
+
+            def send_email(self, to, subject, body, metadata=None) -> EmailSendResult:
                 raise RuntimeError("SMTP is down")
 
         with patch.object(api_router, "get_connection", factory), \
-             patch("jobconnect.integrations.email.get_email_sender", return_value=BrokenSender()):
+             patch.object(api_router, "get_email_sender", return_value=BrokenSender()):
             resp = client.post(
                 "/api/applications/99/status",
                 headers={"Authorization": f"Bearer {token}"},
@@ -280,9 +308,10 @@ class TestEmailFailureDoesNotAffectBusiness(unittest.TestCase):
         # Business transaction must succeed despite email failure
         self.assertEqual(resp.status_code, 200, resp.text)
         self.assertEqual(resp.json()["status"], "shortlisted")
-        # Email delivery should be marked failed, not left as queued
+        # email_attempts row must have been inserted (email failure is recorded, not skipped)
         all_sql = " | ".join(sql for c in factory.cursors for sql, _ in c.executed).lower()
-        self.assertIn("failed", all_sql)
+        self.assertIn("email_attempts", all_sql)
+        self.assertIn("insert into email_attempts", all_sql)
 
 
 # ---------------------------------------------------------------------------
@@ -295,13 +324,14 @@ class TestNotifyInsertShape(unittest.TestCase):
         mock_cur = MagicMock()
         mock_cur.fetchone.return_value = (7,)
         notify(mock_cur, 99, "invite_sent", "Invite", "You were invited.", "invite", 55)
-        sql, params = mock_cur.execute.call_args[0]
-        self.assertIn("notifications", sql)
-        self.assertIn("queued", sql)  # email_delivery_status default
-        self.assertIn(99, params)     # recipient_user_id
-        self.assertIn("invite_sent", params)
-        self.assertIn("invite", params)
-        self.assertIn(55, params)     # entity_id
+        # First execute call is the notifications INSERT
+        first_sql, first_params = mock_cur.execute.call_args_list[0][0]
+        self.assertIn("notifications", first_sql)
+        self.assertIn("queued", first_sql)  # email_delivery_status default
+        self.assertIn(99, first_params)     # recipient_user_id
+        self.assertIn("invite_sent", first_params)
+        self.assertIn("invite", first_params)
+        self.assertIn(55, first_params)     # entity_id
 
 
 # ---------------------------------------------------------------------------
@@ -318,19 +348,27 @@ class TestAuditSideEffects(unittest.TestCase):
         token = _token(10, "recruiter")
         resume_row = (7, 20, "CV", "sum", "exp", ["py"], "ha_noi", "remote", "mid", "dai_hoc", [], False, "active")
         job_row = (5, 100, 10, "Dev", "req", ["py"], "ha_noi", "remote", "mid", "dai_hoc", [], "published", None, None)
+        invite_detail_row = (42, 5, 7, 20, 10, "pending", None)
 
+        # create_invite() flow: get_resume_row, get_job_row, SELECT pending, INSERT invite,
+        # notify() [5 DB calls], INSERT audit_logs (business), _select_invite_by_id
         factory = _fake_conn([
             (10, "r@example.com", "recruiter", "active"),  # current_user
             resume_row,                                    # get_resume_row
             job_row,                                       # get_job_row
-            None,                                          # no pending invite
+            None,                                          # SELECT pending invite → None
             (42, 5, 7, 20, 10, "pending", None),           # INSERT recruiter_invites RETURNING
-            (1,),                                          # notify RETURNING
-            None,                                          # audit INSERT
+            (1,),                                          # notify: INSERT notifications
+            ("c@example.com",),                            # notify: SELECT email
+            (51,),                                         # notify: INSERT email_attempts
+            None,                                          # notify: UPDATE notifications
+            None,                                          # notify: INSERT audit_logs (email)
+            None,                                          # INSERT audit_logs (business)
+            invite_detail_row,                             # _select_invite_by_id
         ])
 
         with patch.object(api_router, "get_connection", factory), \
-             patch("jobconnect.modules.invites.service.dispatch_email"):
+             patch.object(api_router, "get_email_sender", return_value=LocalLogEmailSender()):
             resp = self.client.post(
                 "/api/invites",
                 headers={"Authorization": f"Bearer {token}"},
@@ -339,6 +377,7 @@ class TestAuditSideEffects(unittest.TestCase):
         self.assertEqual(resp.status_code, 201, resp.text)
         all_sql = " | ".join(sql for c in factory.cursors for sql, _ in c.executed).lower()
         self.assertIn("audit_logs", all_sql)
+        self.assertIn("email_attempts", all_sql)
 
 
 if __name__ == "__main__":

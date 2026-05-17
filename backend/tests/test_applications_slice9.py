@@ -213,7 +213,9 @@ class TestClosedJobBlocks(unittest.TestCase):
         self.assertEqual(resp.status_code, 404, resp.text)
         self.assertEqual(resp.json()["error"]["code"], "not_found")
 
-    def test_apply_against_draft_job_keeps_404(self) -> None:
+    def test_apply_against_draft_job_keeps_400(self) -> None:
+        """Draft jobs return 400 invalid_job_state (not 404) since validate_application_inputs
+        fetches the job row and explicitly checks for published status."""
         token = _token(10, "candidate")
         script = [
             (10, "c@example.com", "candidate", "active"),
@@ -226,8 +228,8 @@ class TestClosedJobBlocks(unittest.TestCase):
                 headers={"Authorization": f"Bearer {token}"},
                 json={"job_id": 5, "resume_id": 7},
             )
-        self.assertEqual(resp.status_code, 404, resp.text)
-        self.assertEqual(resp.json()["error"]["code"], "not_found")
+        self.assertEqual(resp.status_code, 400, resp.text)
+        self.assertEqual(resp.json()["error"]["code"], "invalid_job_state")
 
     def test_invite_against_closed_job_returns_closed_job_409(self) -> None:
         token = _token(10, "recruiter")
@@ -247,11 +249,12 @@ class TestClosedJobBlocks(unittest.TestCase):
 
     def test_accept_invite_when_job_closed_returns_closed_job_409(self) -> None:
         token = _token(10, "candidate")
-        # get_invite_row returns a pending invite; then get_job_row returns closed
+        # accept_invite calls validate_application_inputs which checks resume then job.
         script = [
             (10, "c@example.com", "candidate", "active"),                 # current_user
             _invite_row(invite_id=42, candidate_user_id=10,
                         recruiter_user_id=99, status="pending"),          # get_invite_row
+            _resume_row(7, 10, "active"),                                 # get_resume_row (validate)
             _job_row(5, 99, "closed"),                                    # get_job_row → closed
         ]
         with patch.object(api_router, "get_connection", _fake_conn(script)):
@@ -334,16 +337,22 @@ class TestStatusChangeSideEffects(unittest.TestCase):
 
     def test_recruiter_shortlist_writes_event_notification_audit(self) -> None:
         token = _token(99, "recruiter")
-        # current_user → get_application_row → UPDATE returning updated row
-        # → INSERT application_events → INSERT notifications → INSERT audit_logs
+        # Flow: get_application_row → UPDATE → INSERT events → notify() [5 DB calls] →
+        #        INSERT audit_logs (business) → _select_application_by_id → SELECT events
         updated_row = _application_row(99, 10, "shortlisted")
         factory = _fake_conn([
             (99, "r@example.com", "recruiter", "active"),  # current_user
             _application_row(99, 10, "submitted"),         # get_application_row
             updated_row,                                   # UPDATE applications RETURNING
             None,                                          # INSERT application_events
-            None,                                          # INSERT notifications
-            None,                                          # INSERT audit_logs
+            (42,),                                         # notify: INSERT notifications RETURNING
+            ("c@example.com",),                            # notify: SELECT email FROM users
+            (88,),                                         # notify: INSERT email_attempts RETURNING
+            None,                                          # notify: UPDATE notifications
+            None,                                          # notify: INSERT audit_logs (email)
+            None,                                          # INSERT audit_logs (business)
+            updated_row,                                   # _select_application_by_id
+            [],                                            # SELECT application_events
         ])
         with patch.object(api_router, "get_connection", factory):
             resp = self.client.post(
@@ -354,13 +363,14 @@ class TestStatusChangeSideEffects(unittest.TestCase):
         self.assertEqual(resp.status_code, 200, resp.text)
         self.assertEqual(resp.json()["status"], "shortlisted")
 
-        # Verify the three side-effect INSERTs were issued.
+        # Verify the key side-effect INSERTs were issued.
         all_sql = " | ".join(
             sql for c in factory.cursors for sql, _ in c.executed
         ).lower()
         self.assertIn("application_events", all_sql)
         self.assertIn("notifications", all_sql)
         self.assertIn("audit_logs", all_sql)
+        self.assertIn("email_attempts", all_sql)
 
 
 # ---------------------------------------------------------------------------
@@ -380,29 +390,30 @@ class TestAcceptInviteReturnsExistingApplication(unittest.TestCase):
         invite = _invite_row(42, 10, 99, "pending")
         accepted_invite = _invite_row(42, 10, 99, "accepted")
 
-        # Trace (verified against invites.service.accept_invite + applications.service
-        # .create_application_record):
+        # Trace (verified against invites.service.accept_invite v2 flow):
         # 1. current_user
         # 2. get_invite_row
-        # 3. get_job_row (Slice 9 pre-check)
-        # 4. UPDATE recruiter_invites RETURNING → accepted invite
-        # 5. INSERT notifications
-        # 6. INSERT audit_logs
-        # 7. get_resume_row (inside create_application_record)
-        # 8. get_job_row (inside create_application_record)
-        # 9. INSERT applications RETURNING → raises UniqueViolation
-        # 10. SELECT existing application
+        # 3. get_resume_row (validate_application_inputs)
+        # 4. get_job_row (validate_application_inputs)
+        # 5. _select_application_by_pair (inside create_application_in_cursor) → existing found
+        # 6. UPDATE recruiter_invites RETURNING → accepted_invite
+        # 7-11. notify() [INSERT notifications, SELECT email, INSERT email_attempts, UPDATE notif, INSERT audit]
+        # 12. INSERT audit_logs (business invite_accepted)
+        # 13. _select_invite_by_id
         script = [
             (10, "c@example.com", "candidate", "active"),  # current_user
             invite,                                        # get_invite_row
-            _job_row(5, 99, "published"),                  # get_job_row (slice 9)
-            accepted_invite,                               # UPDATE recruiter_invites
-            None,                                          # notify
-            None,                                          # audit
-            _resume_row(7, 10, "active"),                  # get_resume_row
-            _job_row(5, 99, "published"),                  # get_job_row (inside create_app)
-            psycopg.errors.UniqueViolation("dup"),         # INSERT applications raises
-            existing_app,                                  # SELECT existing application
+            _resume_row(7, 10, "active"),                  # get_resume_row (validate)
+            _job_row(5, 99, "published"),                  # get_job_row (validate)
+            existing_app,                                  # _select_application_by_pair → found
+            accepted_invite,                               # UPDATE recruiter_invites RETURNING
+            (901,),                                        # notify: INSERT notifications
+            ("recruiter@example.com",),                    # notify: SELECT email FROM users
+            (801,),                                        # notify: INSERT email_attempts
+            None,                                          # notify: UPDATE notifications
+            None,                                          # notify: INSERT audit_logs (email)
+            None,                                          # INSERT audit_logs (business)
+            accepted_invite,                               # _select_invite_by_id
         ]
         with patch.object(api_router, "get_connection", _fake_conn(script)):
             resp = self.client.post(

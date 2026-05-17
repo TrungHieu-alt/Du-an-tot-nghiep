@@ -53,8 +53,8 @@ not treat it as the final architecture contract.
 | Parsing | Document create/retry inserts `parse_jobs` rows and schedules the worker when `BackgroundTasks` is available. The public parse-job response is still thin. | Target flow expects extraction, preprocessing, LLM parse, entity creation/update, embeddings, and a parse review payload with normalized fields, hard-filter fields, extracted text reference, parser metadata, and embedding metadata. |
 | Embeddings | Manual resume/job create and update write through the active embedding provider, with local hash as the default fallback. | Aligned with Slice 7 provider boundary; broader backfill/re-embedding operations remain future work. |
 | Matching rerank | Runtime now attempts local cross-encoder rerank on top deterministic candidates. | If reranker fails/unavailable, request falls back to deterministic scoring with runtime warning metadata. |
-| Email | `integrations/email/` adapter with `LocalLogEmailSender` (default); `dispatch_email()` in `shared.py` sends after business transaction commits and updates `email_delivery_status` to `sent`/`failed`. Email failure never rolls back business transactions. | Aligned (Slice 10). SMTP/SendGrid provider deferred to post-MVP. |
-| Admin | Admin endpoints are read-heavy; some admin reads audit access. | Aligned with MVP read-only admin stance. |
+| Email | `integrations/email/` adapter with `LocalLogEmailSender` (default). `notify()` in `shared.py` writes notification + `email_attempts` row inline with the business transaction; email send exceptions are caught and the attempt is marked `failed` without rolling back the business transaction. `EMAIL_PROVIDER=local` records `logged`; SMTP marks `sent`/`failed`. | Aligned (Slice 10). SMTP/SendGrid provider deferred to post-MVP. |
+| Admin | Admin endpoints are read-heavy; monitoring reads write `admin_monitoring_access` audit rows with filter metadata. | Aligned with MVP read-only admin stance. |
 
 ## System And Root
 
@@ -133,27 +133,27 @@ not treat it as the final architecture contract.
 
 | Method | Path | Roles | Main input | Response | Side effects | DB touchpoints | Contract status |
 |---|---|---|---|---|---|---|---|
-| `GET` | `/api/applications` | candidate, recruiter, admin | `status?`, `job_id?`, `resume_id?`, `limit`, `offset` | paginated `ApplicationDetail` | none | `applications` read; `job_posts` read for visibility | Partial: role-scoped listing works, but response lacks linked job/resume display summaries and timestamps required by production FE. |
-| `POST` | `/api/applications` | candidate | `ApplicationRequest`: job id, resume id, optional note | `ApplicationDetail` | Creates application; appends event; notifies recruiter; writes audit event | `candidate_resumes` read; `job_posts` read; `applications` insert; `application_events` insert; `notifications` insert; `audit_logs` insert | Partial: apply behavior works, but response should become `ApplicationSummary` with linked display summaries. |
-| `GET` | `/api/applications/{application_id}` | candidate, recruiter, admin | application id | `ApplicationDetail` with `events: list[ApplicationEvent]` | none | `applications` read; `application_events` read; `job_posts` read for visibility | Partial: detail includes event history, but target also requires linked job/resume display summaries. |
-| `POST` | `/api/applications/{application_id}/status` | authenticated active user | `ApplicationStatusRequest` | `ApplicationDetail` | Updates status; appends event; notifies candidate; writes audit event | `applications` read/update; `job_posts` read; `application_events` insert; `notifications` insert; `audit_logs` insert | Aligned: enforces role-specific transition graph and terminal-state lock; invalid state transition returns `409 invalid_transition`. |
+| `GET` | `/api/applications` | candidate, recruiter, admin | `status?`, `job_id?`, `resume_id?`, `limit`, `offset` | `ApplicationListResponse` | none | `applications` read; `job_posts` and `candidate_resumes` joined for visibility/read models | Aligned: role-scoped listing returns linked job/resume summaries plus `applied_at` and `updated_at`. |
+| `POST` | `/api/applications` | candidate | `ApplicationRequest`: job id, resume id, optional note | `ApplicationSummary` | Creates application; appends event; notifies recruiter; records email attempt; writes business + email audit events | `candidate_resumes` read; `job_posts` read; `applications` insert/read; `application_events` insert; `notifications` insert/update; `email_attempts` insert; `audit_logs` insert | Aligned: active owned resume + published non-closed job required; duplicate `(job_id, resume_id)` returns `409 duplicate_application`. |
+| `GET` | `/api/applications/{application_id}` | candidate, recruiter, admin | application id | `ApplicationDetail` with linked summaries and `events: list[ApplicationEvent]` | none | `applications` read; `application_events` read; `job_posts` and `candidate_resumes` joined for visibility/read models | Aligned: event history is ordered by `created_at ASC, event_id ASC`. |
+| `POST` | `/api/applications/{application_id}/status` | authenticated active user | `ApplicationStatusRequest` | `ApplicationDetail` | Updates status; appends event; notifies the opposite side where available; records email attempt; writes business + email audit events | `applications` read/update; `job_posts` and `candidate_resumes` joined for visibility/read models; `application_events` insert/read; `notifications` insert/update; `email_attempts` insert; `audit_logs` insert | Aligned: enforces role-specific transition graph and terminal-state lock; invalid state transition returns `409 invalid_transition`. |
 
 ## Invites
 
 | Method | Path | Roles | Main input | Response | Side effects | DB touchpoints | Contract status |
 |---|---|---|---|---|---|---|---|
-| `GET` | `/api/invites` | candidate, recruiter, admin | `status?`, `job_id?`, `resume_id?`, `limit`, `offset` | paginated `InviteDetail` | none | `recruiter_invites` read; `job_posts` read for visibility | Partial: role-scoped listing works, but response lacks linked job/resume display summaries and timestamps required by production FE. |
-| `POST` | `/api/invites` | recruiter | `InviteRequest`: job id, resume id, optional message | `InviteDetail` | Creates pending invite; notifies candidate; writes audit event. Rejects duplicate pending invite with 409 `duplicate_invite`. | `candidate_resumes` read; `job_posts` read; `recruiter_invites` read (dup check) + insert; `notifications` insert; `audit_logs` insert | Partial: lifecycle behavior aligned, but response should become `InviteSummary` with linked display summaries. |
-| `GET` | `/api/invites/{invite_id}` | candidate, recruiter, admin | invite id | `InviteDetail` | none | `recruiter_invites` read; `job_posts` read for visibility | Partial: target requires linked job/resume display summaries. |
-| `POST` | `/api/invites/{invite_id}/accept` | candidate | invite id | `InviteAcceptResponse: { invite, application }` | Sets invite accepted; notifies recruiter; writes audit event; creates or returns application | `recruiter_invites` read/update; `notifications` insert; `audit_logs` insert; `candidate_resumes` read; `job_posts` read; `applications` insert/read; `application_events` insert when new | Aligned (Slice 3): explicit response model. |
-| `POST` | `/api/invites/{invite_id}/reject` | candidate | optional note | `InviteDetail` | Sets invite rejected; notifies recruiter; writes audit event | `recruiter_invites` read/update; `notifications` insert; `audit_logs` insert | Aligned. |
+| `GET` | `/api/invites` | candidate, recruiter, admin | `status?`, `job_id?`, `resume_id?`, `limit`, `offset` | `InviteListResponse` | none | `recruiter_invites` read; `job_posts` and `candidate_resumes` joined for visibility/read models | Aligned: role-scoped listing returns linked job/resume summaries plus `created_at` and `updated_at`. |
+| `POST` | `/api/invites` | recruiter | `InviteRequest`: job id, resume id, optional message | `InviteDetail` | Creates pending invite; notifies candidate; records email attempt; writes business + email audit events; rejects duplicate pending invite with 409 `duplicate_invite` | `candidate_resumes` read; `job_posts` read; `recruiter_invites` read (dup check) + insert/read; `notifications` insert/update; `email_attempts` insert; `audit_logs` insert | Aligned: active resume + owned published non-closed job required; pending invite creates no application. |
+| `GET` | `/api/invites/{invite_id}` | candidate, recruiter, admin | invite id | `InviteDetail` with linked summaries | none | `recruiter_invites` read; `job_posts` and `candidate_resumes` joined for visibility/read models | Aligned. |
+| `POST` | `/api/invites/{invite_id}/accept` | candidate | invite id | `InviteAcceptResponse: { invite, application }` | Sets invite accepted; notifies recruiter; records email attempt; writes business + email audit events; creates application and event when absent or returns existing application without duplicate rows | `recruiter_invites` read/update; `notifications` insert/update; `email_attempts` insert; `audit_logs` insert; `candidate_resumes` read; `job_posts` read; `applications` insert/read; `application_events` insert when new | Aligned. |
+| `POST` | `/api/invites/{invite_id}/reject` | candidate | optional note | `InviteDetail` with linked summaries | Sets invite rejected; notifies recruiter; records email attempt; writes business + email audit events; creates no application | `recruiter_invites` read/update; `notifications` insert/update; `email_attempts` insert; `audit_logs` insert | Aligned. |
 
 ## Notifications
 
 | Method | Path | Roles | Main input | Response | Side effects | DB touchpoints | Contract status |
 |---|---|---|---|---|---|---|---|
-| `GET` | `/api/notifications` | authenticated active user | `status?`, `limit`, `offset` | paginated `NotificationDetail` | none | `notifications` read | Aligned. |
-| `POST` | `/api/notifications/{notification_id}/read` | notification owner | notification id | `NotificationDetail` | Sets notification read | `notifications` update | Aligned. |
+| `GET` | `/api/notifications` | authenticated active user | `status?`, `limit`, `offset` | paginated `NotificationDetail` including `email_delivery_status` and `metadata` | none | `notifications` read | Aligned. |
+| `POST` | `/api/notifications/{notification_id}/read` | notification owner | notification id | `NotificationDetail` including `email_delivery_status` and `metadata` | Sets notification read | `notifications` update | Aligned. |
 | `POST` | `/api/notifications/read-all` | authenticated active user | bearer token | `NotificationsReadAllResponse: { updated_count }` | Marks current user's unread notifications as read | `notifications` update | Aligned (Slice 3): key renamed from `updated` to `updated_count`. |
 
 ## Admin Monitoring
@@ -164,10 +164,10 @@ not treat it as the final architecture contract.
 | `GET` | `/api/admin/users/{user_id}` | admin | user id | `AdminUserDetail` | Writes admin monitoring audit event | `users` read; optional `candidate_profiles` / `recruiter_profiles` / `organizations` read; operational count reads | Aligned: returns user, profile/organization context when available, and lightweight ops summary counts. |
 | `GET` | `/api/admin/documents` | admin | `document_type?`, `parse_status?`, `owner_user_id?`, `limit`, `offset` | paginated `DocumentDetail` | Writes admin monitoring audit event | `uploaded_documents` read; optional parse-job existence filter | Aligned. |
 | `GET` | `/api/admin/parse-jobs` | admin | `status?`, `document_type?`, `limit`, `offset` | paginated parse job details | Writes admin monitoring audit event | `parse_jobs` read joined to `uploaded_documents` for document type filter | Aligned. |
-| `GET` | `/api/admin/applications` | admin | `status?`, `job_id?`, `resume_id?`, `limit`, `offset` | paginated `ApplicationDetail` | none | `applications` read | Aligned. |
-| `GET` | `/api/admin/invites` | admin | `status?`, `job_id?`, `resume_id?`, `limit`, `offset` | paginated `InviteDetail` | none | `recruiter_invites` read | Aligned. |
-| `GET` | `/api/admin/notifications` | admin | `status?`, `user_id?`, `limit`, `offset` | paginated `NotificationDetail` | none | `notifications` read | Aligned. |
-| `GET` | `/api/admin/audit-logs` | admin | `actor_user_id?`, `target_type?`, `target_id?`, `event_type?`, `limit`, `offset` | paginated audit log dicts | none | `audit_logs` read | Aligned. |
+| `GET` | `/api/admin/applications` | admin | `status?`, `job_id?`, `resume_id?`, `limit`, `offset` | paginated `ApplicationDetail` | Writes admin monitoring audit event | `audit_logs` insert; `applications` read | Aligned. |
+| `GET` | `/api/admin/invites` | admin | `status?`, `job_id?`, `resume_id?`, `limit`, `offset` | paginated `InviteDetail` | Writes admin monitoring audit event | `audit_logs` insert; `recruiter_invites` read | Aligned. |
+| `GET` | `/api/admin/notifications` | admin | `status?`, `user_id?`, `limit`, `offset` | paginated `NotificationDetail` | Writes admin monitoring audit event | `audit_logs` insert; `notifications` read | Aligned. |
+| `GET` | `/api/admin/audit-logs` | admin | `actor_user_id?`, `target_type?`, `target_id?`, `event_type?`, `limit`, `offset` | paginated audit log dicts | Writes admin monitoring audit event | `audit_logs` insert/read | Aligned. |
 
 ## Database Table Coverage By Workflow
 
@@ -178,12 +178,12 @@ not treat it as the final architecture contract.
 | Recruiter profile and organizations | `recruiter_profiles`, `organizations` | Organization ownership is not strongly enforced in update route. |
 | Resumes | `candidate_resumes`, `candidate_resume_embeddings` | Manual create/update immediately writes provider-backed embeddings. |
 | Jobs | `job_posts`, `job_post_embeddings` | Manual create/update immediately writes provider-backed embeddings. |
-| Documents and parsing | `uploaded_documents`, `parse_jobs` | Parse jobs are queued metadata only in current router. |
+| Documents and parsing | `uploaded_documents`, `parse_jobs`, `notifications`, `email_attempts`, `audit_logs` | Worker failures mark parse jobs failed and create notification/email/audit side effects. |
 | Matching and semantic search | `candidate_resumes`, `job_posts`, embedding tables | Matching iterates eligible public pool and applies hard filters before scoring. |
-| Applications | `applications`, `application_events`, `notifications`, `audit_logs` | Apply and status update create events, notifications, and audit logs. |
-| Invites | `recruiter_invites`, `applications`, `application_events`, `notifications`, `audit_logs` | Accept creates or returns an application. Reject creates no application. |
-| Notifications | `notifications` | In-app rows exist; email provider is not implemented here. |
-| Admin | Read tables plus optional `audit_logs` | Some admin read routes audit access; not all admin routes do. |
+| Applications | `applications`, `application_events`, `notifications`, `email_attempts`, `audit_logs` | Apply and status update create events, notifications, email attempts, and audit logs. |
+| Invites | `recruiter_invites`, `applications`, `application_events`, `notifications`, `email_attempts`, `audit_logs` | Accept creates or returns an application. Reject creates no application. Invite notifications record email attempts. |
+| Notifications | `notifications`, `email_attempts`, `audit_logs` | In-app rows are paired with non-blocking email attempts and email audit events. |
+| Admin | Read tables plus `audit_logs` | All admin monitoring read routes audit access with metadata. |
 
 ## Gap Impact Classification And Slice Mapping
 
@@ -278,21 +278,21 @@ Classification rules:
 
 | Endpoint | Gap | Fix | Impact |
 |---|---|---|---|
-| `POST /api/applications/{id}/status` | Full transition graph enforcement was missing. | Done: graph and terminal-state lock are enforced. Slice 9 added regression tests for `rejected→shortlisted`, `hired→rejected`, `withdrawn→submitted`, and self-loops on terminal states. | non-breaking |
-| `POST /api/applications` | Duplicate `(job_id, resume_id)` returned only the DB `UniqueViolation` path without explicit envelope. | Done: returns `409 duplicate_application` via psycopg `UniqueViolation` handler with regression test. | non-breaking |
-| `POST /api/invites` | No duplicate pending-invite guard. | Done in Slice 3: rejects duplicate pending invite with `409 duplicate_invite`. | non-breaking |
-| `POST /api/invites/{id}/accept` | Response shape has no explicit model; duplicate (job, resume) application was raised as 409. | Done: `{ invite, application }`. `allow_existing=True` path returns the pre-existing application without duplicate event. | non-breaking |
-| Closed-job blocks (apply/invite/accept) | Closed jobs returned generic `404 not_found`, indistinguishable from missing jobs. | Done in Slice 9: `POST /api/applications`, `POST /api/invites`, and `POST /api/invites/{id}/accept` return `409 closed_job` when the target job has `status = closed`. Draft/missing jobs continue to return `404 not_found`. Status updates on existing applications remain allowed so recruiters can wrap up. | non-breaking |
-| Application/invite side effects | Status/lifecycle mutations had to produce `application_events` + notification + audit. | Done: regression test asserts all three rows are written for recruiter shortlisting. | none |
-| Application DTOs | List/detail responses lack linked display summaries and timestamps. | Return `ApplicationSummary`/detail with job/resume summaries and `applied_at`/`updated_at`. | non-breaking (carry-over for Slice 12 cleanup) |
-| Invite DTOs | List/detail responses lack linked display summaries and timestamps. | Return `InviteSummary`/detail with job/resume summaries and `created_at`/`updated_at`. | non-breaking (carry-over for Slice 12 cleanup) |
+| `POST /api/applications` | Duplicate and invalid-state behavior needed command-backed coverage. | Candidate apply requires active owned resume (`400 inactive_resume`) + published non-closed job (`409 closed_job`); duplicate `(job_id, resume_id)` returns `409 duplicate_application`; success writes application event, notification, email attempt, and audit. | non-breaking |
+| `POST /api/applications/{id}/status` | Full transition graph and terminal lock needed hardening evidence. | Canonical graph and terminal-state lock are enforced; valid status changes write application event, notification, email attempt, and audit; regression tests cover `rejected→shortlisted`, `hired→rejected`, `withdrawn→submitted`, and terminal self-loops. | non-breaking |
+| `POST /api/invites` | Invite validation needed closed-job and side-effect coverage. | Recruiter invite requires active resume (`400 inactive_resume`) + owned published non-closed job (`409 closed_job`); duplicate pending invite returns `409 duplicate_invite`; success writes notification, email attempt, and audit without creating an application. | non-breaking |
+| `POST /api/invites/{id}/accept` | Duplicate accepted-invite behavior needed verification. | Accept validates job status first (`409 closed_job`); creates application with application event/notification/email attempt/audit, or returns the existing `(job_id, resume_id)` application without duplicate application/event rows; invite acceptance writes notification, email attempt, and audit. | non-breaking |
+| `POST /api/invites/{id}/reject` | Rejected invite no-application behavior needed verification. | Reject sets invite rejected, writes notification, email attempt, and audit; creates no application or application event. | non-breaking |
+| Closed-job blocks (apply/invite/accept) | Closed jobs returned generic `404 not_found`, indistinguishable from missing jobs. | `POST /api/applications`, `POST /api/invites`, and `POST /api/invites/{id}/accept` return `409 closed_job` when the target job has `status = closed`. Draft/missing jobs return `404 not_found`. Status updates on existing applications remain allowed so recruiters can wrap up. | non-breaking |
+| Application DTOs | List/detail responses lacked linked display summaries and timestamps. | Return typed `ApplicationListResponse`, `ApplicationSummary`, and detail with job/resume summaries, `applied_at`, `updated_at`, and ordered `events`. | non-breaking |
+| Invite DTOs | List/detail responses lacked linked display summaries and timestamps. | Return typed `InviteListResponse`/`InviteDetail` with job/resume summaries and `created_at`/`updated_at`. | non-breaking |
 
 ### Notifications, Email, Audit (Slice 10)
 
 | Endpoint | Gap | Fix | Impact |
 |---|---|---|---|
-| Email delivery | Notifications stored with `email_delivery_status = queued`; no provider call. | Introduce email adapter; failure must not roll back transaction. | none (internal) |
-| Audit consistency | Some admin reads audit; others do not. | Decide and apply consistent policy. | none |
+| Email delivery | Notifications stored with `email_delivery_status = queued`; no provider call. | Done: email adapter boundary, local/log default, SMTP provider path, `email_attempts` persistence, and non-blocking failure handling. | none (internal) |
+| Audit consistency | Some admin reads audit; others do not. | Done: all admin monitoring reads write `admin_monitoring_access` with metadata; business/email audit rows include metadata JSON. | none |
 
 ### Admin Monitoring (Slice 11)
 

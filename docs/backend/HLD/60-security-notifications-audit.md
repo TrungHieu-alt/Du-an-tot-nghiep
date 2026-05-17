@@ -37,13 +37,22 @@ Create in-app notifications and attempt basic email for:
 Email delivery failure must be logged and must not roll back the business
 transaction.
 
-### Email Adapter (Slice 10)
+### Email Adapter
+
+Runtime email delivery uses an adapter boundary:
 
 - `integrations/email/base.py` — `EmailSender` abstract interface (`send(to, subject, body)`).
-- `integrations/email/local.py` — `LocalLogEmailSender`: writes to application log, always succeeds. Default for dev/test.
+- `integrations/email/local.py` — `LocalLogEmailSender`: writes to application log; attempts recorded as `logged`. Default for dev/test.
 - `integrations/email/__init__.py` — `get_email_sender()` factory; env var `EMAIL_PROVIDER` (default `local`).
-- `shared.dispatch_email(notification_id)` — fetches committed notification row, calls sender, updates `email_delivery_status` to `sent`/`failed` in a separate DB connection. Returns immediately for `notification_id <= 0`. Swallows all exceptions.
-- All `notify()` calls now use `RETURNING notification_id`; dispatchers call `dispatch_email()` after the business transaction commits.
+- `EMAIL_PROVIDER=local` or unset: local/log sender; no real email is sent.
+- `EMAIL_PROVIDER=smtp`: SMTP sender if `SMTP_HOST` and `EMAIL_FROM` are set; otherwise falls back to local/log.
+- SMTP optional env vars: `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_USE_TLS`, `SMTP_TIMEOUT_SECONDS`.
+
+`notify()` in `shared.py` writes the `notifications` row, records an
+`email_attempts` row, and calls `audit()` — all within the same cursor/transaction
+as the business action. Email send exceptions are caught; the business action
+continues and the email attempt is marked `failed`. Email delivery failure must
+not roll back the business transaction.
 
 ## Audit
 
@@ -60,6 +69,11 @@ Business audit events are required for:
 
 Audit events must include actor user ID when known, target entity, event type,
 timestamp, and metadata JSON.
+
+Admin monitoring read endpoints use the same audit policy: read-only access is
+audited as `admin_monitoring_access` with the monitored resource and filters in
+metadata. This keeps Slice 11 operational monitoring data visible without
+adding admin write behavior.
 
 ## Observability
 

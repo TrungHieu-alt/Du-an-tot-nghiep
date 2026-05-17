@@ -380,6 +380,7 @@ class TestAdminApplications(unittest.TestCase):
         token = _token(99, "admin")
         factory = _fake_conn([
             _user_row(99, "admin"),
+            None,                            # audit INSERT
             (3,),                            # COUNT
             [_application_row(1), _application_row(2)],  # list
         ])
@@ -396,7 +397,7 @@ class TestAdminApplications(unittest.TestCase):
         token = _token(99, "admin")
         factory = _fake_conn([
             _user_row(99, "admin"),
-            (0,), [],
+            None, (0,), [],   # audit + COUNT + list
         ])
         with patch.object(api_router, "get_connection", factory):
             resp = self.client.get(
@@ -419,6 +420,7 @@ class TestAdminInvites(unittest.TestCase):
         token = _token(99, "admin")
         factory = _fake_conn([
             _user_row(99, "admin"),
+            None,           # audit INSERT
             (1,),
             [_invite_row(10)],
         ])
@@ -446,6 +448,7 @@ class TestAdminNotifications(unittest.TestCase):
         token = _token(99, "admin")
         factory = _fake_conn([
             _user_row(99, "admin"),
+            None,           # audit INSERT
             (2,),
             [_notification_row(1), _notification_row(2)],
         ])
@@ -461,7 +464,7 @@ class TestAdminNotifications(unittest.TestCase):
         token = _token(99, "admin")
         factory = _fake_conn([
             _user_row(99, "admin"),
-            (0,), [],
+            None, (0,), [],   # audit + COUNT + list
         ])
         with patch.object(api_router, "get_connection", factory):
             resp = self.client.get(
@@ -484,6 +487,7 @@ class TestAdminAuditLogs(unittest.TestCase):
         token = _token(99, "admin")
         factory = _fake_conn([
             _user_row(99, "admin"),
+            None,           # audit INSERT
             (1,),
             [_audit_row(1)],
         ])
@@ -502,7 +506,7 @@ class TestAdminAuditLogs(unittest.TestCase):
         token = _token(99, "admin")
         factory = _fake_conn([
             _user_row(99, "admin"),
-            (0,), [],
+            None, (0,), [],   # audit + COUNT + list
         ])
         with patch.object(api_router, "get_connection", factory):
             resp = self.client.get(
