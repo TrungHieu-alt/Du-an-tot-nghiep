@@ -292,10 +292,25 @@ class TestExtractor(unittest.TestCase):
         result = extract_text(io.BytesIO(b"not a pdf"), "application/pdf")
         self.assertEqual(result, "")
 
-    def test_docx_returns_empty_in_slice5(self) -> None:
+    def test_docx_invalid_bytes_returns_empty(self) -> None:
         mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         result = extract_text(io.BytesIO(b"PK fake docx"), mime)
         self.assertEqual(result, "")
+
+    def test_docx_valid_file_extracts_text(self) -> None:
+        """python-docx round-trip: create a real DOCX in memory and extract its text."""
+        import docx  # type: ignore[import]
+
+        doc = docx.Document()
+        doc.add_paragraph("Backend Engineer with 5 years experience.")
+        doc.add_paragraph("Skills: Python, FastAPI, PostgreSQL.")
+        buf = io.BytesIO()
+        doc.save(buf)
+        buf.seek(0)
+        mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        result = extract_text(buf, mime)
+        self.assertIn("Backend Engineer", result)
+        self.assertIn("Python", result)
 
 
 # ---------------------------------------------------------------------------
